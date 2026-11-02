@@ -121,8 +121,16 @@ const groups = [
 .sidebar-foot i { width: 7px; height: 7px; border-radius: 50%; background: #76c9a8; box-shadow: 0 0 0 4px rgba(118, 201, 168, 0.12); }
 
 @media (max-width: 900px) {
-  .sidebar { position: static; min-height: auto; }
-  .menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sidebar { position: static; min-width: 0; max-width: 100vw; min-height: auto; overflow: hidden; }
+  .brand { min-height: 64px; }
+  .menu { display: flex; width: 100%; max-width: 100vw; height: 58px; min-height: 58px; flex: none; gap: 8px; padding: 9px 12px; overflow-x: auto; scrollbar-width: none; }
+  .menu::-webkit-scrollbar { display: none; }
+  :deep(.el-menu-item-group) { flex: 0 0 auto; }
+  :deep(.el-menu-item-group__title) { display: none; }
+  :deep(.el-menu-item-group > ul) { display: flex; gap: 6px; }
+  :deep(.el-menu-item) { height: 40px; margin: 0; padding: 0 14px; white-space: nowrap; }
+  :deep(.el-menu-item:hover),
+  :deep(.el-menu-item.is-active) { transform: none; }
   .sidebar-foot { display: none; }
 }
 </style>

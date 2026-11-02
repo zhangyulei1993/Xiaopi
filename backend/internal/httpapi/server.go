@@ -122,8 +122,8 @@ func (s *Server) updatePublicConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	config.Normalize()
-	if config.HeroTitle == "" || len(config.Locations) > 20 || len(config.FeaturedChannels) > 12 {
-		writeError(w, http.StatusBadRequest, "heroTitle is required and configuration is too large")
+	if err := config.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	configStore, ok := s.store.(appConfigStore)

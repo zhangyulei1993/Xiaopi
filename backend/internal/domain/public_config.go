@@ -1,6 +1,14 @@
 package domain
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"unicode/utf8"
+)
+
+var publicConfigPhonePattern = regexp.MustCompile(`^\+?\d{6,20}$`)
 
 type MiniappLocation struct {
 	Label   string `json:"label"`
@@ -59,4 +67,64 @@ func (config *PublicConfig) Normalize() {
 		config.FeaturedChannels[index].Subtitle = strings.TrimSpace(config.FeaturedChannels[index].Subtitle)
 		config.FeaturedChannels[index].Keyword = strings.TrimSpace(config.FeaturedChannels[index].Keyword)
 	}
+}
+
+func (config PublicConfig) Validate() error {
+	if config.HeroTitle == "" {
+		return errors.New("品牌名称不能为空")
+	}
+	if utf8.RuneCountInString(config.HeroTitle) > 20 {
+		return errors.New("品牌名称不能超过 20 个字符")
+	}
+	if config.HeroSubtitle == "" {
+		return errors.New("首页主标题不能为空")
+	}
+	if utf8.RuneCountInString(config.HeroSubtitle) > 30 {
+		return errors.New("首页主标题不能超过 30 个字符")
+	}
+	if config.HeroDescription == "" {
+		return errors.New("首页副标题不能为空")
+	}
+	if utf8.RuneCountInString(config.HeroDescription) > 40 {
+		return errors.New("首页副标题不能超过 40 个字符")
+	}
+	if utf8.RuneCountInString(config.Notice) > 120 {
+		return errors.New("首页公告不能超过 120 个字符")
+	}
+	if config.ContactPhone != "" && !publicConfigPhonePattern.MatchString(config.ContactPhone) {
+		return errors.New("联系电话格式不正确")
+	}
+	if len(config.Locations) == 0 || len(config.Locations) > 20 {
+		return errors.New("地理位置数量必须在 1 到 20 个之间")
+	}
+	locationKeywords := make(map[string]struct{}, len(config.Locations))
+	for index, location := range config.Locations {
+		if location.Label == "" || location.Keyword == "" {
+			return fmt.Errorf("第 %d 个地理位置缺少名称或搜索关键词", index+1)
+		}
+		if utf8.RuneCountInString(location.Label) > 12 || utf8.RuneCountInString(location.Keyword) > 20 {
+			return fmt.Errorf("第 %d 个地理位置内容过长", index+1)
+		}
+		if _, exists := locationKeywords[location.Keyword]; exists {
+			return errors.New("地理位置搜索关键词不能重复")
+		}
+		locationKeywords[location.Keyword] = struct{}{}
+	}
+	if len(config.FeaturedChannels) == 0 || len(config.FeaturedChannels) > 12 {
+		return errors.New("精选频道数量必须在 1 到 12 个之间")
+	}
+	channelKeywords := make(map[string]struct{}, len(config.FeaturedChannels))
+	for index, channel := range config.FeaturedChannels {
+		if channel.Title == "" || channel.Subtitle == "" || channel.Keyword == "" {
+			return fmt.Errorf("第 %d 个精选频道信息不完整", index+1)
+		}
+		if utf8.RuneCountInString(channel.Icon) > 4 || utf8.RuneCountInString(channel.Title) > 12 || utf8.RuneCountInString(channel.Subtitle) > 20 || utf8.RuneCountInString(channel.Keyword) > 20 {
+			return fmt.Errorf("第 %d 个精选频道内容过长", index+1)
+		}
+		if _, exists := channelKeywords[channel.Keyword]; exists {
+			return errors.New("精选频道搜索关键词不能重复")
+		}
+		channelKeywords[channel.Keyword] = struct{}{}
+	}
+	return nil
 }

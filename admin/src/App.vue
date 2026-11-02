@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Collection, House, Location, User } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Collection, Delete, House, Location, Plus, RefreshLeft, User } from '@element-plus/icons-vue'
 
 import AdminSidebar from './components/AdminSidebar.vue'
 import AdminTopbar from './components/AdminTopbar.vue'
@@ -34,6 +34,8 @@ const pageError = ref('')
 const savingConfig = ref(false)
 const configMessage = ref('')
 const configFailed = ref(false)
+const savedConfigJSON = ref('')
+const configLastSavedAt = ref('')
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
 const adminCandidate = ref<WechatUser | null>(null)
@@ -64,7 +66,11 @@ async function api<T>(path: string, options: RequestInit = {}) {
   return body.data as T
 }
 
-const applyConfig = (value: PublicConfig) => Object.assign(publicConfig, value)
+const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.stringify(value))
+const applyConfig = (value: PublicConfig, markSaved = false) => {
+  Object.assign(publicConfig, cloneConfig(value))
+  if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
+}
 
 async function load() {
   loading.value = true
@@ -83,7 +89,7 @@ async function load() {
     users.value = userData || []
     admins.value = adminData || []
     temporaryAccess.value = temporaryData || []
-    applyConfig(configData)
+    applyConfig(configData, true)
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '数据加载失败'
     throw error
@@ -127,34 +133,76 @@ const currentMetric = computed(() => tab.value === '线索管理' ? '线索总�
 const statusType = (status: string) => status === '正常' || status === 'PUBLISHED' ? 'success' : status === 'PENDING' ? 'warning' : 'info'
 const formatTime = (value: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
 
-const locationsText = computed({
-  get: () => publicConfig.locations.map((item) => `${item.label}|${item.keyword}`).join('\n'),
-  set: (value: string) => {
-    publicConfig.locations = value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-      const [label, keyword = label] = line.split('|').map((item) => item.trim())
-      return { label, keyword }
-    })
-  },
+const configDirty = computed(() => Boolean(savedConfigJSON.value) && JSON.stringify(publicConfig) !== savedConfigJSON.value)
+const configErrors = computed(() => {
+  const errors: string[] = []
+  if (!publicConfig.heroTitle.trim()) errors.push('品牌标题不能为空')
+  if (!publicConfig.heroSubtitle.trim()) errors.push('首页主标题不能为空')
+  if (!publicConfig.heroDescription.trim()) errors.push('首页副标题不能为空')
+  if (publicConfig.contactPhone && !/^\+?\d{6,20}$/.test(publicConfig.contactPhone.trim())) errors.push('联系电话格式不正确')
+  if (!publicConfig.locations.length) errors.push('至少配置一个地理位置')
+  if (publicConfig.locations.length > 20) errors.push('地理位置不能超过 20 个')
+  publicConfig.locations.forEach((item, index) => {
+    if (!item.label.trim() || !item.keyword.trim()) errors.push(`第 ${index + 1} 个地理位置缺少名称或搜索关键词`)
+  })
+  const locationKeywords = publicConfig.locations.map((item) => item.keyword.trim()).filter(Boolean)
+  if (new Set(locationKeywords).size !== locationKeywords.length) errors.push('地理位置搜索关键词不能重复')
+  if (!publicConfig.featuredChannels.length) errors.push('至少配置一个精选频道')
+  if (publicConfig.featuredChannels.length > 12) errors.push('精选频道不能超过 12 个')
+  publicConfig.featuredChannels.forEach((item, index) => {
+    if (!item.title.trim() || !item.subtitle.trim() || !item.keyword.trim()) errors.push(`第 ${index + 1} 个精选频道信息不完整`)
+  })
+  const channelKeywords = publicConfig.featuredChannels.map((item) => item.keyword.trim()).filter(Boolean)
+  if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
+  return errors
 })
 
-const channelsText = computed({
-  get: () => publicConfig.featuredChannels.map((item) => `${item.icon}|${item.title}|${item.subtitle}|${item.keyword}`).join('\n'),
-  set: (value: string) => {
-    publicConfig.featuredChannels = value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-      const [icon = '🏠', title = '', subtitle = '', keyword = title] = line.split('|').map((item) => item.trim())
-      return { icon, title, subtitle, keyword }
-    })
-  },
-})
+function addLocation() {
+  if (publicConfig.locations.length >= 20) return
+  publicConfig.locations.push({ label: '', keyword: '' })
+}
+
+function removeLocation(index: number) {
+  publicConfig.locations.splice(index, 1)
+}
+
+function addChannel() {
+  if (publicConfig.featuredChannels.length >= 12) return
+  publicConfig.featuredChannels.push({ icon: '🏠', title: '', subtitle: '', keyword: '' })
+}
+
+function removeChannel(index: number) {
+  publicConfig.featuredChannels.splice(index, 1)
+}
+
+function moveItem<T>(items: T[], index: number, offset: -1 | 1) {
+  const target = index + offset
+  if (target < 0 || target >= items.length) return
+  const [item] = items.splice(index, 1)
+  items.splice(target, 0, item)
+}
+
+function resetConfig() {
+  if (!savedConfigJSON.value) return
+  applyConfig(JSON.parse(savedConfigJSON.value))
+  configMessage.value = '已恢复为最近一次发布的配置。'
+  configFailed.value = false
+}
 
 async function saveConfig() {
+  if (configErrors.value.length) {
+    configFailed.value = true
+    configMessage.value = configErrors.value[0]
+    return
+  }
   savingConfig.value = true
   configMessage.value = ''
   configFailed.value = false
   try {
     const value = await api<PublicConfig>('/v1/admin/config/public', { method: 'PUT', body: JSON.stringify(publicConfig) })
-    applyConfig(value)
-    configMessage.value = '配置已保存，小程序重新进入后即可获取最新内容。'
+    applyConfig(value, true)
+    configLastSavedAt.value = new Date().toLocaleString('zh-CN', { hour12: false })
+    configMessage.value = '配置已发布，小程序重新进入后即可获取最新内容。'
   } catch (error) {
     configFailed.value = true
     configMessage.value = error instanceof Error ? error.message : '保存失败'
@@ -388,25 +436,92 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <template v-else-if="tab === '小程序配置'">
           <section class="page-header">
-            <div><span>内容与运营</span><h1>小程序配置</h1><p>配置首页品牌信息、公告、地理位置和精选频道，保存后由线上 API 统一下发。</p></div>
-            <el-button type="primary" size="large" :loading="savingConfig" @click="saveConfig">保存并发布</el-button>
+            <div><span>内容与运营</span><h1>小程序配置中心</h1><p>统一维护首页文案、公告、地区入口和精选频道。右侧预览会随编辑实时更新。</p></div>
+          </section>
+          <section class="surface config-toolbar">
+            <div class="publish-state">
+              <i :class="{ dirty: configDirty }" />
+              <div><strong>{{ configDirty ? '存在未发布修改' : '线上配置已同步' }}</strong><span>{{ configLastSavedAt ? `最近发布：${configLastSavedAt}` : '当前内容来自线上配置' }}</span></div>
+            </div>
+            <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
+            <div class="config-toolbar-actions">
+              <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复已发布版本</el-button>
+              <el-button type="primary" size="large" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
+            </div>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
-          <div v-loading="loading" class="config-grid">
-            <section class="surface form-section">
-              <div class="section-heading"><span>01</span><div><h2>首页基础信息</h2><p>控制小程序首页首屏文案与联系方式。</p></div></div>
-              <el-form label-position="top">
-                <el-form-item label="品牌标题"><el-input v-model="publicConfig.heroTitle" /></el-form-item>
-                <el-form-item label="首页主标题"><el-input v-model="publicConfig.heroSubtitle" /></el-form-item>
-                <el-form-item label="首页副标题"><el-input v-model="publicConfig.heroDescription" /></el-form-item>
-                <el-form-item label="公告内容"><el-input v-model="publicConfig.notice" type="textarea" :rows="3" /></el-form-item>
-                <el-form-item label="联系电话"><el-input v-model="publicConfig.contactPhone" /></el-form-item>
-              </el-form>
-            </section>
-            <div class="config-side">
-              <section class="surface form-section"><div class="section-heading"><span>02</span><div><h2>地理位置</h2><p>每行：显示名称|搜索关键词</p></div></div><el-input v-model="locationsText" type="textarea" :rows="7" placeholder="光谷|光谷" /></section>
-              <section class="surface form-section"><div class="section-heading"><span>03</span><div><h2>精选频道</h2><p>每行：图标|标题|副标题|搜索关键词</p></div></div><el-input v-model="channelsText" type="textarea" :rows="8" placeholder="🏢|金融港|通勤优选|金融港" /></section>
+          <section v-if="configErrors.length" class="config-validation">
+            <strong>发布前需要处理 {{ configErrors.length }} 项</strong>
+            <ul><li v-for="error in configErrors" :key="error">{{ error }}</li></ul>
+          </section>
+          <div v-loading="loading" class="config-workspace">
+            <div class="config-editor">
+              <section class="surface form-section config-section">
+                <div class="section-heading"><span>01</span><div><h2>首页基础信息</h2><p>这些内容显示在首页首屏和公告区域。</p></div></div>
+                <el-form label-position="top" class="basic-config-form">
+                  <div class="form-row two-columns">
+                    <el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item>
+                    <el-form-item label="联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /></el-form-item>
+                  </div>
+                  <el-form-item label="首页主标题" required><el-input v-model="publicConfig.heroSubtitle" maxlength="30" show-word-limit placeholder="一句话说明服务区域或核心价值" /></el-form-item>
+                  <el-form-item label="首页副标题" required><el-input v-model="publicConfig.heroDescription" maxlength="40" show-word-limit placeholder="补充可信度或服务特色" /></el-form-item>
+                  <el-form-item label="首页公告"><el-input v-model="publicConfig.notice" type="textarea" :rows="3" maxlength="120" show-word-limit placeholder="发布签约提醒、服务通知或风险提示" /></el-form-item>
+                </el-form>
+              </section>
+
+              <section class="surface form-section config-section">
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>地理位置入口</h2><p>用户点击后会使用搜索关键词筛选房源，顺序与小程序一致。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 20" @click="addLocation">新增地区</el-button></div>
+                <div v-if="publicConfig.locations.length" class="structured-list">
+                  <article v-for="(item, index) in publicConfig.locations" :key="`location-${index}`" class="config-list-item">
+                    <div class="item-index">{{ String(index + 1).padStart(2, '0') }}</div>
+                    <div class="item-fields location-fields">
+                      <label><span>显示名称</span><el-input v-model="item.label" maxlength="12" placeholder="例如：光谷" /></label>
+                      <label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="例如：光谷" /></label>
+                    </div>
+                    <div class="item-actions">
+                      <el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.locations, index, -1)" />
+                      <el-button text :icon="ArrowDown" :disabled="index === publicConfig.locations.length - 1" aria-label="下移" @click="moveItem(publicConfig.locations, index, 1)" />
+                      <el-popconfirm title="确认删除这个地区入口？" @confirm="removeLocation(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm>
+                    </div>
+                  </article>
+                </div>
+                <div v-else class="config-empty"><strong>还没有地理位置</strong><span>至少添加一个地区，用户才能从首页快速筛选房源。</span><el-button type="primary" plain :icon="Plus" @click="addLocation">添加第一个地区</el-button></div>
+              </section>
+
+              <section class="surface form-section config-section">
+                <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道</h2><p>频道会以横向卡片展示，建议保留 3–6 个重点入口。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
+                <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
+                  <article v-for="(item, index) in publicConfig.featuredChannels" :key="`channel-${index}`" class="channel-editor-card">
+                    <header><div class="channel-order"><span>{{ item.icon || '🏠' }}</span><strong>频道 {{ index + 1 }}</strong></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.featuredChannels, index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="下移" @click="moveItem(publicConfig.featuredChannels, index, 1)" /><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
+                    <div class="channel-fields">
+                      <label class="icon-field"><span>图标</span><el-input v-model="item.icon" maxlength="4" placeholder="🏠" /></label>
+                      <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" /></label>
+                      <label><span>副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label>
+                      <label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" /></label>
+                    </div>
+                  </article>
+                </div>
+                <div v-else class="config-empty"><strong>还没有精选频道</strong><span>添加频道后，用户可以从首页直接进入对应房源列表。</span><el-button type="primary" plain :icon="Plus" @click="addChannel">添加第一个频道</el-button></div>
+              </section>
             </div>
+
+            <aside class="config-preview-column">
+              <div class="preview-heading"><div><strong>小程序首页预览</strong><span>按实际配置实时更新</span></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
+              <div class="phone-preview">
+                <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+                <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
+                <div class="mini-content">
+                  <section class="mini-hero"><span>{{ publicConfig.heroTitle || '品牌名称' }}</span><strong>{{ publicConfig.heroSubtitle || '首页主标题' }}</strong><p>{{ publicConfig.heroDescription || '首页副标题' }}</p><button>查找房源 ›</button></section>
+                  <div v-if="publicConfig.notice" class="mini-notice"><b>公告</b><span>{{ publicConfig.notice }}</span></div>
+                  <div class="mini-section-title">热门地区</div>
+                  <div class="mini-locations"><span v-for="(item, index) in publicConfig.locations.slice(0, 6)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
+                  <div class="mini-section-title">精选频道</div>
+                  <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 4)" :key="`preview-channel-${index}`"><b>{{ item.icon || '🏠' }}</b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
+                </div>
+                <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
+              </div>
+              <p class="preview-note">预览用于确认信息层级，实际小程序会根据设备尺寸自适应。</p>
+            </aside>
           </div>
         </template>
 
