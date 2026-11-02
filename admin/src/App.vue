@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { Collection, House, Location, User } from '@element-plus/icons-vue'
+
+import AdminSidebar from './components/AdminSidebar.vue'
+import AdminTopbar from './components/AdminTopbar.vue'
 
 type LocationConfig = { label: string; keyword: string }
 type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string }
@@ -12,37 +16,32 @@ type PublicConfig = {
   locations: LocationConfig[]
   featuredChannels: ChannelConfig[]
 }
+type Property = { title: string; community: string; status: string }
+type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
+type Customer = { name: string; phone: string; status: string }
+type TabKey = '运营总览' | '房源审核' | '线索管理' | '客户管理' | '小程序配置'
 
-const apiBase = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:18080/api'
+const apiBase = import.meta.env.VITE_API_BASE || 'http://150.158.157.213/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
-const tab = ref('房源审核')
-const users = ref([{ name: '微信用户', phone: '未绑定', status: '正常' }])
-const properties = ref<{ title: string; community: string; status: string }[]>([])
-const leads = ref<{ sourceName: string; community: string; sourcePhone: string; status: string }[]>([])
+const tab = ref<TabKey>('运营总览')
 const username = ref('admin')
 const password = ref('')
 const loginError = ref('')
+const loading = ref(false)
+const pageError = ref('')
 const savingConfig = ref(false)
 const configMessage = ref('')
-const publicConfig = reactive<PublicConfig>({
-  heroTitle: '',
-  heroSubtitle: '',
-  heroDescription: '',
-  notice: '',
-  contactPhone: '',
-  locations: [],
-  featuredChannels: [],
-})
+const configFailed = ref(false)
+const properties = ref<Property[]>([])
+const leads = ref<Lead[]>([])
+const users = ref<Customer[]>([{ name: '微信用户', phone: '未绑定', status: '正常' }])
+const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', locations: [], featuredChannels: [] })
 
-const api = async <T,>(path: string, options: RequestInit = {}) => {
+async function api<T>(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('xiaopi_admin_token')
   const response = await fetch(`${apiBase}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
   })
   const body = await response.json()
   if (!response.ok || body.code !== 0) throw new Error(body.message || '请求失败')
@@ -51,33 +50,60 @@ const api = async <T,>(path: string, options: RequestInit = {}) => {
 
 const applyConfig = (value: PublicConfig) => Object.assign(publicConfig, value)
 
-const load = async () => {
-  const [propertyData, leadData, configData] = await Promise.all([
-    api<typeof properties.value>('/v1/properties'),
-    api<typeof leads.value>('/v1/property-leads'),
-    api<PublicConfig>('/v1/config/public'),
-  ])
-  properties.value = propertyData
-  leads.value = leadData
-  applyConfig(configData)
-}
-
-const login = async () => {
-  loginError.value = ''
+async function load() {
+  loading.value = true
+  pageError.value = ''
   try {
-    const auth = await api<{ accessToken: string }>('/v1/admin/login', {
-      method: 'POST',
-      body: JSON.stringify({ username: username.value, password: password.value }),
-    })
-    localStorage.setItem('xiaopi_admin_token', auth.accessToken)
-    loggedIn.value = true
-    await load()
+    const [propertyData, leadData, configData] = await Promise.all([
+      api<Property[]>('/v1/properties'),
+      api<Lead[]>('/v1/property-leads'),
+      api<PublicConfig>('/v1/config/public'),
+    ])
+    properties.value = propertyData || []
+    leads.value = leadData || []
+    applyConfig(configData)
   } catch (error) {
-    loginError.value = error instanceof Error ? error.message : '登录失败'
+    pageError.value = error instanceof Error ? error.message : '数据加载失败'
+    throw error
+  } finally {
+    loading.value = false
   }
 }
 
-const rows = computed(() => tab.value === '客户管理' ? users.value : tab.value === '线索管理' ? leads.value : properties.value)
+async function login() {
+  if (!username.value || !password.value || loading.value) return
+  loginError.value = ''
+  loading.value = true
+  try {
+    const auth = await api<{ accessToken: string }>('/v1/admin/login', { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) })
+    localStorage.setItem('xiaopi_admin_token', auth.accessToken)
+    loggedIn.value = true
+    tab.value = '运营总览'
+    await load()
+  } catch (error) {
+    localStorage.removeItem('xiaopi_admin_token')
+    loggedIn.value = false
+    loginError.value = error instanceof Error ? error.message : '登录失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+function logout() {
+  localStorage.removeItem('xiaopi_admin_token')
+  loggedIn.value = false
+  password.value = ''
+}
+
+function selectTab(value: string) { tab.value = value as TabKey }
+
+const rows = computed(() => {
+  if (tab.value === '客户管理') return users.value.map((item) => ({ name: item.name, info: item.phone, status: item.status }))
+  if (tab.value === '线索管理') return leads.value.map((item) => ({ name: item.sourceName, info: `${item.community} · ${item.sourcePhone}`, status: item.status }))
+  return properties.value.map((item) => ({ name: item.title, info: item.community, status: item.status }))
+})
+const currentMetric = computed(() => tab.value === '客户管理' ? '客户总数' : tab.value === '线索管理' ? '线索总数' : '房源总数')
+const statusType = (status: string) => status === '正常' || status === 'PUBLISHED' ? 'success' : status === 'PENDING' ? 'warning' : 'info'
 
 const locationsText = computed({
   get: () => publicConfig.locations.map((item) => `${item.label}|${item.keyword}`).join('\n'),
@@ -99,86 +125,108 @@ const channelsText = computed({
   },
 })
 
-const saveConfig = async () => {
+async function saveConfig() {
   savingConfig.value = true
   configMessage.value = ''
+  configFailed.value = false
   try {
-    const value = await api<PublicConfig>('/v1/admin/config/public', {
-      method: 'PUT',
-      body: JSON.stringify(publicConfig),
-    })
+    const value = await api<PublicConfig>('/v1/admin/config/public', { method: 'PUT', body: JSON.stringify(publicConfig) })
     applyConfig(value)
-    configMessage.value = '小程序配置已保存并立即生效'
+    configMessage.value = '配置已保存，小程序重新进入后即可获取最新内容。'
   } catch (error) {
+    configFailed.value = true
     configMessage.value = error instanceof Error ? error.message : '保存失败'
   } finally {
     savingConfig.value = false
   }
 }
 
-if (loggedIn.value) load().catch(() => { loggedIn.value = false })
+onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 </script>
 
 <template>
-  <main v-if="!loggedIn" class="login">
-    <section>
-      <div class="logo">小皮租房</div>
-      <p>运营管理后台</p>
-      <form @submit.prevent="login">
-        <input v-model="username" placeholder="管理员账号" />
-        <input v-model="password" placeholder="管理员密码" type="password" />
-        <div v-if="loginError" class="error">{{ loginError }}</div>
-        <button type="submit">登录后台</button>
-      </form>
+  <main v-if="!loggedIn" class="login-page">
+    <section class="login-panel surface">
+      <div class="login-brand">
+        <div class="login-mark">小</div>
+        <span>小皮租房</span>
+        <h1>运营管理后台</h1>
+        <p>管理房源、客户线索与小程序首页内容。</p>
+      </div>
+      <el-form label-position="top" @submit.prevent="login">
+        <el-form-item label="管理员账号"><el-input v-model.trim="username" autocomplete="username" :disabled="loading" /></el-form-item>
+        <el-form-item label="管理员密码"><el-input v-model="password" type="password" autocomplete="current-password" show-password :disabled="loading" @keyup.enter="login" /></el-form-item>
+        <el-alert v-if="loginError" :title="loginError" type="error" show-icon :closable="false" />
+        <el-button type="primary" size="large" class="login-button" :loading="loading" :disabled="!username || !password" @click="login">登录后台</el-button>
+      </el-form>
     </section>
   </main>
 
-  <main v-else class="layout">
-    <aside>
-      <div class="brand">小皮租房</div>
-      <div v-for="item in ['房源审核','线索管理','客户管理','小程序配置']" :key="item" class="nav" :class="{ active: tab === item }" @click="tab = item">{{ item }}</div>
-    </aside>
-    <section class="content">
-      <header><h1>{{ tab }}</h1><span>管理员</span></header>
+  <main v-else class="admin-shell">
+    <AdminSidebar :active="tab" @select="selectTab" />
+    <section class="admin-main">
+      <AdminTopbar :title="tab" @logout="logout" />
+      <div class="admin-content">
+        <el-alert v-if="pageError" class="page-error" :title="pageError" type="error" show-icon :closable="false" />
 
-      <template v-if="tab === '小程序配置'">
-        <div class="config-card">
-          <h2>首页基础信息</h2>
-          <label>品牌标题<input v-model="publicConfig.heroTitle" /></label>
-          <label>首页主标题<input v-model="publicConfig.heroSubtitle" /></label>
-          <label>首页副标题<input v-model="publicConfig.heroDescription" /></label>
-          <label>公告内容<textarea v-model="publicConfig.notice" rows="3"></textarea></label>
-          <label>联系电话<input v-model="publicConfig.contactPhone" /></label>
-
-          <h2>地理位置</h2>
-          <p class="help">每行一个，格式：显示名称|搜索关键词</p>
-          <textarea v-model="locationsText" rows="6" placeholder="光谷|光谷"></textarea>
-
-          <h2>精选频道</h2>
-          <p class="help">每行一个，格式：图标|标题|副标题|搜索关键词</p>
-          <textarea v-model="channelsText" rows="7" placeholder="🏢|金融港|通勤优选|金融港"></textarea>
-
-          <div v-if="configMessage" class="config-message">{{ configMessage }}</div>
-          <button class="save" :disabled="savingConfig" @click="saveConfig">{{ savingConfig ? '保存中...' : '保存并发布' }}</button>
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="stats">
-          <div><b>{{ rows.length }}</b><small>{{ tab === '客户管理' ? '客户总数' : tab === '线索管理' ? '待处理线索' : '房源总数' }}</small></div>
-          <div><b>0</b><small>今日新增</small></div>
-          <div><b>0</b><small>待处理事项</small></div>
-        </div>
-        <div class="table">
-          <div class="tr head"><span>名称</span><span>信息</span><span>状态</span><span>操作</span></div>
-          <div v-for="row in rows" :key="row.name || row.title || row.community" class="tr">
-            <span>{{ row.name || row.title || row.sourceName }}</span>
-            <span>{{ row.phone || row.community || row.sourcePhone }}</span>
-            <span>{{ row.status }}</span>
-            <button>查看</button>
+        <template v-if="tab === '运营总览'">
+          <section class="dashboard-hero">
+            <div><span class="dashboard-kicker">XIAOPI OPERATIONS</span><h1>租住业务运营总览</h1><p>集中查看房源、线索与用户状态，并维护小程序对外展示的地区和精选频道。</p></div>
+            <div class="hero-meter"><span>当前待跟进线索</span><strong>{{ leads.length }}</strong></div>
+          </section>
+          <div v-loading="loading" class="stats-grid dashboard-grid">
+            <button class="surface stat-card" @click="tab = '房源审核'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong><em>查看房源审核</em></button>
+            <button class="surface stat-card" @click="tab = '线索管理'"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong><em>跟进租住意向</em></button>
+            <button class="surface stat-card" @click="tab = '客户管理'"><el-icon><User /></el-icon><span>平台客户</span><strong>{{ users.length }}</strong><em>查看用户状态</em></button>
+            <button class="surface stat-card" @click="tab = '小程序配置'"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong><em>维护展示内容</em></button>
           </div>
-        </div>
-      </template>
+        </template>
+
+        <template v-else-if="tab === '小程序配置'">
+          <section class="page-header">
+            <div><span>内容与运营</span><h1>小程序配置</h1><p>配置首页品牌信息、公告、地理位置和精选频道，保存后由线上 API 统一下发。</p></div>
+            <el-button type="primary" size="large" :loading="savingConfig" @click="saveConfig">保存并发布</el-button>
+          </section>
+          <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
+          <div v-loading="loading" class="config-grid">
+            <section class="surface form-section">
+              <div class="section-heading"><span>01</span><div><h2>首页基础信息</h2><p>控制小程序首页首屏文案与联系方式。</p></div></div>
+              <el-form label-position="top">
+                <el-form-item label="品牌标题"><el-input v-model="publicConfig.heroTitle" /></el-form-item>
+                <el-form-item label="首页主标题"><el-input v-model="publicConfig.heroSubtitle" /></el-form-item>
+                <el-form-item label="首页副标题"><el-input v-model="publicConfig.heroDescription" /></el-form-item>
+                <el-form-item label="公告内容"><el-input v-model="publicConfig.notice" type="textarea" :rows="3" /></el-form-item>
+                <el-form-item label="联系电话"><el-input v-model="publicConfig.contactPhone" /></el-form-item>
+              </el-form>
+            </section>
+            <div class="config-side">
+              <section class="surface form-section"><div class="section-heading"><span>02</span><div><h2>地理位置</h2><p>每行：显示名称|搜索关键词</p></div></div><el-input v-model="locationsText" type="textarea" :rows="7" placeholder="光谷|光谷" /></section>
+              <section class="surface form-section"><div class="section-heading"><span>03</span><div><h2>精选频道</h2><p>每行：图标|标题|副标题|搜索关键词</p></div></div><el-input v-model="channelsText" type="textarea" :rows="8" placeholder="🏢|金融港|通勤优选|金融港" /></section>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <section class="page-header">
+            <div><span>业务管理</span><h1>{{ tab }}</h1><p>查看线上业务数据，状态信息与小程序使用同一套 API。</p></div>
+            <el-button :loading="loading" @click="load">刷新数据</el-button>
+          </section>
+          <div class="stats-grid list-stats">
+            <section class="surface compact-stat"><span>{{ currentMetric }}</span><strong>{{ rows.length }}</strong></section>
+            <section class="surface compact-stat"><span>今日新增</span><strong>0</strong></section>
+            <section class="surface compact-stat"><span>待处理事项</span><strong>{{ tab === '线索管理' ? leads.length : 0 }}</strong></section>
+          </div>
+          <section class="surface table-panel">
+            <div class="table-heading"><div><h2>{{ tab }}列表</h2><p>共 {{ rows.length }} 条记录</p></div></div>
+            <el-table v-loading="loading" :data="rows" empty-text="暂无数据">
+              <el-table-column prop="name" label="名称" min-width="180" />
+              <el-table-column prop="info" label="信息" min-width="240" />
+              <el-table-column label="状态" width="140"><template #default="scope"><el-tag :type="statusType(scope.row.status)" effect="light">{{ scope.row.status || '未知' }}</el-tag></template></el-table-column>
+              <el-table-column label="操作" width="120" align="center"><template #default><el-button link type="primary">查看</el-button></template></el-table-column>
+            </el-table>
+          </section>
+        </template>
+      </div>
     </section>
   </main>
 </template>
