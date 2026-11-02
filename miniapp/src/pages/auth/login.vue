@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { saveSession } from '../../auth/session'
 import { wechatLogin } from '../../api/properties'
 
-const TOKEN_STORAGE_KEY = 'xiaopi_access_token'
 const isLoggingIn = ref(false)
 
-const showLoginError = () => {
-  uni.showToast({ title: '登录失败，请稍后重试', icon: 'none' })
+const showLoginError = (message = '登录失败，请稍后重试') => {
+  uni.showToast({ title: message, icon: 'none' })
 }
 
 const login = () => {
@@ -18,13 +18,13 @@ const login = () => {
     success: async (res) => {
       try {
         const result = await wechatLogin(res.code)
-        uni.setStorageSync(TOKEN_STORAGE_KEY, result.accessToken)
+        saveSession(result.accessToken, 'user')
         uni.showToast({ title: '登录成功' })
         setTimeout(() => {
           uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) })
         }, 500)
-      } catch {
-        showLoginError()
+      } catch (error) {
+        showLoginError(error instanceof Error ? error.message : undefined)
       } finally {
         isLoggingIn.value = false
       }
@@ -42,7 +42,7 @@ const login = () => {
     <view class="card login-card">
       <view class="logo">小皮</view>
       <view class="title">微信登录</view>
-      <view class="muted">登录后可以联系房源、提交房源线索</view>
+      <view class="muted">登录后可以联系房源并使用需要身份验证的服务</view>
       <button class="button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="login">
         微信一键登录
       </button>
