@@ -18,7 +18,7 @@ import (
 
 type temporaryAuthStore interface {
 	ListTemporaryAccess(context.Context) ([]domain.TemporaryAccess, error)
-	UpsertTemporaryAccess(context.Context, string, string, string, time.Time) (domain.TemporaryAccess, error)
+	UpsertTemporaryAccess(context.Context, string, string, string, string, time.Time) (domain.TemporaryAccess, error)
 	SetTemporaryAccessStatus(context.Context, string, string) error
 	LoginTemporaryUser(context.Context, domain.User, string, string, time.Time) (domain.User, error)
 }
@@ -74,7 +74,7 @@ func (s *Server) createTemporaryAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expiresAt := time.Now().Add(time.Duration(input.ExpiresInHours) * time.Hour)
-	item, err := store.UpsertTemporaryAccess(r.Context(), phone, s.temporaryCodeHash(phone, code), claimsFromContext(r.Context()).Subject, expiresAt)
+	item, err := store.UpsertTemporaryAccess(r.Context(), phone, s.temporaryCodeHash(phone, code), code, claimsFromContext(r.Context()).Subject, expiresAt)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save temporary access")
 		return

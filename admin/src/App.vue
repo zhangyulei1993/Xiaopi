@@ -20,7 +20,7 @@ type Property = { title: string; community: string; status: string }
 type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
 type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
 type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
-type TemporaryAccess = { id: number; phone: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
+type TemporaryAccess = { id: number; phone: string; accessCode: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
 type TabKey = '运营总览' | '房源审核' | '线索管理' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://150.158.157.213/api'
@@ -292,7 +292,7 @@ async function generateTemporaryAccess() {
       body: JSON.stringify({ phone: temporaryPhone.value, expiresInHours: temporaryHours.value }),
     })
     generatedTemporaryCode.value = result.accessCode
-    temporaryMessage.value = '访问码已生成。请通过可信渠道发送给对应用户，离开本页后将不再显示明文。'
+    temporaryMessage.value = '访问码已生成，可在下方访问记录中随时查看。'
     temporaryAccess.value = await api<TemporaryAccess[]>('/v1/admin/temporary-access')
     temporaryPhone.value = ''
   } catch (error) {
@@ -419,13 +419,14 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <span class="hours-unit">小时有效</span>
               <el-button type="primary" :loading="generatingTemporaryCode" :disabled="!temporaryPhone" @click="generateTemporaryAccess">生成访问码</el-button>
             </div>
-            <div v-if="generatedTemporaryCode" class="generated-code"><span>本次访问码</span><strong>{{ generatedTemporaryCode }}</strong><small>请现在复制并发送，后台不会再次显示明文。</small></div>
+            <div v-if="generatedTemporaryCode" class="generated-code"><span>本次访问码</span><strong>{{ generatedTemporaryCode }}</strong><small>测试阶段会同时保留在下方访问记录中。</small></div>
           </section>
           <el-alert v-if="temporaryMessage" class="config-alert" :title="temporaryMessage" :type="temporaryFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section class="surface table-panel">
             <div class="table-heading"><div><h2>访问码记录</h2><p>重新生成会立即替换同一手机号的旧访问码</p></div></div>
             <el-table :data="temporaryAccess" empty-text="暂无临时访问码">
               <el-table-column prop="phone" label="手机号" min-width="160" />
+              <el-table-column label="访问码" min-width="170"><template #default="scope"><strong v-if="scope.row.accessCode" class="access-code-cell">{{ scope.row.accessCode }}</strong><span v-else class="unavailable-code">历史记录，需重新生成</span></template></el-table-column>
               <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' && new Date(scope.row.expiresAt) > new Date() ? 'success' : 'info'">{{ scope.row.status === 'revoked' ? '已撤销' : new Date(scope.row.expiresAt) <= new Date() ? '已过期' : '有效' }}</el-tag></template></el-table-column>
               <el-table-column label="有效期至" min-width="180"><template #default="scope">{{ formatTime(scope.row.expiresAt) }}</template></el-table-column>
               <el-table-column prop="createdBy" label="创建人" min-width="140" />
@@ -444,10 +445,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <div><strong>{{ configDirty ? '存在未发布修改' : '线上配置已同步' }}</strong><span>{{ configLastSavedAt ? `最近发布：${configLastSavedAt}` : '当前内容来自线上配置' }}</span></div>
             </div>
             <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
-            <div class="config-toolbar-actions">
-              <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复已发布版本</el-button>
-              <el-button type="primary" size="large" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
-            </div>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section v-if="configErrors.length" class="config-validation">
@@ -507,6 +504,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
             <aside class="config-preview-column">
               <div class="preview-heading"><div><strong>小程序首页预览</strong><span>按实际配置实时更新</span></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
+              <div class="config-preview-actions">
+                <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button>
+                <el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
+              </div>
               <div class="phone-preview">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>

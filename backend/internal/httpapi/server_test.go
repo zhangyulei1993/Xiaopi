@@ -93,12 +93,12 @@ func (f *fakeStore) IsAdminUser(_ context.Context, userID string) (bool, error) 
 func (f *fakeStore) ListTemporaryAccess(context.Context) ([]domain.TemporaryAccess, error) {
 	return f.temporaryAccess, nil
 }
-func (f *fakeStore) UpsertTemporaryAccess(_ context.Context, phone, codeHash, createdBy string, expiresAt time.Time) (domain.TemporaryAccess, error) {
+func (f *fakeStore) UpsertTemporaryAccess(_ context.Context, phone, codeHash, accessCode, createdBy string, expiresAt time.Time) (domain.TemporaryAccess, error) {
 	if f.temporaryHashes == nil {
 		f.temporaryHashes = map[string]string{}
 	}
 	f.temporaryHashes[phone] = codeHash
-	item := domain.TemporaryAccess{ID: 1, Phone: phone, Status: "active", ExpiresAt: expiresAt, CreatedBy: createdBy, CreatedAt: time.Now()}
+	item := domain.TemporaryAccess{ID: 1, Phone: phone, AccessCode: accessCode, Status: "active", ExpiresAt: expiresAt, CreatedBy: createdBy, CreatedAt: time.Now()}
 	f.temporaryAccess = []domain.TemporaryAccess{item}
 	return item, nil
 }
@@ -243,6 +243,11 @@ func TestTemporaryAccessCreatesDistinctAuthenticatedUser(t *testing.T) {
 	}](t, created)
 	if len(data.AccessCode) != 8 {
 		t.Fatalf("expected 8 character access code, got %q", data.AccessCode)
+	}
+	listed := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/admin/temporary-access", nil, adminToken)
+	items := responseData[[]domain.TemporaryAccess](t, listed)
+	if len(items) != 1 || items[0].AccessCode != data.AccessCode {
+		t.Fatalf("expected admin list to expose the current test access code, got %#v", items)
 	}
 	login := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/temporary/login", map[string]string{"phone": "13800138000", "accessCode": data.AccessCode}, "")
 	if login.Code != http.StatusOK {

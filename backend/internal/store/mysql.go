@@ -270,7 +270,7 @@ func (s *MySQL) IsAdminUser(ctx context.Context, userID string) (bool, error) {
 }
 
 func (s *MySQL) ListTemporaryAccess(ctx context.Context) ([]domain.TemporaryAccess, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,phone,status,expires_at,created_by,created_at FROM temporary_access_codes ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,phone,COALESCE(access_code,''),status,expires_at,created_by,created_at FROM temporary_access_codes ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +278,7 @@ func (s *MySQL) ListTemporaryAccess(ctx context.Context) ([]domain.TemporaryAcce
 	items := make([]domain.TemporaryAccess, 0)
 	for rows.Next() {
 		var item domain.TemporaryAccess
-		if err := rows.Scan(&item.ID, &item.Phone, &item.Status, &item.ExpiresAt, &item.CreatedBy, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Phone, &item.AccessCode, &item.Status, &item.ExpiresAt, &item.CreatedBy, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -286,13 +286,13 @@ func (s *MySQL) ListTemporaryAccess(ctx context.Context) ([]domain.TemporaryAcce
 	return items, rows.Err()
 }
 
-func (s *MySQL) UpsertTemporaryAccess(ctx context.Context, phone, codeHash, createdBy string, expiresAt time.Time) (domain.TemporaryAccess, error) {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO temporary_access_codes (phone,code_hash,status,expires_at,created_by) VALUES (?,?,'active',?,?) ON DUPLICATE KEY UPDATE code_hash=VALUES(code_hash),status='active',expires_at=VALUES(expires_at),created_by=VALUES(created_by),updated_at=CURRENT_TIMESTAMP`, phone, codeHash, expiresAt, createdBy)
+func (s *MySQL) UpsertTemporaryAccess(ctx context.Context, phone, codeHash, accessCode, createdBy string, expiresAt time.Time) (domain.TemporaryAccess, error) {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO temporary_access_codes (phone,code_hash,access_code,status,expires_at,created_by) VALUES (?,?,?,'active',?,?) ON DUPLICATE KEY UPDATE code_hash=VALUES(code_hash),access_code=VALUES(access_code),status='active',expires_at=VALUES(expires_at),created_by=VALUES(created_by),updated_at=CURRENT_TIMESTAMP`, phone, codeHash, accessCode, expiresAt, createdBy)
 	if err != nil {
 		return domain.TemporaryAccess{}, err
 	}
 	var item domain.TemporaryAccess
-	err = s.db.QueryRowContext(ctx, `SELECT id,phone,status,expires_at,created_by,created_at FROM temporary_access_codes WHERE phone=?`, phone).Scan(&item.ID, &item.Phone, &item.Status, &item.ExpiresAt, &item.CreatedBy, &item.CreatedAt)
+	err = s.db.QueryRowContext(ctx, `SELECT id,phone,COALESCE(access_code,''),status,expires_at,created_by,created_at FROM temporary_access_codes WHERE phone=?`, phone).Scan(&item.ID, &item.Phone, &item.AccessCode, &item.Status, &item.ExpiresAt, &item.CreatedBy, &item.CreatedAt)
 	return item, err
 }
 
