@@ -9,7 +9,7 @@ const leads = ref<PropertyLead[]>([])
 const properties = ref<Property[]>([])
 const loading = ref(false)
 const load = async () => { loading.value = true; try { [leads.value, properties.value] = await Promise.all([request<PropertyLead[]>('/v1/property-leads'), request<Property[]>('/v1/properties')]) } catch (error) { uni.showToast({ title:error instanceof Error?error.message:'加载失败', icon:'none' }) } finally { loading.value = false } }
-onShow(() => { if (!hasRole('admin')) { uni.redirectTo({ url:'/pages/admin/login' }); return } load() })
+onShow(() => { if (!hasRole('admin')) { uni.showToast({ title: '暂无运营权限', icon: 'none' }); uni.switchTab({ url:'/pages/me/index' }); return } load() })
 const convert = async (lead: PropertyLead) => { try { await request('/v1/property-leads/convert', { method:'POST', data:{ leadId:lead.id, title:lead.community, community:lead.community, location:lead.location, layout:lead.layout, rentMonthly:lead.expectedRentMonthly, description:lead.note, ownerId:'xiaopi-admin' } }); uni.showToast({ title:'已转为正式房源' }); load() } catch(error) { uni.showToast({ title:error instanceof Error?error.message:'转换失败', icon:'none' }) } }
 const changeStatus = async (property: Property, status: string) => { try { await request('/v1/properties/status', { method:'PATCH', data:{ propertyId:property.id, status, operatorId:'xiaopi-admin' } }); uni.showToast({ title:'状态已更新' }); load() } catch(error) { uni.showToast({ title:error instanceof Error?error.message:'状态更新失败', icon:'none' }) } }
 const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber })

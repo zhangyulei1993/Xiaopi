@@ -23,10 +23,6 @@ export interface PublicConfig {
   featuredChannels: { icon: string; title: string; subtitle: string; keyword: string }[]
 }
 
-export interface LoginResult {
-  accessToken: string
-}
-
 export const wechatLogin = (code: string) => request<WechatLoginResult>('/v1/auth/wechat/login', {
   method: 'POST',
   data: { code },
@@ -42,9 +38,9 @@ export const temporaryLogin = (phone: string, accessCode: string) => request<Wec
   data: { phone, accessCode },
 })
 
+export const refreshAuth = () => request<{ accessToken: string; role: 'user' | 'admin' }>('/v1/auth/refresh', {
+  method: 'POST',
+})
+
 export const getPublicConfig = () => request<PublicConfig>('/v1/config/public')
 
-export const adminLogin = (username: string, password: string) => request<LoginResult>('/v1/admin/login', {
-  method: 'POST',
-  data: { username, password },
-})

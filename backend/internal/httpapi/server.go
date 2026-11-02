@@ -64,6 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/phone", s.requireRoles(s.bindWechatPhone, roleUser, roleAdmin))
 	mux.HandleFunc("POST /api/v1/auth/temporary/login", s.temporaryLogin)
+	mux.HandleFunc("POST /api/v1/auth/refresh", s.requireRoles(s.refreshAuth, roleUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/users", s.requireRoles(s.listUsers, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/admin-users", s.requireRoles(s.listAdminUsers, roleAdmin))
 	mux.HandleFunc("POST /api/v1/admin/admin-users", s.requireRoles(s.assignAdminUser, roleAdmin))
@@ -253,6 +254,22 @@ func (s *Server) wechatUserRole(ctx context.Context, userID string) string {
 		return roleAdmin
 	}
 	return roleUser
+}
+
+func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromContext(r.Context())
+	role := roleUser
+	if claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin {
+		role = roleAdmin
+	} else {
+		role = s.wechatUserRole(r.Context(), claims.Subject)
+	}
+	token, err := s.tokens.issue(claims.Subject, role)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to refresh access token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"accessToken": token, "role": role}})
 }
 
 func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {

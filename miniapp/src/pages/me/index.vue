@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
-import { clearSession, getSession, type SessionRole } from '../../auth/session'
-import { bindWechatPhone } from '../../api/properties'
+import { clearSession, getSession, saveSession, type SessionRole } from '../../auth/session'
+import { bindWechatPhone, refreshAuth } from '../../api/properties'
 
 const role = ref<SessionRole | null>(null)
 const phone = ref('')
@@ -10,15 +10,23 @@ const isBindingPhone = ref(false)
 const isLoggedIn = computed(() => role.value !== null)
 const isAdmin = computed(() => role.value === 'admin')
 
-onShow(() => {
-  role.value = getSession()?.role || null
+onShow(async () => {
+  const session = getSession()
+  role.value = session?.role || null
   phone.value = String(uni.getStorageSync('xiaopi_bound_phone') || '')
+  if (!session) return
+  try {
+    const refreshed = await refreshAuth()
+    saveSession(refreshed.accessToken, refreshed.role)
+    role.value = refreshed.role
+  } catch {
+    role.value = getSession()?.role || null
+  }
 })
 
 const login = () => uni.navigateTo({ url: '/pages/auth/login' })
 const publish = () => uni.navigateTo({ url: '/pages/publish/index' })
 const browse = () => uni.switchTab({ url: '/pages/properties/index' })
-const adminLogin = () => uni.navigateTo({ url: '/pages/admin/login' })
 const workbench = () => uni.navigateTo({ url: '/pages/admin/index' })
 const editProperty = () => uni.navigateTo({ url: '/pages/admin/property-edit' })
 
@@ -88,10 +96,6 @@ const logout = () => {
       <view class="group-title">运营管理</view>
       <view @click="workbench">管理员工作台 <text>›</text></view>
       <view @click="editProperty">录入正式房源 <text>›</text></view>
-    </view>
-
-    <view v-else class="card menu">
-      <view @click="adminLogin">运营人员入口 <text>›</text></view>
     </view>
 
     <button v-if="isLoggedIn" class="logout" @click="logout">退出登录</button>

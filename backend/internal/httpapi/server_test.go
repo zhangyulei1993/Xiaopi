@@ -345,3 +345,34 @@ func TestWechatUserIDFitsDatabaseColumnAndIsStable(t *testing.T) {
 		t.Fatalf("wechat user id exceeds users.id column: %d (%q)", len(first), first)
 	}
 }
+
+func TestRefreshAuthReflectsCurrentAdminAssignment(t *testing.T) {
+	dataStore := &fakeStore{admins: []domain.AdminUser{{UserID: "wx-user-1", Status: "active"}}}
+	server := testServer(dataStore)
+	userToken, err := server.tokens.issue("wx-user-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upgraded := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, userToken)
+	if upgraded.Code != http.StatusOK {
+		t.Fatalf("expected refresh success, got %d: %s", upgraded.Code, upgraded.Body.String())
+	}
+	upgradedAuth := responseData[struct {
+		Role string `json:"role"`
+	}](t, upgraded)
+	if upgradedAuth.Role != roleAdmin {
+		t.Fatalf("expected admin role, got %q", upgradedAuth.Role)
+	}
+	dataStore.admins[0].Status = "disabled"
+	adminToken, err := server.tokens.issue("wx-user-1", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	downgraded := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, adminToken)
+	downgradedAuth := responseData[struct {
+		Role string `json:"role"`
+	}](t, downgraded)
+	if downgradedAuth.Role != roleUser {
+		t.Fatalf("expected user role after disable, got %q", downgradedAuth.Role)
+	}
+}
