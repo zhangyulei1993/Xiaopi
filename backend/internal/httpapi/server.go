@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,13 @@ type Store interface {
 	UpsertUser(context.Context, domain.User) error
 }
 
+type appConfigStore interface {
+	GetAppConfig(context.Context, string) ([]byte, error)
+	UpsertAppConfig(context.Context, string, []byte) error
+}
+
+const publicConfigKey = "miniapp_public"
+
 type Server struct {
 	properties []domain.Property
 	store      Store
@@ -53,6 +61,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
+	mux.HandleFunc("GET /api/v1/config/public", s.publicConfig)
+	mux.HandleFunc("PUT /api/v1/admin/config/public", s.requireRoles(s.updatePublicConfig, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleUser, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))
@@ -62,6 +72,59 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/property-leads", s.requireRoles(s.listPropertyLeads, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads", s.createPropertyLead)
 	return logging(cors(mux))
+}
+
+func (s *Server) loadPublicConfig(ctx context.Context) (domain.PublicConfig, error) {
+	config := domain.DefaultPublicConfig()
+	config.ContactPhone = os.Getenv("CONTACT_PHONE")
+	configStore, ok := s.store.(appConfigStore)
+	if !ok {
+		return config, nil
+	}
+	value, err := configStore.GetAppConfig(ctx, publicConfigKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return config, nil
+	}
+	if err != nil {
+		return config, err
+	}
+	if err := json.Unmarshal(value, &config); err != nil {
+		return domain.PublicConfig{}, err
+	}
+	return config, nil
+}
+
+func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
+	config, err := s.loadPublicConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load public config")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": config})
+}
+
+func (s *Server) updatePublicConfig(w http.ResponseWriter, r *http.Request) {
+	var config domain.PublicConfig
+	if decodeJSON(w, r, &config) != nil {
+		writeError(w, http.StatusBadRequest, "invalid public config")
+		return
+	}
+	config.Normalize()
+	if config.HeroTitle == "" || len(config.Locations) > 20 || len(config.FeaturedChannels) > 12 {
+		writeError(w, http.StatusBadRequest, "heroTitle is required and configuration is too large")
+		return
+	}
+	configStore, ok := s.store.(appConfigStore)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "configuration store unavailable")
+		return
+	}
+	value, err := json.Marshal(config)
+	if err != nil || configStore.UpsertAppConfig(r.Context(), publicConfigKey, value) != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save public config")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": config})
 }
 
 func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {

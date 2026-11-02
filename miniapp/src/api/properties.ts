@@ -13,7 +13,13 @@ export interface WechatLoginResult {
 }
 
 export interface PublicConfig {
+  heroTitle: string
+  heroSubtitle: string
+  heroDescription: string
+  notice: string
   contactPhone: string
+  locations: { label: string; keyword: string }[]
+  featuredChannels: { icon: string; title: string; subtitle: string; keyword: string }[]
 }
 
 export interface LoginResult {

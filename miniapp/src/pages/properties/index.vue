@@ -2,23 +2,26 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { API_ORIGIN } from '../../api/client'
-import { listProperties, type Property } from '../../api/properties'
+import { getPublicConfig, listProperties, type Property } from '../../api/properties'
 
 const properties = ref<Property[]>([])
 const keyword = ref('')
 const selectedArea = ref('全部')
+const configuredLocations = ref<{ label: string; keyword: string }[]>([])
 const loading = ref(false)
 const loadFailed = ref(false)
 
 const areas = computed(() => {
+  if (configuredLocations.value.length) return [{ label: '全部', keyword: '' }, ...configuredLocations.value]
   const values = properties.value.map((item) => item.location?.split(/[·/]/)[0]?.trim()).filter(Boolean)
-  return ['全部', ...Array.from(new Set(values))]
+  return [{ label: '全部', keyword: '' }, ...Array.from(new Set(values)).map((value) => ({ label: value, keyword: value }))]
 })
 
 const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase()
   return properties.value.filter((item) => {
-    const matchesArea = selectedArea.value === '全部' || item.location?.includes(selectedArea.value)
+    const location = areas.value.find((area) => area.label === selectedArea.value)
+    const matchesArea = !location?.keyword || item.location?.includes(location.keyword)
     const searchable = `${item.title} ${item.community} ${item.location} ${item.layout}`.toLowerCase()
     return matchesArea && (!query || searchable.includes(query))
   })
@@ -28,7 +31,17 @@ const load = async () => {
   loading.value = true
   loadFailed.value = false
   try {
-    properties.value = await listProperties()
+    const [items, config] = await Promise.all([
+      listProperties(),
+      getPublicConfig().catch(() => null),
+    ])
+    properties.value = items
+    configuredLocations.value = config?.locations || []
+    const pendingFilter = String(uni.getStorageSync('xiaopi_property_filter') || '')
+    if (pendingFilter) {
+      keyword.value = pendingFilter
+      uni.removeStorageSync('xiaopi_property_filter')
+    }
   } catch (error) {
     loadFailed.value = true
     uni.showToast({ title: error instanceof Error ? error.message : '房源加载失败', icon: 'none' })
@@ -59,10 +72,10 @@ const coverUrl = (item: Property) => {
     <scroll-view scroll-x class="chips">
       <text
         v-for="area in areas"
-        :key="area"
-        :class="{ active: selectedArea === area }"
-        @click="selectedArea = area"
-      >{{ area }}</text>
+        :key="area.label"
+        :class="{ active: selectedArea === area.label }"
+        @click="selectedArea = area.label"
+      >{{ area.label }}</text>
     </scroll-view>
 
     <view v-if="loading" class="state card">正在加载房源...</view>

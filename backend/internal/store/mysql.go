@@ -168,6 +168,17 @@ func (s *MySQL) UpsertUser(ctx context.Context, user domain.User) error {
 	return err
 }
 
+func (s *MySQL) GetAppConfig(ctx context.Context, key string) ([]byte, error) {
+	var value []byte
+	err := s.db.QueryRowContext(ctx, `SELECT config_value FROM app_configs WHERE config_key=?`, key).Scan(&value)
+	return value, err
+}
+
+func (s *MySQL) UpsertAppConfig(ctx context.Context, key string, value []byte) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO app_configs (config_key,config_value) VALUES (?,?) ON DUPLICATE KEY UPDATE config_value=VALUES(config_value),updated_at=CURRENT_TIMESTAMP`, key, value)
+	return err
+}
+
 func env(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
