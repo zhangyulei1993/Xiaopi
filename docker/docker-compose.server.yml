@@ -5,6 +5,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile.server
+      network: host
     container_name: xiaopi-api
     restart: unless-stopped
     network_mode: host
