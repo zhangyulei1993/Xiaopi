@@ -136,6 +136,9 @@ func (s *MySQL) UpdatePropertyStatus(ctx context.Context, propertyID, nextStatus
 	if err := tx.QueryRowContext(ctx, `SELECT status FROM properties WHERE id=? FOR UPDATE`, propertyID).Scan(&current); err != nil {
 		return err
 	}
+	if !domain.CanTransitionPropertyStatus(current, nextStatus) {
+		return domain.ErrInvalidPropertyStatusTransition
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE properties SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, nextStatus, propertyID); err != nil {
 		return err
 	}

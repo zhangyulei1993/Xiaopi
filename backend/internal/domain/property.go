@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrInvalidPropertyStatusTransition = errors.New("invalid property status transition")
 
 type PropertyStatus string
 
@@ -53,5 +58,27 @@ func (p *Property) TakeOffline() {
 	if p.Status == PropertyPublished {
 		p.Status = PropertyOffline
 		p.UpdatedAt = time.Now()
+	}
+}
+
+func IsPropertyStatus(value string) bool {
+	switch PropertyStatus(value) {
+	case PropertyDraft, PropertyPending, PropertyPublished, PropertyOffline:
+		return true
+	default:
+		return false
+	}
+}
+
+func CanTransitionPropertyStatus(from, to string) bool {
+	switch PropertyStatus(from) {
+	case PropertyDraft, PropertyOffline:
+		return PropertyStatus(to) == PropertyPending
+	case PropertyPending:
+		return PropertyStatus(to) == PropertyPublished || PropertyStatus(to) == PropertyDraft
+	case PropertyPublished:
+		return PropertyStatus(to) == PropertyOffline
+	default:
+		return false
 	}
 }

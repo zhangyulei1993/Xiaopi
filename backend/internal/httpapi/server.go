@@ -2,28 +2,50 @@ package httpapi
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"xiaopi/backend/internal/domain"
-	"xiaopi/backend/internal/store"
 )
+
+type Store interface {
+	ListProperties(context.Context) ([]domain.Property, error)
+	CreateProperty(context.Context, domain.Property) error
+	UpdateProperty(context.Context, domain.Property) error
+	ListPropertyLeads(context.Context) ([]domain.PropertyLead, error)
+	CreatePropertyLead(context.Context, domain.PropertyLead) error
+	UpdatePropertyStatus(context.Context, string, string, string, string) error
+	ConvertLeadToProperty(context.Context, string, domain.Property) error
+	AddPropertyMedia(context.Context, domain.PropertyMedia) error
+	UpsertUser(context.Context, domain.User) error
+}
 
 type Server struct {
 	properties []domain.Property
-	store      *store.MySQL
+	store      Store
+	config     Config
+	tokens     tokenManager
+	httpClient *http.Client
 }
 
-func NewServer(mysqlStore *store.MySQL) *Server { return &Server{store: mysqlStore} }
+func NewServer(dataStore Store) *Server { return NewServerWithConfig(dataStore, ConfigFromEnv()) }
+
+func NewServerWithConfig(dataStore Store, config Config) *Server {
+	return &Server{
+		store:      dataStore,
+		config:     config,
+		tokens:     newTokenManager(config),
+		httpClient: &http.Client{Timeout: 5 * time.Second},
+	}
+}
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -32,12 +54,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
-	mux.HandleFunc("POST /api/v1/properties", s.createProperty)
-	mux.HandleFunc("PATCH /api/v1/properties/update", s.updateProperty)
-	mux.HandleFunc("PATCH /api/v1/properties/status", s.updatePropertyStatus)
-	mux.HandleFunc("POST /api/v1/property-leads/convert", s.convertPropertyLead)
-	mux.HandleFunc("POST /api/v1/media/upload", s.uploadMedia)
-	mux.HandleFunc("GET /api/v1/property-leads", s.listPropertyLeads)
+	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleUser, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/properties/status", s.requireRoles(s.updatePropertyStatus, roleAdmin))
+	mux.HandleFunc("POST /api/v1/property-leads/convert", s.requireRoles(s.convertPropertyLead, roleAdmin))
+	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/property-leads", s.requireRoles(s.listPropertyLeads, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads", s.createPropertyLead)
 	return logging(cors(mux))
 }
@@ -47,32 +69,24 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if json.NewDecoder(r.Body).Decode(&input) != nil {
+	if decodeJSON(w, r, &input) != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid request"})
 		return
 	}
-	username, password := os.Getenv("ADMIN_USERNAME"), os.Getenv("ADMIN_PASSWORD")
-	if username == "" {
-		username = "admin"
+	if !s.config.authConfigured() {
+		writeError(w, http.StatusServiceUnavailable, "admin authentication is not configured")
+		return
 	}
-	if password == "" {
-		password = "xiaopi_admin_2026"
-	}
-	if input.Username != username || input.Password != password {
+	if !secureEqual(input.Username, s.config.AdminUsername) || !secureEqual(input.Password, s.config.AdminPassword) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"code": 401, "message": "账号或密码错误"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"accessToken": signToken(username), "username": username}})
-}
-
-func signToken(subject string) string {
-	secret := os.Getenv("JWT_ADMIN_SECRET")
-	if secret == "" {
-		secret = "xiaopi-admin-secret"
+	token, err := s.tokens.issue(s.config.AdminUsername, roleAdmin)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue access token")
+		return
 	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(subject))
-	return base64.RawURLEncoding.EncodeToString([]byte(subject + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))))
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"accessToken": token, "username": s.config.AdminUsername}})
 }
 
 func cors(next http.Handler) http.Handler {
@@ -96,17 +110,28 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Code string `json:"code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Code == "" {
+	if err := decodeJSON(w, r, &input); err != nil || strings.TrimSpace(input.Code) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "code is required"})
 		return
 	}
 	appID, secret := os.Getenv("WECHAT_MINI_APP_ID"), os.Getenv("WECHAT_MINI_APP_SECRET")
-	if os.Getenv("WECHAT_MOCK_ENABLED") == "true" || appID == "" || secret == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": "xiaopi-dev-token", "isDevMock": true}})
+	isDevelopmentMock := os.Getenv("APP_ENV") != "production" && (appID == "" || secret == "")
+	if os.Getenv("WECHAT_MOCK_ENABLED") == "true" || isDevelopmentMock {
+		if len(s.tokens.secret) == 0 {
+			writeError(w, http.StatusServiceUnavailable, "user authentication is not configured")
+			return
+		}
+		userID := "dev-user"
+		token, _ := s.tokens.issue(userID, roleUser)
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "isDevMock": true}})
+		return
+	}
+	if appID == "" || secret == "" || len(s.tokens.secret) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "wechat authentication is not configured")
 		return
 	}
 	endpoint := "https://api.weixin.qq.com/sns/jscode2session?" + url.Values{"appid": {appID}, "secret": {secret}, "js_code": {input.Code}, "grant_type": {"authorization_code"}}.Encode()
-	resp, err := http.Get(endpoint)
+	resp, err := s.httpClient.Get(endpoint)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"code": 502, "message": "wechat service unavailable"})
 		return
@@ -129,30 +154,63 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": "xiaopi-user-" + userID, "isDevMock": false}})
+	token, err := s.tokens.issue(userID, roleUser)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue access token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "isDevMock": false}})
 }
 
-func (s *Server) listProperties(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
+	showAll := false
+	if claims, ok := s.optionalClaims(r); ok && claims.Role == roleAdmin {
+		showAll = true
+	}
 	if s.store != nil {
-		items, err := s.store.ListProperties(context.Background())
+		items, err := s.store.ListProperties(r.Context())
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": visibleProperties(items, showAll)})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": s.properties})
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": visibleProperties(s.properties, showAll)})
+}
+
+func visibleProperties(items []domain.Property, showAll bool) []domain.Property {
+	result := make([]domain.Property, 0, len(items))
+	for _, item := range items {
+		if showAll || item.Status == domain.PropertyPublished {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 	var p domain.Property
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	if err := decodeJSON(w, r, &p); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid property"})
 		return
 	}
-	p.ID = time.Now().Format("20060102150405.000000000")
+	p.Title, p.Community = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community)
+	if p.Title == "" || p.Community == "" || p.RentMonthly < 0 {
+		writeError(w, http.StatusBadRequest, "title, community and a non-negative rentMonthly are required")
+		return
+	}
+	propertyID, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create property id")
+		return
+	}
+	p.ID = propertyID
 	p.Status = domain.PropertyDraft
+	claims := claimsFromContext(r.Context())
+	if claims.Role == roleUser {
+		p.OwnerID = claims.Subject
+	}
 	p.CreatedAt = time.Now()
 	p.UpdatedAt = p.CreatedAt
 	if s.store != nil {
@@ -168,8 +226,12 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 	var p domain.Property
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil || p.ID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "id is required"})
+	if err := decodeJSON(w, r, &p); err != nil || p.ID == "" || strings.TrimSpace(p.Title) == "" || strings.TrimSpace(p.Community) == "" || p.RentMonthly < 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "id, title, community and a non-negative rentMonthly are required"})
+		return
+	}
+	if s.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
 		return
 	}
 	if err := s.store.UpdateProperty(r.Context(), p); err != nil {
@@ -194,11 +256,16 @@ func (s *Server) listPropertyLeads(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createPropertyLead(w http.ResponseWriter, r *http.Request) {
 	var lead domain.PropertyLead
-	if err := json.NewDecoder(r.Body).Decode(&lead); err != nil || lead.Community == "" {
+	if err := decodeJSON(w, r, &lead); err != nil || strings.TrimSpace(lead.Community) == "" || lead.ExpectedRentMonthly < 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "community is required"})
 		return
 	}
-	lead.ID = time.Now().Format("20060102150405.000000000")
+	leadID, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create lead id")
+		return
+	}
+	lead.ID = leadID
 	lead.Status = domain.LeadNew
 	lead.CreatedAt = time.Now()
 	lead.UpdatedAt = lead.CreatedAt
@@ -207,6 +274,9 @@ func (s *Server) createPropertyLead(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
+	} else {
+		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
+		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": lead})
 }
@@ -218,12 +288,17 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 		OperatorID string `json:"operatorId"`
 		Note       string `json:"note"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.PropertyID == "" || input.Status == "" {
+	if err := decodeJSON(w, r, &input); err != nil || input.PropertyID == "" || !domain.IsPropertyStatus(input.Status) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "propertyId and status are required"})
 		return
 	}
+	input.OperatorID = claimsFromContext(r.Context()).Subject
 	if s.store != nil {
 		if err := s.store.UpdatePropertyStatus(r.Context(), input.PropertyID, input.Status, input.OperatorID, input.Note); err != nil {
+			if errors.Is(err, domain.ErrInvalidPropertyStatusTransition) {
+				writeError(w, http.StatusConflict, err.Error())
+				return
+			}
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
@@ -243,12 +318,21 @@ func (s *Server) convertPropertyLead(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		OwnerID     string `json:"ownerId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.LeadID == "" || input.Community == "" {
+	if err := decodeJSON(w, r, &input); err != nil || input.LeadID == "" || strings.TrimSpace(input.Community) == "" || input.RentMonthly < 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "leadId and community are required"})
 		return
 	}
+	if s.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
+		return
+	}
+	propertyID, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create property id")
+		return
+	}
 	now := time.Now()
-	p := domain.Property{ID: now.Format("20060102150405.000000000"), Title: input.Title, Community: input.Community, Location: input.Location, Layout: input.Layout, RentMonthly: input.RentMonthly, FeeText: input.FeeText, Description: input.Description, Status: domain.PropertyDraft, OwnerID: input.OwnerID, CreatedAt: now, UpdatedAt: now}
+	p := domain.Property{ID: propertyID, Title: input.Title, Community: input.Community, Location: input.Location, Layout: input.Layout, RentMonthly: input.RentMonthly, FeeText: input.FeeText, Description: input.Description, Status: domain.PropertyDraft, OwnerID: input.OwnerID, CreatedAt: now, UpdatedAt: now}
 	if err := s.store.ConvertLeadToProperty(r.Context(), input.LeadID, p); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 		return
@@ -257,6 +341,7 @@ func (s *Server) convertPropertyLead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+(1<<20))
 	if err := r.ParseMultipartForm(20 << 20); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid multipart form"})
 		return
@@ -269,6 +354,22 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 	if header.Size > 20<<20 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "file too large"})
+		return
+	}
+	buffer := make([]byte, 512)
+	read, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "failed to inspect file")
+		return
+	}
+	contentType := http.DetectContentType(buffer[:read])
+	allowedTypes := map[string]bool{"image/jpeg": true, "image/png": true, "image/webp": true, "video/mp4": true}
+	if !allowedTypes[contentType] {
+		writeError(w, http.StatusUnsupportedMediaType, "only JPEG, PNG, WebP and MP4 files are supported")
+		return
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to process file")
 		return
 	}
 	dir := os.Getenv("FILE_STORAGE_LOCAL_PATH")
@@ -293,7 +394,21 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	mediaPath := "/uploads/" + name
 	if propertyID := r.FormValue("propertyId"); propertyID != "" && s.store != nil {
-		_ = s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: fmt.Sprintf("%d", time.Now().UnixNano()), PropertyID: propertyID, Type: r.FormValue("mediaType"), URL: mediaPath, Sort: 0})
+		mediaID, idErr := newID()
+		if idErr != nil {
+			_ = os.Remove(path)
+			writeError(w, http.StatusInternalServerError, "failed to create media id")
+			return
+		}
+		mediaType := "image"
+		if strings.HasPrefix(contentType, "video/") {
+			mediaType = "video"
+		}
+		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: 0}); err != nil {
+			_ = os.Remove(path)
+			writeError(w, http.StatusInternalServerError, "failed to save media")
+			return
+		}
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": map[string]string{"name": name, "path": mediaPath}})
 }
