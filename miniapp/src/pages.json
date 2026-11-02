@@ -6,7 +6,8 @@
     { "path": "pages/publish/index", "style": { "navigationBarTitleText": "发布房源" } },
     { "path": "pages/me/index", "style": { "navigationBarTitleText": "我的" } },
     { "path": "pages/admin/index", "style": { "navigationBarTitleText": "小皮工作台" } },
-    { "path": "pages/admin/property-edit", "style": { "navigationBarTitleText": "编辑房源" } }
+    { "path": "pages/admin/property-edit", "style": { "navigationBarTitleText": "编辑房源" } },
+    { "path": "pages/auth/login", "style": { "navigationBarTitleText": "微信登录" } }
   ],
   "tabBar": { "color": "#8aa7a0", "selectedColor": "#0f8177", "backgroundColor": "#f8fffd", "list": [
     { "pagePath": "pages/home/index", "text": "首页" },
