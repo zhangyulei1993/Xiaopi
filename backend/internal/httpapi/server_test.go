@@ -321,6 +321,19 @@ func TestInvalidStatusTransitionReturnsConflict(t *testing.T) {
 	}
 }
 
+func TestAdminCannotSubmitPropertyLead(t *testing.T) {
+	dataStore := &fakeStore{admins: []domain.AdminUser{{UserID: "wx-admin-1", Status: "active"}}}
+	server := testServer(dataStore)
+	staleUserToken, err := server.tokens.issue("wx-admin-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/property-leads", map[string]any{"community": "测试小区", "expectedRentMonthly": 3000}, staleUserToken)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected assigned admin to be forbidden even with stale user token, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestExpiredTokenIsRejected(t *testing.T) {
 	manager := newTokenManager(Config{TokenSecret: "secret", TokenTTL: time.Minute})
 	now := time.Unix(1_700_000_000, 0)

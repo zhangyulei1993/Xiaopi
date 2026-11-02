@@ -365,6 +365,10 @@ func (s *Server) listPropertyLeads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createPropertyLead(w http.ResponseWriter, r *http.Request) {
+	if claims, ok := s.optionalClaims(r); ok && (claims.Role == roleAdmin || s.wechatUserRole(r.Context(), claims.Subject) == roleAdmin) {
+		writeError(w, http.StatusForbidden, "管理员无需提交房源线索")
+		return
+	}
 	var lead domain.PropertyLead
 	if err := decodeJSON(w, r, &lead); err != nil || strings.TrimSpace(lead.Community) == "" || lead.ExpectedRentMonthly < 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "community is required"})

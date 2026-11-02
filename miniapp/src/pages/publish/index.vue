@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onLoad } from '@dcloudio/uni-app'
 import { reactive, ref } from 'vue'
-import { createPropertyLead } from '../../api/properties'
+import { createPropertyLead, refreshAuth } from '../../api/properties'
+import { getSession, saveSession } from '../../auth/session'
 
 const form = reactive({
   sourceName: '',
@@ -12,6 +14,27 @@ const form = reactive({
   note: '',
 })
 const submitting = ref(false)
+const checkingRole = ref(true)
+
+onLoad(async () => {
+  const session = getSession()
+  if (!session) {
+    checkingRole.value = false
+    return
+  }
+  try {
+    const refreshed = await refreshAuth()
+    saveSession(refreshed.accessToken, refreshed.role)
+    if (refreshed.role === 'admin') {
+      uni.showToast({ title: '管理员无需提交房源线索', icon: 'none' })
+      setTimeout(() => uni.switchTab({ url: '/pages/me/index' }), 300)
+      return
+    }
+  } catch {
+    // 请求提交时仍会由服务端再次校验管理员身份。
+  }
+  checkingRole.value = false
+})
 
 const submit = async () => {
   if (submitting.value) return
@@ -42,7 +65,7 @@ const submit = async () => {
 </script>
 
 <template>
-  <view class="page">
+  <view v-if="!checkingRole" class="page">
     <view class="tip card">
       <view class="title small">提供房源线索</view>
       <view class="muted">提交基础信息后，小皮会电话联系并实地核验。正式房源由运营人员审核发布。</view>
@@ -60,6 +83,7 @@ const submit = async () => {
       {{ submitting ? '提交中...' : '提交房源线索' }}
     </button>
   </view>
+  <view v-else class="page checking muted">正在确认用户身份...</view>
 </template>
 
 <style scoped>
@@ -72,4 +96,5 @@ const submit = async () => {
 .column textarea { width: 100%; height: 170rpx; margin-top: 18rpx; }
 .button { width: 100%; border: 0; font-size: 30rpx; line-height: 1.4; }
 .button::after { border: 0; }
+.checking { padding-top: 180rpx; text-align: center; }
 </style>

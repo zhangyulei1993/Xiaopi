@@ -70,7 +70,7 @@ const logout = () => {
     <view class="profile card" @click="!isLoggedIn && login()">
       <view class="avatar">{{ isAdmin ? '管' : '小' }}</view>
       <view class="profile-copy">
-        <view class="title">{{ isAdmin ? '小皮管理员' : isLoggedIn ? '微信用户' : '登录小皮租房' }}</view>
+        <view class="profile-title"><view class="title">{{ isAdmin ? '小皮管理员' : isLoggedIn ? '微信用户' : '登录小皮租房' }}</view><text v-if="isLoggedIn" class="role-badge" :class="{ admin: isAdmin }">{{ isAdmin ? '运营管理员' : '普通用户' }}</text></view>
         <view class="muted">
           {{ isAdmin ? '房源运营工作台已授权' : isLoggedIn ? '已登录，可联系房源' : '登录后联系房源并管理身份服务' }}
         </view>
@@ -80,7 +80,7 @@ const logout = () => {
 
     <view class="card menu">
       <view @click="browse">浏览全部房源 <text>›</text></view>
-      <view @click="publish">提交房源线索 <text>›</text></view>
+      <view v-if="!isAdmin" @click="publish">提交房源线索 <text>›</text></view>
     </view>
 
     <view v-if="isLoggedIn" class="card phone-card">
@@ -105,6 +105,9 @@ const logout = () => {
 <style scoped>
 .profile { display: flex; align-items: center; gap: 24rpx; padding: 40rpx; }
 .profile-copy { flex: 1; }
+.profile-title { display: flex; align-items: center; flex-wrap: wrap; gap: 12rpx; }
+.role-badge { padding: 6rpx 12rpx; border-radius: 999rpx; background: #edf4f2; color: #6b8c86; font-size: 20rpx; font-weight: 600; }
+.role-badge.admin { background: #e1f5ee; color: #0f8177; }
 .avatar { width: 110rpx; height: 110rpx; border-radius: 50%; background: #0f8177; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 48rpx; font-weight: 700; }
 .arrow { color: #9bbab4; font-size: 54rpx; }
 .menu view { padding: 30rpx 0; border-bottom: 1rpx solid #edf4f1; font-size: 30rpx; }
