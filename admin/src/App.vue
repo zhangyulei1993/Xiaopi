@@ -37,6 +37,7 @@ const configFailed = ref(false)
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
 const adminCandidate = ref<WechatUser | null>(null)
+const adminSearchOpen = ref(false)
 const adminMessage = ref('')
 const adminFailed = ref(false)
 const properties = ref<Property[]>([])
@@ -186,13 +187,21 @@ function resetAdminSearch() {
   adminCandidate.value = null
   adminMessage.value = ''
   adminFailed.value = false
+  adminSearchOpen.value = adminPhone.value.replace(/\D/g, '').length >= 2
 }
 
-function searchAdminCandidate() {
-  const phone = adminPhone.value.replace(/[^+\d]/g, '')
-  adminCandidate.value = users.value.find((item) => item.phone === phone) || null
-  adminFailed.value = !adminCandidate.value
-  adminMessage.value = adminCandidate.value ? '已找到微信用户，请确认后指定管理员。' : '没有找到绑定该手机号的微信用户。'
+const adminSearchResults = computed(() => {
+  const query = adminPhone.value.replace(/\D/g, '')
+  if (query.length < 2) return []
+  return users.value.filter((item) => item.phone.replace(/\D/g, '').includes(query)).slice(0, 8)
+})
+
+function selectAdminCandidate(user: WechatUser) {
+  adminCandidate.value = user
+  adminPhone.value = user.phone
+  adminSearchOpen.value = false
+  adminFailed.value = false
+  adminMessage.value = '已选择微信用户，请确认后指定管理员。'
 }
 
 const candidateIsAdmin = computed(() => Boolean(adminCandidate.value && admins.value.some((item) => item.userId === adminCandidate.value?.id)))
@@ -321,7 +330,17 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
           <section class="surface admin-search-panel">
             <div class="admin-search-heading"><h2>搜索微信用户</h2><p>只有已经出现在“微信用户”列表并绑定手机号的用户可以成为管理员。</p></div>
-            <div class="assign-control"><el-input v-model.trim="adminPhone" placeholder="输入完整手机号" clearable @input="resetAdminSearch" @keyup.enter="searchAdminCandidate" /><el-button type="primary" :disabled="!adminPhone" @click="searchAdminCandidate">搜索用户</el-button></div>
+            <div class="admin-search-control">
+              <el-input v-model.trim="adminPhone" placeholder="输入手机号任意连续数字，例如后四位" clearable @input="resetAdminSearch" @focus="adminSearchOpen = adminPhone.replace(/\D/g, '').length >= 2" />
+              <div v-if="adminSearchOpen" class="admin-search-results">
+                <button v-for="item in adminSearchResults" :key="item.id" type="button" @click="selectAdminCandidate(item)">
+                  <span><strong>{{ item.nickname || '微信用户' }}</strong><small>{{ item.phone }}</small></span>
+                  <el-tag v-if="admins.some((admin) => admin.userId === item.id)" size="small" type="success">已是管理员</el-tag>
+                  <small v-else>选择</small>
+                </button>
+                <div v-if="adminSearchResults.length === 0" class="no-search-result">没有匹配的已绑定手机号用户</div>
+              </div>
+            </div>
             <div v-if="adminCandidate" class="admin-candidate">
               <div class="user-cell"><el-avatar :size="44" :src="adminCandidate.avatarUrl">微</el-avatar><div><strong>{{ adminCandidate.nickname || '微信用户' }}</strong><span>{{ adminCandidate.phone }} · {{ adminCandidate.id }}</span></div></div>
               <div class="candidate-actions"><el-tag v-if="candidateIsAdmin" type="success">已是管理员</el-tag><el-button v-else type="primary" :loading="assigningAdmin" @click="assignAdmin">指定为管理员</el-button></div>
