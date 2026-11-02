@@ -256,3 +256,14 @@ func TestExpiredTokenIsRejected(t *testing.T) {
 		t.Fatalf("expected expired token error, got %v", err)
 	}
 }
+
+func TestWechatUserIDFitsDatabaseColumnAndIsStable(t *testing.T) {
+	first := wechatUserID("oExampleOpenIdWithTypicalLength")
+	second := wechatUserID("oExampleOpenIdWithTypicalLength")
+	if first != second {
+		t.Fatalf("wechat user id must be stable: %q != %q", first, second)
+	}
+	if len(first) > 36 {
+		t.Fatalf("wechat user id exceeds users.id column: %d (%q)", len(first), first)
+	}
+}

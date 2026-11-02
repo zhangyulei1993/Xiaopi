@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -216,7 +217,7 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"code": 502, "message": result.ErrMsg})
 		return
 	}
-	userID := fmt.Sprintf("wx-%x", result.OpenID)
+	userID := wechatUserID(result.OpenID)
 	if s.store != nil {
 		if err := s.store.UpsertUser(r.Context(), domain.User{ID: userID, OpenID: result.OpenID, Status: domain.UserActive}); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
@@ -230,6 +231,11 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "role": userRole, "isDevMock": false}})
+}
+
+func wechatUserID(openID string) string {
+	digest := sha256.Sum256([]byte(openID))
+	return fmt.Sprintf("wx-%x", digest[:16])
 }
 
 func (s *Server) wechatUserRole(ctx context.Context, userID string) string {
