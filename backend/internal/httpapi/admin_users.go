@@ -17,6 +17,7 @@ type userAdminStore interface {
 	ListAdminUsers(context.Context) ([]domain.AdminUser, error)
 	AssignAdminByPhone(context.Context, string, string) (domain.AdminUser, error)
 	SetAdminStatus(context.Context, string, string) error
+	DeleteAdminUser(context.Context, string) error
 	IsAdminUser(context.Context, string) (bool, error)
 }
 
@@ -105,6 +106,27 @@ func (s *Server) updateAdminUserStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"userId": input.UserID, "status": input.Status}})
+}
+
+func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request) {
+	userID := strings.TrimSpace(r.PathValue("userID"))
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "userId is required")
+		return
+	}
+	store, ok := s.userAdminStore()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "admin user store unavailable")
+		return
+	}
+	if err := store.DeleteAdminUser(r.Context(), userID); errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "管理员不存在")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete admin user")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"userId": userID}})
 }
 
 func normalizePhone(value string) string {

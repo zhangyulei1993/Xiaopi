@@ -68,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/admin-users", s.requireRoles(s.listAdminUsers, roleAdmin))
 	mux.HandleFunc("POST /api/v1/admin/admin-users", s.requireRoles(s.assignAdminUser, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/admin/admin-users/status", s.requireRoles(s.updateAdminUserStatus, roleAdmin))
+	mux.HandleFunc("DELETE /api/v1/admin/admin-users/{userID}", s.requireRoles(s.deleteAdminUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/temporary-access", s.requireRoles(s.listTemporaryAccess, roleAdmin))
 	mux.HandleFunc("POST /api/v1/admin/temporary-access", s.requireRoles(s.createTemporaryAccess, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/admin/temporary-access/status", s.requireRoles(s.updateTemporaryAccessStatus, roleAdmin))

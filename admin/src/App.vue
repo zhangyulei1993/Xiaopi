@@ -36,6 +36,7 @@ const configMessage = ref('')
 const configFailed = ref(false)
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
+const adminCandidate = ref<WechatUser | null>(null)
 const adminMessage = ref('')
 const adminFailed = ref(false)
 const properties = ref<Property[]>([])
@@ -162,7 +163,7 @@ async function saveConfig() {
 }
 
 async function assignAdmin() {
-  const phone = adminPhone.value.trim()
+  const phone = adminCandidate.value?.phone || ''
   if (!phone || assigningAdmin.value) return
   assigningAdmin.value = true
   adminMessage.value = ''
@@ -170,6 +171,7 @@ async function assignAdmin() {
   try {
     await api<AdminUser>('/v1/admin/admin-users', { method: 'POST', body: JSON.stringify({ phone }) })
     adminPhone.value = ''
+    adminCandidate.value = null
     adminMessage.value = '已指定为管理员，该用户重新登录小程序后获得管理员权限。'
     admins.value = await api<AdminUser[]>('/v1/admin/admin-users')
   } catch (error) {
@@ -179,6 +181,21 @@ async function assignAdmin() {
     assigningAdmin.value = false
   }
 }
+
+function resetAdminSearch() {
+  adminCandidate.value = null
+  adminMessage.value = ''
+  adminFailed.value = false
+}
+
+function searchAdminCandidate() {
+  const phone = adminPhone.value.replace(/[^+\d]/g, '')
+  adminCandidate.value = users.value.find((item) => item.phone === phone) || null
+  adminFailed.value = !adminCandidate.value
+  adminMessage.value = adminCandidate.value ? '已找到微信用户，请确认后指定管理员。' : '没有找到绑定该手机号的微信用户。'
+}
+
+const candidateIsAdmin = computed(() => Boolean(adminCandidate.value && admins.value.some((item) => item.userId === adminCandidate.value?.id)))
 
 async function setAdminStatus(item: AdminUser, status: 'active' | 'disabled') {
   adminMessage.value = ''
@@ -190,6 +207,19 @@ async function setAdminStatus(item: AdminUser, status: 'active' | 'disabled') {
   } catch (error) {
     adminFailed.value = true
     adminMessage.value = error instanceof Error ? error.message : '管理员状态更新失败'
+  }
+}
+
+async function deleteAdmin(item: AdminUser) {
+  adminMessage.value = ''
+  adminFailed.value = false
+  try {
+    await api(`/v1/admin/admin-users/${encodeURIComponent(item.userId)}`, { method: 'DELETE' })
+    admins.value = admins.value.filter((admin) => admin.userId !== item.userId)
+    adminMessage.value = '管理员身份已删除，微信用户账号仍然保留。'
+  } catch (error) {
+    adminFailed.value = true
+    adminMessage.value = error instanceof Error ? error.message : '管理员删除失败'
   }
 }
 
@@ -287,11 +317,15 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <template v-else-if="tab === '管理员列表'">
           <section class="page-header">
-            <div><span>平台设置</span><h1>管理员列表</h1><p>管理员必须来自已绑定手机号的微信用户。输入手机号匹配用户并授予运营权限。</p></div>
+            <div><span>平台设置</span><h1>管理员列表</h1><p>先按手机号搜索已绑定的微信用户，确认用户身份后再授予运营权限。</p></div>
           </section>
-          <section class="surface assign-admin-panel">
-            <div><h2>指定管理员</h2><p>该微信用户重新登录小程序后，管理员权限生效。</p></div>
-            <div class="assign-control"><el-input v-model.trim="adminPhone" placeholder="输入微信用户已绑定的手机号" clearable @keyup.enter="assignAdmin" /><el-button type="primary" :loading="assigningAdmin" :disabled="!adminPhone" @click="assignAdmin">指定管理员</el-button></div>
+          <section class="surface admin-search-panel">
+            <div class="admin-search-heading"><h2>搜索微信用户</h2><p>只有已经出现在“微信用户”列表并绑定手机号的用户可以成为管理员。</p></div>
+            <div class="assign-control"><el-input v-model.trim="adminPhone" placeholder="输入完整手机号" clearable @input="resetAdminSearch" @keyup.enter="searchAdminCandidate" /><el-button type="primary" :disabled="!adminPhone" @click="searchAdminCandidate">搜索用户</el-button></div>
+            <div v-if="adminCandidate" class="admin-candidate">
+              <div class="user-cell"><el-avatar :size="44" :src="adminCandidate.avatarUrl">微</el-avatar><div><strong>{{ adminCandidate.nickname || '微信用户' }}</strong><span>{{ adminCandidate.phone }} · {{ adminCandidate.id }}</span></div></div>
+              <div class="candidate-actions"><el-tag v-if="candidateIsAdmin" type="success">已是管理员</el-tag><el-button v-else type="primary" :loading="assigningAdmin" @click="assignAdmin">指定为管理员</el-button></div>
+            </div>
           </section>
           <el-alert v-if="adminMessage" class="config-alert" :title="adminMessage" :type="adminFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section class="surface table-panel">
@@ -302,7 +336,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <el-table-column label="角色" width="120"><template #default><el-tag>运营管理员</el-tag></template></el-table-column>
               <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'info'">{{ scope.row.status === 'active' ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
               <el-table-column label="指定时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
-              <el-table-column label="操作" width="120" align="center"><template #default="scope"><el-button v-if="scope.row.status !== 'active'" link type="primary" @click="setAdminStatus(scope.row, 'active')">启用</el-button><el-popconfirm v-else title="停用后，该用户重新登录将失去管理员权限，确认停用？" width="260" @confirm="setAdminStatus(scope.row, 'disabled')"><template #reference><el-button link type="danger">停用</el-button></template></el-popconfirm></template></el-table-column>
+              <el-table-column label="操作" width="170" align="center"><template #default="scope"><div class="admin-actions"><el-button v-if="scope.row.status !== 'active'" link type="primary" @click="setAdminStatus(scope.row, 'active')">启用</el-button><el-popconfirm v-else title="停用后，该用户重新登录将失去管理员权限，确认停用？" width="260" @confirm="setAdminStatus(scope.row, 'disabled')"><template #reference><el-button link type="warning">停用</el-button></template></el-popconfirm><el-popconfirm title="删除后该用户将移出管理员列表，但微信用户账号保留。确认删除？" width="280" @confirm="deleteAdmin(scope.row)"><template #reference><el-button link type="danger">删除</el-button></template></el-popconfirm></div></template></el-table-column>
             </el-table>
           </section>
         </template>

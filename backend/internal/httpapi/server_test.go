@@ -73,6 +73,15 @@ func (f *fakeStore) SetAdminStatus(_ context.Context, userID, status string) err
 	}
 	return sql.ErrNoRows
 }
+func (f *fakeStore) DeleteAdminUser(_ context.Context, userID string) error {
+	for index := range f.admins {
+		if f.admins[index].UserID == userID {
+			f.admins = append(f.admins[:index], f.admins[index+1:]...)
+			return nil
+		}
+	}
+	return sql.ErrNoRows
+}
 func (f *fakeStore) IsAdminUser(_ context.Context, userID string) (bool, error) {
 	for _, admin := range f.admins {
 		if admin.UserID == userID && admin.Status == "active" {
@@ -199,6 +208,10 @@ func TestAdminCanListUsersAndAssignAdminByPhone(t *testing.T) {
 	admin := responseData[domain.AdminUser](t, assignResponse)
 	if admin.UserID != "wx-user-1" || admin.CreatedBy != "operator" {
 		t.Fatalf("unexpected admin assignment: %#v", admin)
+	}
+	deleted := performRequest(t, server.Handler(), http.MethodDelete, "/api/v1/admin/admin-users/wx-user-1", nil, token)
+	if deleted.Code != http.StatusOK || len(dataStore.admins) != 0 {
+		t.Fatalf("expected deleted admin mapping, got %d: %s admins=%#v", deleted.Code, deleted.Body.String(), dataStore.admins)
 	}
 }
 

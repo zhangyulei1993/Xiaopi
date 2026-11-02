@@ -252,6 +252,17 @@ func (s *MySQL) SetAdminStatus(ctx context.Context, userID, status string) error
 	return nil
 }
 
+func (s *MySQL) DeleteAdminUser(ctx context.Context, userID string) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM admin_users WHERE user_id=?`, userID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *MySQL) IsAdminUser(ctx context.Context, userID string) (bool, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_users WHERE user_id=? AND status='active'`, userID).Scan(&count)
