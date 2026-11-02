@@ -6,6 +6,10 @@ export const createProperty = (property: Partial<Property>) => request<Property>
 export const updateProperty = (property: Partial<Property>) => request<Property>('/v1/properties/update', { method: 'PATCH', data: property })
 export interface PropertyLead { id: string; sourceName: string; sourcePhone: string; community: string; location: string; layout: string; expectedRentMonthly: number; note: string; status: string }
 export const createPropertyLead = (lead: Partial<PropertyLead>) => request<PropertyLead>('/v1/property-leads', { method: 'POST', data: lead })
+export interface RentalRequest { id?: string; requestType: 'general'|'appointment'; propertyId?: string; phone: string; location: string; layout: string; budgetMin: number; budgetMax: number; moveInDate: string; note: string; status?: string; createdAt?: string }
+export const createRentalRequest = (item: RentalRequest) => request<RentalRequest>('/v1/rental-requests', { method: 'POST', data: item })
+export const listFavorites = () => request<string[]>('/v1/favorites')
+export const setFavorite = (propertyId: string, favorite: boolean) => request<{ propertyId: string; favorite: boolean }>(`/v1/favorites/${encodeURIComponent(propertyId)}`, { method: favorite ? 'PUT' : 'DELETE' })
 
 export interface WechatLoginResult {
   accessToken: string

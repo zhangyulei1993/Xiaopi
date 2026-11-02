@@ -139,6 +139,7 @@ button, input, textarea { font: inherit; }
 .table-heading p, .section-heading p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: 13px; }
 .table-panel .el-table { --el-table-border-color: #edf1f5; --el-table-header-bg-color: #f7f9fc; }
 .table-panel .el-table__header th { height: 48px; color: #526176; font-weight: 700; }
+.muted-table-text { color: var(--color-text-secondary); font-size: 12px; }
 .user-cell { display: flex; align-items: center; gap: 12px; }
 .user-cell strong, .user-cell span { display: block; }
 .user-cell strong { color: var(--color-text-primary); font-size: 14px; }

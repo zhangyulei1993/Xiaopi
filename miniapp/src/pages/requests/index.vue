@@ -1,0 +1,233 @@
+<script setup lang="ts">
+import { onLoad } from "@dcloudio/uni-app";
+import { reactive, ref } from "vue";
+import { createRentalRequest, getPublicConfig } from "../../api/properties";
+import { getSession } from "../../auth/session";
+
+const propertyID = ref(""),
+  propertyTitle = ref(""),
+  contactPhone = ref(""),
+  submitting = ref(false);
+const form = reactive({
+  phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
+  location: "",
+  layout: "",
+  budgetMin: 0,
+  budgetMax: 2500,
+  moveInDate: "",
+  note: "",
+});
+onLoad(async (query) => {
+  propertyID.value = String(query?.propertyId || "");
+  propertyTitle.value = decodeURIComponent(String(query?.title || ""));
+  contactPhone.value = (
+    await getPublicConfig().catch(() => ({ contactPhone: "" }))
+  ).contactPhone;
+});
+const ensureLogin = () => {
+  if (getSession()?.role === "user") return true;
+  uni.showModal({
+    title: "登录后提交",
+    content: "登录后才能保存并跟进你的找房需求",
+    confirmText: "去登录",
+    success: (res) =>
+      res.confirm && uni.navigateTo({ url: "/pages/auth/login" }),
+  });
+  return false;
+};
+const submit = async () => {
+  if (!ensureLogin() || submitting.value) return;
+  if (
+    !/^\+?\d{6,20}$/.test(form.phone) ||
+    (!propertyID.value && !form.location.trim()) ||
+    form.budgetMax < form.budgetMin
+  ) {
+    uni.showToast({ title: "请完善手机号、地区和预算", icon: "none" });
+    return;
+  }
+  submitting.value = true;
+  try {
+    await createRentalRequest({
+      requestType: propertyID.value ? "appointment" : "general",
+      propertyId: propertyID.value,
+      phone: form.phone,
+      location: form.location,
+      layout: form.layout,
+      budgetMin: Number(form.budgetMin),
+      budgetMax: Number(form.budgetMax),
+      moveInDate: form.moveInDate,
+      note: form.note,
+    });
+    uni.showModal({
+      title: propertyID.value ? "预约已提交" : "需求已提交",
+      content: "小皮会根据你的条件匹配房源并联系你。",
+      showCancel: false,
+      success: () => uni.navigateBack(),
+    });
+  } catch (error) {
+    uni.showToast({
+      title: error instanceof Error ? error.message : "提交失败",
+      icon: "none",
+    });
+  } finally {
+    submitting.value = false;
+  }
+};
+const call = () =>
+  contactPhone.value
+    ? uni.makePhoneCall({ phoneNumber: contactPhone.value })
+    : uni.showToast({ title: "联系电话尚未配置", icon: "none" });
+</script>
+<template>
+  <view class="page"
+    ><view class="request-hero"
+      ><text>{{ propertyID ? "预约房源" : "小皮帮你找房" }}</text
+      ><view>{{
+        propertyID ? propertyTitle : "说清需求，比反复筛选更高效"
+      }}</view
+      ><small>{{
+        propertyID
+          ? "提交后由运营人员联系确认看房时间"
+          : "填写预算、区域和入住要求，我们继续为你匹配"
+      }}</small></view
+    ><view class="card form"
+      ><view class="field"
+        ><text>联系电话 *</text
+        ><input
+          v-model.trim="form.phone"
+          type="number"
+          placeholder="用于接收匹配和预约通知" /></view
+      ><view class="field"
+        ><text>意向地区 {{ propertyID ? "" : "*" }}</text
+        ><input
+          v-model.trim="form.location"
+          placeholder="例如：佛祖岭、金融港" /></view
+      ><view class="field"
+        ><text>期望户型</text
+        ><input
+          v-model.trim="form.layout"
+          placeholder="例如：一室一厅 / 合租主卧" /></view
+      ><view class="field"
+        ><text>月租预算</text
+        ><view class="budget"
+          ><input
+            v-model.number="form.budgetMin"
+            type="number"
+            placeholder="最低"
+          /><text>至</text
+          ><input
+            v-model.number="form.budgetMax"
+            type="number"
+            placeholder="最高"
+          /><text>元</text></view
+        ></view
+      ><view class="field"
+        ><text>预计入住</text
+        ><picker mode="date" @change="form.moveInDate = $event.detail.value"
+          ><view class="picker"
+            >{{ form.moveInDate || "选择日期" }} <text>›</text></view
+          ></picker
+        ></view
+      ><view class="field"
+        ><text>补充要求</text
+        ><textarea
+          v-model.trim="form.note"
+          maxlength="300"
+          placeholder="通勤地点、整租/合租、楼层、宠物、采光等"
+        ></textarea></view></view
+    ><view class="privacy"
+      >提交即表示同意小皮根据以上信息联系你，仅用于本次找房服务。</view
+    ><view class="button" @click="submit">{{
+      submitting ? "提交中..." : propertyID ? "预约这套房源" : "提交找房需求"
+    }}</view
+    ><view class="contact" @click="call">急着找房？直接联系小皮 ›</view></view
+  >
+</template>
+<style scoped>
+.request-hero {
+  padding: 38rpx 34rpx;
+  margin-bottom: 24rpx;
+  border-radius: 34rpx;
+  background: radial-gradient(
+      circle at 90% 10%,
+      rgba(244, 217, 161, 0.4),
+      transparent 180rpx
+    ),
+    linear-gradient(140deg, #173f3c, #287168);
+  color: #fff;
+}
+.request-hero > text {
+  color: #f4d9a1;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+.request-hero > view {
+  margin-top: 16rpx;
+  font-size: 40rpx;
+  font-weight: 800;
+}
+.request-hero small {
+  display: block;
+  margin-top: 12rpx;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+.form {
+  padding: 8rpx 28rpx;
+}
+.field {
+  padding: 25rpx 0;
+  border-bottom: 1rpx solid #edf4f1;
+}
+.field > text {
+  display: block;
+  margin-bottom: 14rpx;
+  color: #315f5a;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+.field input,
+.field textarea,
+.picker {
+  width: 100%;
+  color: #073b3a;
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+.field textarea {
+  height: 150rpx;
+}
+.budget {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 12rpx;
+}
+.budget input {
+  padding: 16rpx;
+  border-radius: 16rpx;
+  background: #f4f9f7;
+  text-align: center;
+}
+.budget text,
+.picker text {
+  color: #8aa7a0;
+}
+.picker {
+  display: flex;
+  justify-content: space-between;
+}
+.privacy {
+  padding: 0 12rpx;
+  color: #8aa7a0;
+  font-size: 21rpx;
+  line-height: 1.6;
+}
+.contact {
+  text-align: center;
+  margin-top: 28rpx;
+  color: #0e8177;
+  font-size: 26rpx;
+}
+</style>

@@ -11,6 +11,7 @@ const groups = [
       { key: '运营总览', label: '运营总览', icon: DataAnalysis },
       { key: '房源审核', label: '房源审核', icon: House },
       { key: '线索管理', label: '线索管理', icon: Collection },
+      { key: '租客需求', label: '租客需求', icon: Collection },
       { key: '微信用户', label: '微信用户', icon: User },
     ],
   },

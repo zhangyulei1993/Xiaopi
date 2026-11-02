@@ -22,6 +22,8 @@ type fakeStore struct {
 	admins          []domain.AdminUser
 	temporaryAccess []domain.TemporaryAccess
 	temporaryHashes map[string]string
+	rentalRequests  []domain.RentalRequest
+	favorites       map[string][]string
 	statusErr       error
 }
 
@@ -43,7 +45,39 @@ func (f *fakeStore) UpdatePropertyStatus(context.Context, string, string, string
 func (*fakeStore) ConvertLeadToProperty(context.Context, string, domain.Property) error { return nil }
 func (*fakeStore) AddPropertyMedia(context.Context, domain.PropertyMedia) error         { return nil }
 func (*fakeStore) UpsertUser(context.Context, domain.User) error                        { return nil }
-func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error)                   { return f.users, nil }
+func (f *fakeStore) ListRentalRequests(context.Context) ([]domain.RentalRequest, error) {
+	return f.rentalRequests, nil
+}
+func (f *fakeStore) CreateRentalRequest(_ context.Context, item domain.RentalRequest) error {
+	f.rentalRequests = append(f.rentalRequests, item)
+	return nil
+}
+func (f *fakeStore) ListFavoritePropertyIDs(_ context.Context, userID string) ([]string, error) {
+	return f.favorites[userID], nil
+}
+func (f *fakeStore) SetPropertyFavorite(_ context.Context, userID, propertyID string, favorite bool) error {
+	if f.favorites == nil {
+		f.favorites = map[string][]string{}
+	}
+	if favorite {
+		for _, id := range f.favorites[userID] {
+			if id == propertyID {
+				return nil
+			}
+		}
+		f.favorites[userID] = append(f.favorites[userID], propertyID)
+		return nil
+	}
+	items := f.favorites[userID][:0]
+	for _, id := range f.favorites[userID] {
+		if id != propertyID {
+			items = append(items, id)
+		}
+	}
+	f.favorites[userID] = items
+	return nil
+}
+func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error) { return f.users, nil }
 func (f *fakeStore) UpdateUserPhone(_ context.Context, userID, phone string) error {
 	for index := range f.users {
 		if f.users[index].ID == userID {
@@ -259,6 +293,33 @@ func TestTemporaryAccessCreatesDistinctAuthenticatedUser(t *testing.T) {
 	}](t, login)
 	if auth.AccessToken == "" || auth.Role != roleUser || len(dataStore.users) != 1 || dataStore.users[0].Phone != "13800138000" {
 		t.Fatalf("unexpected temporary auth result: %#v users=%#v", auth, dataStore.users)
+	}
+}
+
+func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
+	dataStore := &fakeStore{}
+	server := testServer(dataStore)
+	userToken, err := server.tokens.issue("user-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	favorite := performRequest(t, server.Handler(), http.MethodPut, "/api/v1/favorites/property-1", nil, userToken)
+	if favorite.Code != http.StatusOK {
+		t.Fatalf("favorite failed: %d %s", favorite.Code, favorite.Body.String())
+	}
+	listed := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/favorites", nil, userToken)
+	ids := responseData[[]string](t, listed)
+	if len(ids) != 1 || ids[0] != "property-1" {
+		t.Fatalf("unexpected favorites: %#v", ids)
+	}
+
+	created := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "property-1", "phone": "13800138000", "budgetMin": 1500, "budgetMax": 2500}, userToken)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("rental request failed: %d %s", created.Code, created.Body.String())
+	}
+	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" {
+		t.Fatalf("unexpected request: %#v", dataStore.rentalRequests)
 	}
 }
 

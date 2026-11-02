@@ -28,6 +28,10 @@ type Store interface {
 	ConvertLeadToProperty(context.Context, string, domain.Property) error
 	AddPropertyMedia(context.Context, domain.PropertyMedia) error
 	UpsertUser(context.Context, domain.User) error
+	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
+	CreateRentalRequest(context.Context, domain.RentalRequest) error
+	ListFavoritePropertyIDs(context.Context, string) ([]string, error)
+	SetPropertyFavorite(context.Context, string, string, bool) error
 }
 
 type appConfigStore interface {
@@ -83,7 +87,76 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/property-leads", s.requireRoles(s.listPropertyLeads, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads", s.createPropertyLead)
+	mux.HandleFunc("GET /api/v1/admin/rental-requests", s.requireRoles(s.listRentalRequests, roleAdmin))
+	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))
+	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
+	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
+	mux.HandleFunc("DELETE /api/v1/favorites/{propertyID}", s.requireRoles(s.unfavoriteProperty, roleUser))
 	return logging(cors(mux))
+}
+
+func (s *Server) listRentalRequests(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListRentalRequests(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list rental requests")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
+	var item domain.RentalRequest
+	if decodeJSON(w, r, &item) != nil {
+		writeError(w, http.StatusBadRequest, "invalid rental request")
+		return
+	}
+	item.Phone = normalizePhone(item.Phone)
+	item.Location = strings.TrimSpace(item.Location)
+	item.Layout = strings.TrimSpace(item.Layout)
+	item.Note = strings.TrimSpace(item.Note)
+	if len(item.Phone) < 6 || item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment") {
+		writeError(w, http.StatusBadRequest, "请填写有效的找房需求")
+		return
+	}
+	if item.RequestType == "appointment" && item.PropertyID == "" {
+		writeError(w, http.StatusBadRequest, "预约房源不能为空")
+		return
+	}
+	item.ID, _ = newID()
+	item.UserID = claimsFromContext(r.Context()).Subject
+	item.Status = "new"
+	item.CreatedAt = time.Now()
+	if err := s.store.CreateRentalRequest(r.Context(), item); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create rental request")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": item})
+}
+
+func (s *Server) listFavorites(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListFavoritePropertyIDs(r.Context(), claimsFromContext(r.Context()).Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list favorites")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) favoriteProperty(w http.ResponseWriter, r *http.Request) { s.setFavorite(w, r, true) }
+func (s *Server) unfavoriteProperty(w http.ResponseWriter, r *http.Request) {
+	s.setFavorite(w, r, false)
+}
+func (s *Server) setFavorite(w http.ResponseWriter, r *http.Request, favorite bool) {
+	propertyID := strings.TrimSpace(r.PathValue("propertyID"))
+	if propertyID == "" {
+		writeError(w, http.StatusBadRequest, "propertyId is required")
+		return
+	}
+	if err := s.store.SetPropertyFavorite(r.Context(), claimsFromContext(r.Context()).Subject, propertyID, favorite); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update favorite")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"propertyId": propertyID, "favorite": favorite}})
 }
 
 func (s *Server) loadPublicConfig(ctx context.Context) (domain.PublicConfig, error) {

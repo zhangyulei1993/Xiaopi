@@ -117,6 +117,54 @@ func (s *MySQL) CreatePropertyLead(ctx context.Context, lead domain.PropertyLead
 	return err
 }
 
+func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,status,created_at FROM rental_requests ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.RentalRequest, 0)
+	for rows.Next() {
+		var item domain.RentalRequest
+		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.Phone, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.Status, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) CreateRentalRequest(ctx context.Context, item domain.RentalRequest) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rental_requests (id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.UserID, item.RequestType, item.PropertyID, item.Phone, item.Location, item.Layout, item.BudgetMin, item.BudgetMax, item.MoveInDate, item.Note, item.Status, item.CreatedAt)
+	return err
+}
+
+func (s *MySQL) ListFavoritePropertyIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT property_id FROM property_favorites WHERE user_id=? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) SetPropertyFavorite(ctx context.Context, userID, propertyID string, favorite bool) error {
+	if favorite {
+		_, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO property_favorites (user_id,property_id) VALUES (?,?)`, userID, propertyID)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM property_favorites WHERE user_id=? AND property_id=?`, userID, propertyID)
+	return err
+}
+
 func (s *MySQL) AddPropertyStatusChange(ctx context.Context, change domain.PropertyStatusChange) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO property_status_history (id,property_id,from_status,to_status,operator_id,note,created_at) VALUES (?,?,?,?,?,?,?)`, change.ID, change.PropertyID, change.From, change.To, change.OperatorID, change.Note, change.CreatedAt)
 	return err
