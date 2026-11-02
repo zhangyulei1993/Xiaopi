@@ -1,6 +1,6 @@
 import { clearSession, getSession } from '../auth/session'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:18080/api'
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://150.158.157.213/api'
 export const API_ORIGIN = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE
 
 export type RequestOptions = Omit<UniApp.RequestOptions, 'url' | 'method'> & {
