@@ -43,4 +43,3 @@ export const refreshAuth = () => request<{ accessToken: string; role: 'user' | '
 })
 
 export const getPublicConfig = () => request<PublicConfig>('/v1/config/public')
-
