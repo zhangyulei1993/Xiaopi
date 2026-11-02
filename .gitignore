@@ -1,0 +1,10 @@
+docker/.env
+docker/mysql/data/
+docker/redis/data/
+*.pem
+**/node_modules/
+admin/node_modules
+miniapp/node_modules
+backend/uploads/
+**/dist/
+.DS_Store

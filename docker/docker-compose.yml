@@ -1,0 +1,75 @@
+name: xiaopi
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: xiaopi-api
+    working_dir: /workspace/backend
+    environment:
+      APP_ENV: dev
+      APP_NAME: Xiaopi
+      APP_PORT: 8080
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: xiaopi_user
+      MYSQL_PASSWORD: xiaopi_pass
+      MYSQL_DATABASE: xiaopi_platform
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-xiaopi_admin_2026}
+      JWT_ADMIN_SECRET: ${JWT_ADMIN_SECRET:-xiaopi-admin-secret}
+      WECHAT_MINI_APP_ID: ${WECHAT_MINI_APP_ID:-}
+      WECHAT_MINI_APP_SECRET: ${WECHAT_MINI_APP_SECRET:-}
+      WECHAT_MOCK_ENABLED: ${WECHAT_MOCK_ENABLED:-false}
+    volumes:
+      - ../backend:/workspace/backend
+    ports:
+      - "18080:8080"
+    command: ["go", "run", "./cmd/server"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    container_name: xiaopi-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: xiaopi_platform
+      MYSQL_USER: xiaopi_user
+      MYSQL_PASSWORD: xiaopi_pass
+      MYSQL_ROOT_PASSWORD: xiaopi_root_pass
+      TZ: Asia/Shanghai
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uxiaopi_user", "-pxiaopi_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: xiaopi-redis
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    volumes:
+      - ./redis/data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

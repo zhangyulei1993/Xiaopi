@@ -1,0 +1,24 @@
+{
+  "name": "xiaopi-miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:mp-weixin": "TREE_BUILD_ENV=local UNI_OUTPUT_DIR=dist/mp-weixin uni -p mp-weixin --mode development",
+    "build:mp-weixin": "TREE_BUILD_ENV=local UNI_OUTPUT_DIR=dist/mp-weixin uni build -p mp-weixin --mode development --emptyOutDir"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "3.0.0-alpha-5010220260604001",
+    "@dcloudio/uni-components": "3.0.0-alpha-5010220260604001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5010220260604001",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.35"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "3.4.16",
+    "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010220260604001",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vue-tsc": "^2.2.12"
+  }
+}

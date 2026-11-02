@@ -1,0 +1,5 @@
+FROM golang:1.26
+WORKDIR /workspace/backend
+COPY backend/xiaopi-api /usr/local/bin/xiaopi-api
+EXPOSE 18080
+ENTRYPOINT ["/usr/local/bin/xiaopi-api"]
