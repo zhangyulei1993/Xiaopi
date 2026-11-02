@@ -20,7 +20,8 @@ type Property = { title: string; community: string; status: string }
 type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
 type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
 type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
-type TabKey = '运营总览' | '房源审核' | '线索管理' | '微信用户' | '小程序配置' | '管理员列表'
+type TemporaryAccess = { id: number; phone: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
+type TabKey = '运营总览' | '房源审核' | '线索管理' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://150.158.157.213/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
@@ -41,6 +42,13 @@ const properties = ref<Property[]>([])
 const leads = ref<Lead[]>([])
 const users = ref<WechatUser[]>([])
 const admins = ref<AdminUser[]>([])
+const temporaryAccess = ref<TemporaryAccess[]>([])
+const temporaryPhone = ref('')
+const temporaryHours = ref(168)
+const generatingTemporaryCode = ref(false)
+const generatedTemporaryCode = ref('')
+const temporaryMessage = ref('')
+const temporaryFailed = ref(false)
 const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', locations: [], featuredChannels: [] })
 
 async function api<T>(path: string, options: RequestInit = {}) {
@@ -60,17 +68,19 @@ async function load() {
   loading.value = true
   pageError.value = ''
   try {
-    const [propertyData, leadData, configData, userData, adminData] = await Promise.all([
+    const [propertyData, leadData, configData, userData, adminData, temporaryData] = await Promise.all([
       api<Property[]>('/v1/properties'),
       api<Lead[]>('/v1/property-leads'),
       api<PublicConfig>('/v1/config/public'),
       api<WechatUser[]>('/v1/admin/users'),
       api<AdminUser[]>('/v1/admin/admin-users'),
+      api<TemporaryAccess[]>('/v1/admin/temporary-access'),
     ])
     properties.value = propertyData || []
     leads.value = leadData || []
     users.value = userData || []
     admins.value = adminData || []
+    temporaryAccess.value = temporaryData || []
     applyConfig(configData)
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '数据加载失败'
@@ -183,6 +193,39 @@ async function setAdminStatus(item: AdminUser, status: 'active' | 'disabled') {
   }
 }
 
+async function generateTemporaryAccess() {
+  if (!temporaryPhone.value || generatingTemporaryCode.value) return
+  generatingTemporaryCode.value = true
+  temporaryMessage.value = ''
+  temporaryFailed.value = false
+  generatedTemporaryCode.value = ''
+  try {
+    const result = await api<{ access: TemporaryAccess; accessCode: string }>('/v1/admin/temporary-access', {
+      method: 'POST',
+      body: JSON.stringify({ phone: temporaryPhone.value, expiresInHours: temporaryHours.value }),
+    })
+    generatedTemporaryCode.value = result.accessCode
+    temporaryMessage.value = '访问码已生成。请通过可信渠道发送给对应用户，离开本页后将不再显示明文。'
+    temporaryAccess.value = await api<TemporaryAccess[]>('/v1/admin/temporary-access')
+    temporaryPhone.value = ''
+  } catch (error) {
+    temporaryFailed.value = true
+    temporaryMessage.value = error instanceof Error ? error.message : '访问码生成失败'
+  } finally {
+    generatingTemporaryCode.value = false
+  }
+}
+
+async function revokeTemporaryAccess(item: TemporaryAccess) {
+  try {
+    await api('/v1/admin/temporary-access/status', { method: 'PATCH', body: JSON.stringify({ phone: item.phone, status: 'revoked' }) })
+    item.status = 'revoked'
+  } catch (error) {
+    temporaryFailed.value = true
+    temporaryMessage.value = error instanceof Error ? error.message : '访问码撤销失败'
+  }
+}
+
 onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 </script>
 
@@ -260,6 +303,32 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'info'">{{ scope.row.status === 'active' ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
               <el-table-column label="指定时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
               <el-table-column label="操作" width="120" align="center"><template #default="scope"><el-button v-if="scope.row.status !== 'active'" link type="primary" @click="setAdminStatus(scope.row, 'active')">启用</el-button><el-popconfirm v-else title="停用后，该用户重新登录将失去管理员权限，确认停用？" width="260" @confirm="setAdminStatus(scope.row, 'disabled')"><template #reference><el-button link type="danger">停用</el-button></template></el-popconfirm></template></el-table-column>
+            </el-table>
+          </section>
+        </template>
+
+        <template v-else-if="tab === '临时访问码'">
+          <section class="page-header">
+            <div><span>平台设置</span><h1>临时访问码</h1><p>微信登录暂不可用期间，为指定手机号生成独立访问码。用户使用手机号和访问码登录，不会与其他用户串号。</p></div>
+          </section>
+          <section class="surface temporary-access-panel">
+            <div class="temporary-form">
+              <el-input v-model.trim="temporaryPhone" placeholder="用户手机号" clearable />
+              <el-input-number v-model="temporaryHours" :min="1" :max="720" controls-position="right" />
+              <span class="hours-unit">小时有效</span>
+              <el-button type="primary" :loading="generatingTemporaryCode" :disabled="!temporaryPhone" @click="generateTemporaryAccess">生成访问码</el-button>
+            </div>
+            <div v-if="generatedTemporaryCode" class="generated-code"><span>本次访问码</span><strong>{{ generatedTemporaryCode }}</strong><small>请现在复制并发送，后台不会再次显示明文。</small></div>
+          </section>
+          <el-alert v-if="temporaryMessage" class="config-alert" :title="temporaryMessage" :type="temporaryFailed ? 'error' : 'success'" show-icon :closable="false" />
+          <section class="surface table-panel">
+            <div class="table-heading"><div><h2>访问码记录</h2><p>重新生成会立即替换同一手机号的旧访问码</p></div></div>
+            <el-table :data="temporaryAccess" empty-text="暂无临时访问码">
+              <el-table-column prop="phone" label="手机号" min-width="160" />
+              <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' && new Date(scope.row.expiresAt) > new Date() ? 'success' : 'info'">{{ scope.row.status === 'revoked' ? '已撤销' : new Date(scope.row.expiresAt) <= new Date() ? '已过期' : '有效' }}</el-tag></template></el-table-column>
+              <el-table-column label="有效期至" min-width="180"><template #default="scope">{{ formatTime(scope.row.expiresAt) }}</template></el-table-column>
+              <el-table-column prop="createdBy" label="创建人" min-width="140" />
+              <el-table-column label="操作" width="100" align="center"><template #default="scope"><el-popconfirm v-if="scope.row.status === 'active'" title="确认撤销该手机号的访问码？" @confirm="revokeTemporaryAccess(scope.row)"><template #reference><el-button link type="danger">撤销</el-button></template></el-popconfirm><span v-else>-</span></template></el-table-column>
             </el-table>
           </section>
         </template>

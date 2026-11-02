@@ -20,6 +20,8 @@ type fakeStore struct {
 	leads           []domain.PropertyLead
 	users           []domain.User
 	admins          []domain.AdminUser
+	temporaryAccess []domain.TemporaryAccess
+	temporaryHashes map[string]string
 	statusErr       error
 }
 
@@ -78,6 +80,39 @@ func (f *fakeStore) IsAdminUser(_ context.Context, userID string) (bool, error) 
 		}
 	}
 	return false, nil
+}
+func (f *fakeStore) ListTemporaryAccess(context.Context) ([]domain.TemporaryAccess, error) {
+	return f.temporaryAccess, nil
+}
+func (f *fakeStore) UpsertTemporaryAccess(_ context.Context, phone, codeHash, createdBy string, expiresAt time.Time) (domain.TemporaryAccess, error) {
+	if f.temporaryHashes == nil {
+		f.temporaryHashes = map[string]string{}
+	}
+	f.temporaryHashes[phone] = codeHash
+	item := domain.TemporaryAccess{ID: 1, Phone: phone, Status: "active", ExpiresAt: expiresAt, CreatedBy: createdBy, CreatedAt: time.Now()}
+	f.temporaryAccess = []domain.TemporaryAccess{item}
+	return item, nil
+}
+func (f *fakeStore) SetTemporaryAccessStatus(_ context.Context, phone, status string) error {
+	for index := range f.temporaryAccess {
+		if f.temporaryAccess[index].Phone == phone {
+			f.temporaryAccess[index].Status = status
+			return nil
+		}
+	}
+	return sql.ErrNoRows
+}
+func (f *fakeStore) LoginTemporaryUser(_ context.Context, user domain.User, phone, codeHash string, now time.Time) (domain.User, error) {
+	if f.temporaryHashes[phone] != codeHash || len(f.temporaryAccess) == 0 || f.temporaryAccess[0].Status != "active" || !f.temporaryAccess[0].ExpiresAt.After(now) {
+		return domain.User{}, sql.ErrNoRows
+	}
+	for _, existing := range f.users {
+		if existing.Phone == phone {
+			return existing, nil
+		}
+	}
+	f.users = append(f.users, user)
+	return user, nil
 }
 
 func testServer(dataStore Store) *Server {
@@ -176,6 +211,36 @@ func TestAssignAdminRequiresExistingWechatUserPhone(t *testing.T) {
 	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/admin/admin-users", map[string]string{"phone": "13800138000"}, token)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestTemporaryAccessCreatesDistinctAuthenticatedUser(t *testing.T) {
+	dataStore := &fakeStore{}
+	server := testServer(dataStore)
+	adminToken, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/admin/temporary-access", map[string]any{"phone": "13800138000", "expiresInHours": 24}, adminToken)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("expected access code, got %d: %s", created.Code, created.Body.String())
+	}
+	data := responseData[struct {
+		AccessCode string `json:"accessCode"`
+	}](t, created)
+	if len(data.AccessCode) != 8 {
+		t.Fatalf("expected 8 character access code, got %q", data.AccessCode)
+	}
+	login := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/temporary/login", map[string]string{"phone": "13800138000", "accessCode": data.AccessCode}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("expected temporary login, got %d: %s", login.Code, login.Body.String())
+	}
+	auth := responseData[struct {
+		AccessToken string `json:"accessToken"`
+		Role        string `json:"role"`
+	}](t, login)
+	if auth.AccessToken == "" || auth.Role != roleUser || len(dataStore.users) != 1 || dataStore.users[0].Phone != "13800138000" {
+		t.Fatalf("unexpected temporary auth result: %#v users=%#v", auth, dataStore.users)
 	}
 }
 

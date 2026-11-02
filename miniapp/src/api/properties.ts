@@ -37,6 +37,11 @@ export const bindWechatPhone = (code: string) => request<{ phone: string }>('/v1
   data: { code },
 })
 
+export const temporaryLogin = (phone: string, accessCode: string) => request<WechatLoginResult & { phone: string; temporary: boolean }>('/v1/auth/temporary/login', {
+  method: 'POST',
+  data: { phone, accessCode },
+})
+
 export const getPublicConfig = () => request<PublicConfig>('/v1/config/public')
 
 export const adminLogin = (username: string, password: string) => request<LoginResult>('/v1/admin/login', {

@@ -258,6 +258,73 @@ func (s *MySQL) IsAdminUser(ctx context.Context, userID string) (bool, error) {
 	return count > 0, err
 }
 
+func (s *MySQL) ListTemporaryAccess(ctx context.Context) ([]domain.TemporaryAccess, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,phone,status,expires_at,created_by,created_at FROM temporary_access_codes ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.TemporaryAccess, 0)
+	for rows.Next() {
+		var item domain.TemporaryAccess
+		if err := rows.Scan(&item.ID, &item.Phone, &item.Status, &item.ExpiresAt, &item.CreatedBy, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) UpsertTemporaryAccess(ctx context.Context, phone, codeHash, createdBy string, expiresAt time.Time) (domain.TemporaryAccess, error) {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO temporary_access_codes (phone,code_hash,status,expires_at,created_by) VALUES (?,?,'active',?,?) ON DUPLICATE KEY UPDATE code_hash=VALUES(code_hash),status='active',expires_at=VALUES(expires_at),created_by=VALUES(created_by),updated_at=CURRENT_TIMESTAMP`, phone, codeHash, expiresAt, createdBy)
+	if err != nil {
+		return domain.TemporaryAccess{}, err
+	}
+	var item domain.TemporaryAccess
+	err = s.db.QueryRowContext(ctx, `SELECT id,phone,status,expires_at,created_by,created_at FROM temporary_access_codes WHERE phone=?`, phone).Scan(&item.ID, &item.Phone, &item.Status, &item.ExpiresAt, &item.CreatedBy, &item.CreatedAt)
+	return item, err
+}
+
+func (s *MySQL) SetTemporaryAccessStatus(ctx context.Context, phone, status string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE temporary_access_codes SET status=?,updated_at=CURRENT_TIMESTAMP WHERE phone=?`, status, phone)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *MySQL) LoginTemporaryUser(ctx context.Context, candidate domain.User, phone, codeHash string, now time.Time) (domain.User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.User{}, err
+	}
+	defer tx.Rollback()
+	var accessID uint64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM temporary_access_codes WHERE phone=? AND code_hash=? AND status='active' AND expires_at>? FOR UPDATE`, phone, codeHash, now).Scan(&accessID); err != nil {
+		return domain.User{}, err
+	}
+	var user domain.User
+	err = tx.QueryRowContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users WHERE phone=? LIMIT 1 FOR UPDATE`, phone).Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = tx.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status) VALUES (?,?,?,?,?,?)`, candidate.ID, candidate.OpenID, candidate.Nickname, candidate.AvatarURL, candidate.Phone, candidate.Status)
+		if err != nil {
+			return domain.User{}, err
+		}
+		user = candidate
+	} else if err != nil {
+		return domain.User{}, err
+	} else if _, err := tx.ExecContext(ctx, `UPDATE users SET status='active',updated_at=CURRENT_TIMESTAMP WHERE id=?`, user.ID); err != nil {
+		return domain.User{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.User{}, err
+	}
+	return user, nil
+}
+
 func (s *MySQL) GetAppConfig(ctx context.Context, key string) ([]byte, error) {
 	var value []byte
 	err := s.db.QueryRowContext(ctx, `SELECT config_value FROM app_configs WHERE config_key=?`, key).Scan(&value)

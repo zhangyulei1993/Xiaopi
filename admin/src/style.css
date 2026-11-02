@@ -147,6 +147,12 @@ button, input, textarea { font: inherit; }
 .assign-admin-panel h2 { margin: 0; color: var(--color-primary); font-size: 18px; }
 .assign-admin-panel p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 13px; }
 .assign-control { display: flex; width: min(520px, 100%); gap: 10px; }
+.temporary-access-panel { margin-bottom: 16px; padding: 24px; }
+.temporary-form { display: grid; grid-template-columns: minmax(220px, 1fr) 150px auto auto; align-items: center; gap: 10px; }
+.hours-unit { color: var(--color-text-secondary); font-size: 13px; }
+.generated-code { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px 18px; margin-top: 20px; padding: 18px 20px; border: 1px solid rgba(47, 107, 87, 0.18); border-radius: 14px; background: var(--color-heritage-green-soft); }
+.generated-code span, .generated-code small { color: var(--color-text-secondary); font-size: 12px; }
+.generated-code strong { color: var(--color-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 28px; letter-spacing: 0.12em; }
 
 .config-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr); gap: 18px; align-items: start; }
 .config-side { display: grid; gap: 18px; }
@@ -166,6 +172,7 @@ button, input, textarea { font: inherit; }
 @media (max-width: 640px) {
   .dashboard-hero, .page-header, .assign-admin-panel { align-items: stretch; flex-direction: column; }
   .assign-control { flex-direction: column; }
+  .temporary-form { grid-template-columns: 1fr; }
   .hero-meter { min-width: 0; text-align: left; }
   .dashboard-grid, .list-stats { grid-template-columns: 1fr; }
   .login-panel { padding: 26px 22px; }
