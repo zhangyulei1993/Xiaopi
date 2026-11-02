@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -166,6 +167,95 @@ func (s *MySQL) ConvertLeadToProperty(ctx context.Context, leadID string, p doma
 func (s *MySQL) UpsertUser(ctx context.Context, user domain.User) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE nickname=VALUES(nickname),avatar_url=VALUES(avatar_url),updated_at=CURRENT_TIMESTAMP`, user.ID, user.OpenID, user.Nickname, user.AvatarURL, user.Phone, user.Status)
 	return err
+}
+
+func (s *MySQL) ListUsers(ctx context.Context) ([]domain.User, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.User, 0)
+	for rows.Next() {
+		var user domain.User
+		if err := rows.Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, user)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) UpdateUserPhone(ctx context.Context, userID, phone string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var existingID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE phone=? AND id<>? LIMIT 1 FOR UPDATE`, phone, userID).Scan(&existingID)
+	if err == nil {
+		return domain.ErrPhoneInUse
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE users SET phone=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, phone, userID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	return tx.Commit()
+}
+
+func (s *MySQL) ListAdminUsers(ctx context.Context) ([]domain.AdminUser, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT a.id,a.user_id,u.nickname,u.avatar_url,u.phone,a.role,a.status,a.created_by,a.created_at FROM admin_users a JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.AdminUser, 0)
+	for rows.Next() {
+		var admin domain.AdminUser
+		if err := rows.Scan(&admin.ID, &admin.UserID, &admin.Nickname, &admin.AvatarURL, &admin.Phone, &admin.Role, &admin.Status, &admin.CreatedBy, &admin.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, admin)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) AssignAdminByPhone(ctx context.Context, phone, createdBy string) (domain.AdminUser, error) {
+	var userID string
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE phone=? LIMIT 1`, phone).Scan(&userID); err != nil {
+		return domain.AdminUser{}, err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO admin_users (user_id,role,status,created_by) VALUES (?,'admin','active',?) ON DUPLICATE KEY UPDATE status='active',updated_at=CURRENT_TIMESTAMP`, userID, createdBy)
+	if err != nil {
+		return domain.AdminUser{}, err
+	}
+	var admin domain.AdminUser
+	err = s.db.QueryRowContext(ctx, `SELECT a.id,a.user_id,u.nickname,u.avatar_url,u.phone,a.role,a.status,a.created_by,a.created_at FROM admin_users a JOIN users u ON u.id=a.user_id WHERE a.user_id=?`, userID).Scan(&admin.ID, &admin.UserID, &admin.Nickname, &admin.AvatarURL, &admin.Phone, &admin.Role, &admin.Status, &admin.CreatedBy, &admin.CreatedAt)
+	return admin, err
+}
+
+func (s *MySQL) SetAdminStatus(ctx context.Context, userID, status string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE admin_users SET status=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?`, status, userID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *MySQL) IsAdminUser(ctx context.Context, userID string) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_users WHERE user_id=? AND status='active'`, userID).Scan(&count)
+	return count > 0, err
 }
 
 func (s *MySQL) GetAppConfig(ctx context.Context, key string) ([]byte, error) {

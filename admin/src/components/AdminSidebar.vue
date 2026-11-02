@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Collection, DataAnalysis, House, Location, User } from '@element-plus/icons-vue'
+import { Collection, DataAnalysis, House, Location, User, UserFilled } from '@element-plus/icons-vue'
 
 defineProps<{ active: string }>()
 const emit = defineEmits<{ select: [value: string] }>()
@@ -11,12 +11,16 @@ const groups = [
       { key: '运营总览', label: '运营总览', icon: DataAnalysis },
       { key: '房源审核', label: '房源审核', icon: House },
       { key: '线索管理', label: '线索管理', icon: Collection },
-      { key: '客户管理', label: '客户管理', icon: User },
+      { key: '微信用户', label: '微信用户', icon: User },
     ],
   },
   {
     label: '内容与运营',
     items: [{ key: '小程序配置', label: '小程序配置', icon: Location }],
+  },
+  {
+    label: '平台设置',
+    items: [{ key: '管理员列表', label: '管理员列表', icon: UserFilled }],
   },
 ]
 </script>

@@ -2,13 +2,17 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { clearSession, getSession, type SessionRole } from '../../auth/session'
+import { bindWechatPhone } from '../../api/properties'
 
 const role = ref<SessionRole | null>(null)
+const phone = ref('')
+const isBindingPhone = ref(false)
 const isLoggedIn = computed(() => role.value !== null)
 const isAdmin = computed(() => role.value === 'admin')
 
 onShow(() => {
   role.value = getSession()?.role || null
+  phone.value = String(uni.getStorageSync('xiaopi_bound_phone') || '')
 })
 
 const login = () => uni.navigateTo({ url: '/pages/auth/login' })
@@ -18,6 +22,25 @@ const adminLogin = () => uni.navigateTo({ url: '/pages/admin/login' })
 const workbench = () => uni.navigateTo({ url: '/pages/admin/index' })
 const editProperty = () => uni.navigateTo({ url: '/pages/admin/property-edit' })
 
+const bindPhone = async (event: { detail: { code?: string; errMsg?: string } }) => {
+  const code = event.detail.code
+  if (!code || isBindingPhone.value) {
+    if (event.detail.errMsg?.includes('deny')) uni.showToast({ title: '需要授权手机号才能绑定', icon: 'none' })
+    return
+  }
+  isBindingPhone.value = true
+  try {
+    const result = await bindWechatPhone(code)
+    phone.value = result.phone
+    uni.setStorageSync('xiaopi_bound_phone', result.phone)
+    uni.showToast({ title: '手机号绑定成功' })
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '手机号绑定失败', icon: 'none' })
+  } finally {
+    isBindingPhone.value = false
+  }
+}
+
 const logout = () => {
   uni.showModal({
     title: '退出登录',
@@ -25,7 +48,9 @@ const logout = () => {
     success: (res) => {
       if (!res.confirm) return
       clearSession()
+      uni.removeStorageSync('xiaopi_bound_phone')
       role.value = null
+      phone.value = ''
       uni.showToast({ title: '已退出登录' })
     },
   })
@@ -48,6 +73,15 @@ const logout = () => {
     <view class="card menu">
       <view @click="browse">浏览全部房源 <text>›</text></view>
       <view @click="publish">提交房源线索 <text>›</text></view>
+    </view>
+
+    <view v-if="isLoggedIn" class="card phone-card">
+      <view>
+        <view class="phone-title">微信手机号</view>
+        <view class="muted">{{ phone || '尚未绑定，管理员权限需要通过手机号指定' }}</view>
+      </view>
+      <button v-if="!phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber="bindPhone">绑定手机号</button>
+      <text v-else class="bound">已绑定</text>
     </view>
 
     <view v-if="isAdmin" class="card menu">
@@ -75,4 +109,9 @@ const logout = () => {
 .menu .group-title { padding-top: 4rpx; color: #78a39d; font-size: 24rpx; }
 .logout { margin-top: 36rpx; border: 0; background: transparent; color: #d24b61; font-size: 28rpx; }
 .logout::after { border: 0; }
+.phone-card { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; }
+.phone-title { margin-bottom: 8rpx; color: #123e3c; font-size: 28rpx; font-weight: 600; }
+.phone-card button { flex: 0 0 auto; margin: 0; padding: 0 24rpx; background: #0f8177; color: #fff; font-size: 24rpx; line-height: 68rpx; }
+.phone-card button::after { border: 0; }
+.bound { flex: 0 0 auto; color: #0f8177; font-size: 24rpx; }
 </style>

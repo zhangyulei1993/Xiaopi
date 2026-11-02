@@ -18,8 +18,9 @@ type PublicConfig = {
 }
 type Property = { title: string; community: string; status: string }
 type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
-type Customer = { name: string; phone: string; status: string }
-type TabKey = '运营总览' | '房源审核' | '线索管理' | '客户管理' | '小程序配置'
+type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
+type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
+type TabKey = '运营总览' | '房源审核' | '线索管理' | '微信用户' | '小程序配置' | '管理员列表'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://150.158.157.213/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
@@ -32,9 +33,14 @@ const pageError = ref('')
 const savingConfig = ref(false)
 const configMessage = ref('')
 const configFailed = ref(false)
+const assigningAdmin = ref(false)
+const adminPhone = ref('')
+const adminMessage = ref('')
+const adminFailed = ref(false)
 const properties = ref<Property[]>([])
 const leads = ref<Lead[]>([])
-const users = ref<Customer[]>([{ name: '微信用户', phone: '未绑定', status: '正常' }])
+const users = ref<WechatUser[]>([])
+const admins = ref<AdminUser[]>([])
 const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', locations: [], featuredChannels: [] })
 
 async function api<T>(path: string, options: RequestInit = {}) {
@@ -54,13 +60,17 @@ async function load() {
   loading.value = true
   pageError.value = ''
   try {
-    const [propertyData, leadData, configData] = await Promise.all([
+    const [propertyData, leadData, configData, userData, adminData] = await Promise.all([
       api<Property[]>('/v1/properties'),
       api<Lead[]>('/v1/property-leads'),
       api<PublicConfig>('/v1/config/public'),
+      api<WechatUser[]>('/v1/admin/users'),
+      api<AdminUser[]>('/v1/admin/admin-users'),
     ])
     properties.value = propertyData || []
     leads.value = leadData || []
+    users.value = userData || []
+    admins.value = adminData || []
     applyConfig(configData)
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '数据加载失败'
@@ -98,12 +108,12 @@ function logout() {
 function selectTab(value: string) { tab.value = value as TabKey }
 
 const rows = computed(() => {
-  if (tab.value === '客户管理') return users.value.map((item) => ({ name: item.name, info: item.phone, status: item.status }))
   if (tab.value === '线索管理') return leads.value.map((item) => ({ name: item.sourceName, info: `${item.community} · ${item.sourcePhone}`, status: item.status }))
   return properties.value.map((item) => ({ name: item.title, info: item.community, status: item.status }))
 })
-const currentMetric = computed(() => tab.value === '客户管理' ? '客户总数' : tab.value === '线索管理' ? '线索总数' : '房源总数')
+const currentMetric = computed(() => tab.value === '线索管理' ? '线索总数' : '房源总数')
 const statusType = (status: string) => status === '正常' || status === 'PUBLISHED' ? 'success' : status === 'PENDING' ? 'warning' : 'info'
+const formatTime = (value: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
 
 const locationsText = computed({
   get: () => publicConfig.locations.map((item) => `${item.label}|${item.keyword}`).join('\n'),
@@ -138,6 +148,38 @@ async function saveConfig() {
     configMessage.value = error instanceof Error ? error.message : '保存失败'
   } finally {
     savingConfig.value = false
+  }
+}
+
+async function assignAdmin() {
+  const phone = adminPhone.value.trim()
+  if (!phone || assigningAdmin.value) return
+  assigningAdmin.value = true
+  adminMessage.value = ''
+  adminFailed.value = false
+  try {
+    await api<AdminUser>('/v1/admin/admin-users', { method: 'POST', body: JSON.stringify({ phone }) })
+    adminPhone.value = ''
+    adminMessage.value = '已指定为管理员，该用户重新登录小程序后获得管理员权限。'
+    admins.value = await api<AdminUser[]>('/v1/admin/admin-users')
+  } catch (error) {
+    adminFailed.value = true
+    adminMessage.value = error instanceof Error ? error.message : '指定管理员失败'
+  } finally {
+    assigningAdmin.value = false
+  }
+}
+
+async function setAdminStatus(item: AdminUser, status: 'active' | 'disabled') {
+  adminMessage.value = ''
+  adminFailed.value = false
+  try {
+    await api('/v1/admin/admin-users/status', { method: 'PATCH', body: JSON.stringify({ userId: item.userId, status }) })
+    item.status = status
+    adminMessage.value = status === 'active' ? '管理员已启用。' : '管理员已停用。'
+  } catch (error) {
+    adminFailed.value = true
+    adminMessage.value = error instanceof Error ? error.message : '管理员状态更新失败'
   }
 }
 
@@ -177,9 +219,49 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <div v-loading="loading" class="stats-grid dashboard-grid">
             <button class="surface stat-card" @click="tab = '房源审核'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong><em>查看房源审核</em></button>
             <button class="surface stat-card" @click="tab = '线索管理'"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong><em>跟进租住意向</em></button>
-            <button class="surface stat-card" @click="tab = '客户管理'"><el-icon><User /></el-icon><span>平台客户</span><strong>{{ users.length }}</strong><em>查看用户状态</em></button>
+            <button class="surface stat-card" @click="tab = '微信用户'"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong><em>查看手机号绑定</em></button>
             <button class="surface stat-card" @click="tab = '小程序配置'"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong><em>维护展示内容</em></button>
           </div>
+        </template>
+
+        <template v-else-if="tab === '微信用户'">
+          <section class="page-header">
+            <div><span>用户与权限</span><h1>微信用户</h1><p>展示已通过小程序微信登录的用户；绑定手机号后，才可以按手机号指定管理员。</p></div>
+            <el-button :loading="loading" @click="load">刷新数据</el-button>
+          </section>
+          <section class="surface table-panel">
+            <div class="table-heading"><div><h2>微信用户列表</h2><p>共 {{ users.length }} 人，已绑定手机号 {{ users.filter((item) => item.phone).length }} 人</p></div></div>
+            <el-table v-loading="loading" :data="users" empty-text="暂无微信用户">
+              <el-table-column label="用户" min-width="220">
+                <template #default="scope"><div class="user-cell"><el-avatar :size="38" :src="scope.row.avatarUrl">微</el-avatar><div><strong>{{ scope.row.nickname || '微信用户' }}</strong><span>{{ scope.row.id }}</span></div></div></template>
+              </el-table-column>
+              <el-table-column label="手机号" min-width="160"><template #default="scope"><span v-if="scope.row.phone">{{ scope.row.phone }}</span><el-tag v-else type="info">未绑定</el-tag></template></el-table-column>
+              <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'danger'">{{ scope.row.status === 'active' ? '正常' : '已停用' }}</el-tag></template></el-table-column>
+              <el-table-column label="首次登录" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
+            </el-table>
+          </section>
+        </template>
+
+        <template v-else-if="tab === '管理员列表'">
+          <section class="page-header">
+            <div><span>平台设置</span><h1>管理员列表</h1><p>管理员必须来自已绑定手机号的微信用户。输入手机号匹配用户并授予运营权限。</p></div>
+          </section>
+          <section class="surface assign-admin-panel">
+            <div><h2>指定管理员</h2><p>该微信用户重新登录小程序后，管理员权限生效。</p></div>
+            <div class="assign-control"><el-input v-model.trim="adminPhone" placeholder="输入微信用户已绑定的手机号" clearable @keyup.enter="assignAdmin" /><el-button type="primary" :loading="assigningAdmin" :disabled="!adminPhone" @click="assignAdmin">指定管理员</el-button></div>
+          </section>
+          <el-alert v-if="adminMessage" class="config-alert" :title="adminMessage" :type="adminFailed ? 'error' : 'success'" show-icon :closable="false" />
+          <section class="surface table-panel">
+            <div class="table-heading"><div><h2>已指定管理员</h2><p>共 {{ admins.length }} 人</p></div></div>
+            <el-table :data="admins" empty-text="暂无微信管理员">
+              <el-table-column label="管理员" min-width="220"><template #default="scope"><div class="user-cell"><el-avatar :size="38" :src="scope.row.avatarUrl">管</el-avatar><div><strong>{{ scope.row.nickname || '微信用户' }}</strong><span>{{ scope.row.userId }}</span></div></div></template></el-table-column>
+              <el-table-column prop="phone" label="手机号" min-width="150" />
+              <el-table-column label="角色" width="120"><template #default><el-tag>运营管理员</el-tag></template></el-table-column>
+              <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'info'">{{ scope.row.status === 'active' ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
+              <el-table-column label="指定时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
+              <el-table-column label="操作" width="120" align="center"><template #default="scope"><el-button v-if="scope.row.status !== 'active'" link type="primary" @click="setAdminStatus(scope.row, 'active')">启用</el-button><el-popconfirm v-else title="停用后，该用户重新登录将失去管理员权限，确认停用？" width="260" @confirm="setAdminStatus(scope.row, 'disabled')"><template #reference><el-button link type="danger">停用</el-button></template></el-popconfirm></template></el-table-column>
+            </el-table>
+          </section>
         </template>
 
         <template v-else-if="tab === '小程序配置'">

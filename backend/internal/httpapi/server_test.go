@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,6 +18,8 @@ type fakeStore struct {
 	properties      []domain.Property
 	createdProperty domain.Property
 	leads           []domain.PropertyLead
+	users           []domain.User
+	admins          []domain.AdminUser
 	statusErr       error
 }
 
@@ -38,6 +41,44 @@ func (f *fakeStore) UpdatePropertyStatus(context.Context, string, string, string
 func (*fakeStore) ConvertLeadToProperty(context.Context, string, domain.Property) error { return nil }
 func (*fakeStore) AddPropertyMedia(context.Context, domain.PropertyMedia) error         { return nil }
 func (*fakeStore) UpsertUser(context.Context, domain.User) error                        { return nil }
+func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error)                   { return f.users, nil }
+func (f *fakeStore) UpdateUserPhone(_ context.Context, userID, phone string) error {
+	for index := range f.users {
+		if f.users[index].ID == userID {
+			f.users[index].Phone = phone
+			return nil
+		}
+	}
+	return sql.ErrNoRows
+}
+func (f *fakeStore) ListAdminUsers(context.Context) ([]domain.AdminUser, error) { return f.admins, nil }
+func (f *fakeStore) AssignAdminByPhone(_ context.Context, phone, createdBy string) (domain.AdminUser, error) {
+	for _, user := range f.users {
+		if user.Phone == phone {
+			admin := domain.AdminUser{ID: uint64(len(f.admins) + 1), UserID: user.ID, Nickname: user.Nickname, Phone: phone, Role: roleAdmin, Status: "active", CreatedBy: createdBy}
+			f.admins = append(f.admins, admin)
+			return admin, nil
+		}
+	}
+	return domain.AdminUser{}, sql.ErrNoRows
+}
+func (f *fakeStore) SetAdminStatus(_ context.Context, userID, status string) error {
+	for index := range f.admins {
+		if f.admins[index].UserID == userID {
+			f.admins[index].Status = status
+			return nil
+		}
+	}
+	return sql.ErrNoRows
+}
+func (f *fakeStore) IsAdminUser(_ context.Context, userID string) (bool, error) {
+	for _, admin := range f.admins {
+		if admin.UserID == userID && admin.Status == "active" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 func testServer(dataStore Store) *Server {
 	return NewServerWithConfig(dataStore, Config{
@@ -102,6 +143,39 @@ func TestAdminLoginAndProtectedEndpoint(t *testing.T) {
 	authorized := performRequest(t, handler, http.MethodGet, "/api/v1/property-leads", nil, auth.AccessToken)
 	if authorized.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", authorized.Code, authorized.Body.String())
+	}
+}
+
+func TestAdminCanListUsersAndAssignAdminByPhone(t *testing.T) {
+	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", Nickname: "租客甲", Phone: "13800138000", Status: domain.UserActive}}}
+	server := testServer(dataStore)
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usersResponse := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/admin/users", nil, token)
+	if usersResponse.Code != http.StatusOK || len(responseData[[]domain.User](t, usersResponse)) != 1 {
+		t.Fatalf("expected user list, got %d: %s", usersResponse.Code, usersResponse.Body.String())
+	}
+	assignResponse := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/admin/admin-users", map[string]string{"phone": "13800138000"}, token)
+	if assignResponse.Code != http.StatusCreated {
+		t.Fatalf("expected admin assignment, got %d: %s", assignResponse.Code, assignResponse.Body.String())
+	}
+	admin := responseData[domain.AdminUser](t, assignResponse)
+	if admin.UserID != "wx-user-1" || admin.CreatedBy != "operator" {
+		t.Fatalf("unexpected admin assignment: %#v", admin)
+	}
+}
+
+func TestAssignAdminRequiresExistingWechatUserPhone(t *testing.T) {
+	server := testServer(&fakeStore{})
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/admin/admin-users", map[string]string{"phone": "13800138000"}, token)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

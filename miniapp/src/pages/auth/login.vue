@@ -18,7 +18,7 @@ const login = () => {
     success: async (res) => {
       try {
         const result = await wechatLogin(res.code)
-        saveSession(result.accessToken, 'user')
+        saveSession(result.accessToken, result.role === 'admin' ? 'admin' : 'user')
         uni.showToast({ title: '登录成功' })
         setTimeout(() => {
           uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) })

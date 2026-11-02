@@ -61,6 +61,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
+	mux.HandleFunc("POST /api/v1/auth/wechat/phone", s.requireRoles(s.bindWechatPhone, roleUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/users", s.requireRoles(s.listUsers, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/admin-users", s.requireRoles(s.listAdminUsers, roleAdmin))
+	mux.HandleFunc("POST /api/v1/admin/admin-users", s.requireRoles(s.assignAdminUser, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/admin-users/status", s.requireRoles(s.updateAdminUserStatus, roleAdmin))
 	mux.HandleFunc("GET /api/v1/config/public", s.publicConfig)
 	mux.HandleFunc("PUT /api/v1/admin/config/public", s.requireRoles(s.updatePublicConfig, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
@@ -156,7 +161,7 @@ func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -185,8 +190,9 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		userID := "dev-user"
-		token, _ := s.tokens.issue(userID, roleUser)
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "isDevMock": true}})
+		userRole := s.wechatUserRole(r.Context(), userID)
+		token, _ := s.tokens.issue(userID, userRole)
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "role": userRole, "isDevMock": true}})
 		return
 	}
 	if appID == "" || secret == "" || len(s.tokens.secret) == 0 {
@@ -217,12 +223,25 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	token, err := s.tokens.issue(userID, roleUser)
+	userRole := s.wechatUserRole(r.Context(), userID)
+	token, err := s.tokens.issue(userID, userRole)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue access token")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "isDevMock": false}})
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "role": userRole, "isDevMock": false}})
+}
+
+func (s *Server) wechatUserRole(ctx context.Context, userID string) string {
+	store, ok := s.userAdminStore()
+	if !ok {
+		return roleUser
+	}
+	isAdmin, err := store.IsAdminUser(ctx, userID)
+	if err == nil && isAdmin {
+		return roleAdmin
+	}
+	return roleUser
 }
 
 func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {

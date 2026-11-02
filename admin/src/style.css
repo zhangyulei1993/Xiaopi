@@ -139,6 +139,14 @@ button, input, textarea { font: inherit; }
 .table-heading p, .section-heading p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: 13px; }
 .table-panel .el-table { --el-table-border-color: #edf1f5; --el-table-header-bg-color: #f7f9fc; }
 .table-panel .el-table__header th { height: 48px; color: #526176; font-weight: 700; }
+.user-cell { display: flex; align-items: center; gap: 12px; }
+.user-cell strong, .user-cell span { display: block; }
+.user-cell strong { color: var(--color-text-primary); font-size: 14px; }
+.user-cell span { max-width: 220px; margin-top: 4px; overflow: hidden; color: var(--color-text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.assign-admin-panel { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 16px; padding: 22px 24px; }
+.assign-admin-panel h2 { margin: 0; color: var(--color-primary); font-size: 18px; }
+.assign-admin-panel p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 13px; }
+.assign-control { display: flex; width: min(520px, 100%); gap: 10px; }
 
 .config-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr); gap: 18px; align-items: start; }
 .config-side { display: grid; gap: 18px; }
@@ -156,7 +164,8 @@ button, input, textarea { font: inherit; }
   .admin-content { padding: 20px 16px 32px; }
 }
 @media (max-width: 640px) {
-  .dashboard-hero, .page-header { align-items: stretch; flex-direction: column; }
+  .dashboard-hero, .page-header, .assign-admin-panel { align-items: stretch; flex-direction: column; }
+  .assign-control { flex-direction: column; }
   .hero-meter { min-width: 0; text-align: left; }
   .dashboard-grid, .list-stats { grid-template-columns: 1fr; }
   .login-panel { padding: 26px 22px; }

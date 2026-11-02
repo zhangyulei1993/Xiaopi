@@ -9,6 +9,7 @@ export const createPropertyLead = (lead: Partial<PropertyLead>) => request<Prope
 
 export interface WechatLoginResult {
   accessToken: string
+  role?: 'user' | 'admin'
   isDevMock?: boolean
 }
 
@@ -27,6 +28,11 @@ export interface LoginResult {
 }
 
 export const wechatLogin = (code: string) => request<WechatLoginResult>('/v1/auth/wechat/login', {
+  method: 'POST',
+  data: { code },
+})
+
+export const bindWechatPhone = (code: string) => request<{ phone: string }>('/v1/auth/wechat/phone', {
   method: 'POST',
   data: { code },
 })
