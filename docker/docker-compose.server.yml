@@ -49,7 +49,7 @@ services:
     volumes:
       - ./mysql/data-xiaopi:/var/lib/mysql
     command:
-      - --bind-address=127.0.0.1
+      - --bind-address=0.0.0.0
       - --lower-case-table-names=2
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
