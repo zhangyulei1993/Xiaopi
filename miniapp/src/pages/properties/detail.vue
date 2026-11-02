@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onLoad } from '@dcloudio/uni-app'
 import { ref } from 'vue'
+import { API_ORIGIN } from '../../api/client'
 import { getPublicConfig, listProperties, type Property } from '../../api/properties'
 
 const TOKEN_STORAGE_KEY = 'xiaopi_access_token'
@@ -20,7 +21,7 @@ onLoad(async (query) => {
   }
 })
 
-const mediaUrl = (url: string) => url.startsWith('http') ? url : `http://150.158.157.213${url}`
+const mediaUrl = (url: string) => url.startsWith('http') ? url : `${API_ORIGIN}${url}`
 
 const contact = () => {
   if (!uni.getStorageSync(TOKEN_STORAGE_KEY)) {
