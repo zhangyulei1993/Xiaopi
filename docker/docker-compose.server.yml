@@ -26,6 +26,7 @@ services:
       WECHAT_MINI_APP_ID: ${WECHAT_MINI_APP_ID:-}
       WECHAT_MINI_APP_SECRET: ${WECHAT_MINI_APP_SECRET:-}
       WECHAT_MOCK_ENABLED: ${WECHAT_MOCK_ENABLED:-false}
+      CONTACT_PHONE: ${CONTACT_PHONE:-}
     volumes:
       - ../backend:/workspace/backend
     depends_on:
@@ -72,3 +73,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  adminer:
+    image: adminer:4.8.1-standalone
+    container_name: xiaopi-adminer
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ADMINER_DEFAULT_SERVER: 127.0.0.1
+    command: ["php", "-S", "127.0.0.1:18081", "-t", "/var/www/html"]
