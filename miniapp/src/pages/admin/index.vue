@@ -117,7 +117,7 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
     ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view class="work-head"
       ><view
-        ><view class="title">房源运营工作台</view
+        ><view class="title">房源总览</view
         ></view
       ><view class="refresh" @click="load">刷新</view></view
     ><view class="summary"
@@ -390,4 +390,5 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
   padding: 100rpx 0;
 }
 .page-presentation-head{margin-bottom:28rpx}.work-head{margin-bottom:20rpx}.work-head .title{font-size:36rpx;line-height:1.3}.summary{margin-bottom:28rpx}.tabs{margin-bottom:28rpx}.new-property{margin-bottom:28rpx}.item{margin-bottom:22rpx}.item .title{line-height:1.35}.info{line-height:1.55}.actions{margin-top:28rpx}
+.refresh{font-size:23rpx;line-height:1.2}.summary>view{padding:25rpx 16rpx}.summary strong{font-size:40rpx;line-height:1.1}.summary text{font-size:22rpx;line-height:1.3}.tabs text{padding:19rpx 12rpx;font-size:25rpx;line-height:1.25}.new-property strong{font-size:30rpx;line-height:1.3}.item{padding:30rpx}.item .muted{margin-top:9rpx;font-size:23rpx;line-height:1.55}.note{font-size:23rpx;line-height:1.55}.actions button{min-height:76rpx;font-size:24rpx;line-height:76rpx}
 </style>

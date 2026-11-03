@@ -233,4 +233,5 @@ const call = () =>
   font-size: 26rpx;
 }
 .request-hero{margin-bottom:28rpx;padding:42rpx 34rpx}.request-hero>view{line-height:1.28}.form{padding:12rpx 28rpx}.field{padding:28rpx 0}.privacy{margin-top:8rpx;line-height:1.7}.contact{margin-top:32rpx;padding-bottom:12rpx}
+.request-hero>text{font-size:24rpx;letter-spacing:.5rpx}.request-hero>view{font-size:42rpx;letter-spacing:-1rpx}.request-hero small{line-height:1.65}.field>text{margin-bottom:16rpx;font-size:26rpx;line-height:1.25}.field input,.field textarea,.picker{font-size:29rpx;line-height:1.45}.budget input{min-height:72rpx;padding:0 16rpx}.picker{min-height:50rpx;align-items:center}.privacy{font-size:22rpx}.button{margin-top:24rpx;min-height:96rpx;line-height:96rpx}
 </style>

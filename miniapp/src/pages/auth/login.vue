@@ -71,8 +71,8 @@ const loginTemporarily = async () => {
     <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
     <view class="card login-card">
       <view class="logo">小皮</view>
-      <view class="title">登录小皮租房</view>
-      <view class="muted">微信能力接入完成前，可使用管理员发放的临时访问码登录</view>
+      <view class="title">继续找房</view>
+      <view class="muted">可使用管理员发放的访问码登录</view>
       <view class="temporary-form">
         <input v-model="phone" type="number" maxlength="20" placeholder="手机号" />
         <input v-model="accessCode" maxlength="8" placeholder="8 位访问码" />
@@ -98,4 +98,5 @@ const loginTemporarily = async () => {
 .wechat-button { background: #edf7f3; color: #0f8177; border-radius: 999rpx; }
 .wechat-button::after { border: 0; }
 .page-presentation-head{margin-bottom:26rpx}.login-card{margin-top:0;padding:42rpx 32rpx}.logo{margin-bottom:28rpx}.login-card .title{line-height:1.3}.login-card>.muted{display:block;margin-top:12rpx;line-height:1.65}.temporary-form{margin-top:32rpx}.button{margin-top:36rpx;padding-top:22rpx;padding-bottom:22rpx}.divider{margin:30rpx 0 22rpx}
+.login-card .title{font-size:38rpx}.login-card>.muted{font-size:24rpx}.temporary-form input{height:92rpx;margin-top:18rpx;padding:0 26rpx;font-size:28rpx;line-height:92rpx}.button,.wechat-button{min-height:92rpx;font-size:29rpx;line-height:1.3}.divider{font-size:22rpx}
 </style>
