@@ -554,16 +554,17 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content">
-                  <section class="mini-hero"><span>{{ publicConfig.heroTitle || '品牌名称' }}</span><strong>{{ publicConfig.heroSubtitle || '首页主标题' }}</strong><p>{{ publicConfig.heroDescription || '首页副标题' }}</p><button>查找房源 ›</button></section>
-                  <div v-if="publicConfig.notice" class="mini-notice"><b>公告</b><span>{{ publicConfig.notice }}</span></div>
-                  <div class="mini-section-title">热门地区</div>
-                  <div class="mini-locations"><span v-for="(item, index) in publicConfig.locations.slice(0, 6)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
+                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong>{{ publicConfig.heroSubtitle || '今天想住哪里？' }}</strong><i></i><div class="mini-search">搜索小区、地铁或商圈 <b>搜索</b></div></section>
+                  <div class="mini-locations"><span class="active">附近</span><span v-for="(item, index) in publicConfig.locations.slice(0, 3)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
+                  <div class="mini-budget"><b>租金预算</b><span>¥1,500 以下</span><span>¥1,500–2,500</span></div>
                   <div class="mini-section-title">精选频道</div>
-                  <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 4)" :key="`preview-channel-${index}`"><b>{{ item.icon || '🏠' }}</b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
+                  <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
+                  <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b>查看房源</b></div>
+                  <div class="mini-listing"><div></div><section><strong>正在加载附近好房</strong><span>{{ publicConfig.heroDescription || '真实房源 · 可靠服务' }}</span><b>¥ 租金/月</b></section></div>
                 </div>
                 <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
               </div>
-              <p class="preview-note">预览用于确认信息层级，实际小程序会根据设备尺寸自适应。</p>
+              <p class="preview-note">此处与小程序首页使用同一套频道、地区和标题配置；预览按手机比例缩放。</p>
             </aside>
           </div>
         </template>

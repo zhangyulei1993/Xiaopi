@@ -63,7 +63,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view class="hero">
       <image class="hero-bg" src="../../static/home-lifestyle-hero.png" mode="aspectFill" />
       <view class="city"><image :src="pinIcon" mode="aspectFit" />武汉<text>⌄</text></view>
-      <view class="hero-copy"><strong>今天想住哪里？</strong><i></i></view>
+      <view class="hero-copy"><strong>{{ config.heroSubtitle || "今天想住哪里？" }}</strong><i></i></view>
       <view class="hero-search" @click="browse"><image :src="searchIcon" mode="aspectFit" /><span>搜索小区、地铁或商圈</span><b>搜索</b></view>
     </view>
     <scroll-view scroll-x class="area-scroll" :show-scrollbar="false"><view class="area-row"><text :class="{ selected: selectedArea === '全部' }" @click="selectedArea = '全部'"><image :src="pinIcon" mode="aspectFit" />附近</text><text v-for="location in config.locations" :key="location.label" :class="{ selected: selectedArea === location.label }" @click="selectedArea = location.label">{{ location.label }}</text></view></scroll-view>
