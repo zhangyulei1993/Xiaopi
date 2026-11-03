@@ -23,6 +23,23 @@ export const updateProperty = (property: Partial<Property>) =>
     method: "PATCH",
     data: property,
   });
+export interface LocationSearchItem {
+  id: string;
+  title: string;
+  address: string;
+  district: string;
+  latitude: number;
+  longitude: number;
+  distance?: number;
+}
+export const searchLocations = (
+  keyword: string,
+  latitude: number,
+  longitude: number,
+) =>
+  request<LocationSearchItem[]>(
+    `/v1/admin/location/search?keyword=${encodeURIComponent(keyword)}&latitude=${latitude}&longitude=${longitude}`,
+  );
 export interface PropertyLead {
   id: string;
   sourceName: string;

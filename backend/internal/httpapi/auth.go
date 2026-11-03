@@ -25,6 +25,8 @@ type Config struct {
 	AdminPassword string
 	TokenSecret   string
 	TokenTTL      time.Duration
+	TencentMapKey string
+	TencentMapURL string
 }
 
 func ConfigFromEnv() Config {
@@ -36,11 +38,17 @@ func ConfigFromEnv() Config {
 	if secret == "" {
 		secret = os.Getenv("JWT_ADMIN_SECRET")
 	}
+	mapURL := strings.TrimSpace(os.Getenv("TENCENT_MAP_API_URL"))
+	if mapURL == "" {
+		mapURL = "https://apis.map.qq.com"
+	}
 	return Config{
 		AdminUsername: os.Getenv("ADMIN_USERNAME"),
 		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 		TokenSecret:   secret,
 		TokenTTL:      ttl,
+		TencentMapKey: strings.TrimSpace(os.Getenv("TENCENT_MAP_KEY")),
+		TencentMapURL: strings.TrimRight(mapURL, "/"),
 	}
 }
 
