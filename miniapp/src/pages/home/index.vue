@@ -69,7 +69,10 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view class="hero">
       <image class="hero-bg" :src="presentationImage(homePresentation.backgroundImage)" mode="aspectFill" />
       <view class="city"><image :src="pinIcon" mode="aspectFit" />武汉<text>⌄</text></view>
-      <view class="hero-copy"><strong>{{ homePresentation.title || "今天想住哪里？" }}</strong><i></i></view>
+      <view class="hero-copy">
+        <view class="hero-title">{{ homePresentation.title || "今天想住哪里？" }}</view>
+        <view class="hero-accent"></view>
+      </view>
       <view class="hero-search" @click="browse"><image :src="searchIcon" mode="aspectFit" /><span>{{ homePresentation.subtitle || "搜索小区、地铁或商圈" }}</span><b>搜索</b></view>
     </view>
     <scroll-view scroll-x class="area-scroll" :show-scrollbar="false"><view class="area-row"><text :class="{ selected: selectedArea === '全部' }" @click="selectedArea = '全部'"><image :src="pinIcon" mode="aspectFit" />附近</text><text v-for="location in config.locations" :key="location.label" :class="{ selected: selectedArea === location.label }" @click="selectedArea = location.label">{{ location.label }}</text></view></scroll-view>
@@ -93,4 +96,5 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 
 /* Acceptance pass: every choice must visibly select and carry into the results page. */
 .price-row text.selected{border-radius:12rpx;background:#5e6d2e;color:#fff;font-weight:700}.channel{width:228rpx;height:166rpx;padding:18rpx}.channel strong{overflow:hidden;margin-top:15rpx;font-size:28rpx;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}.channel small{display:block;overflow:hidden;margin-top:7rpx;font-size:21rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.channel-mark{position:relative;width:44rpx;height:44rpx}.channel-mark i{display:block;width:22rpx;height:22rpx;border:3rpx solid rgba(255,255,255,.92);border-radius:50%;box-sizing:border-box}.channel-mark i:after{display:block;width:8rpx;height:8rpx;margin:4rpx;border-radius:50%;background:rgba(255,255,255,.92);content:""}.channel-mark.mark-campus i{border-radius:4rpx}.channel-mark.mark-campus i:after{width:12rpx;height:3rpx;margin:7rpx 2rpx;border-radius:3rpx}.channel-mark.mark-work i{border:0;border-radius:0;background:linear-gradient(90deg,rgba(255,255,255,.92) 0 28%,transparent 28% 37%,rgba(255,255,255,.92) 37% 63%,transparent 63% 72%,rgba(255,255,255,.92) 72%)}.channel-mark.mark-work i:after{display:none}.channel-mark.mark-life i{border-radius:50% 50% 6rpx 6rpx;transform:rotate(45deg)}.channel-mark.mark-life i:after{margin:4rpx}.tone-commute{background:linear-gradient(135deg,#dd8d6f,#bd624c)}.tone-campus{background:linear-gradient(135deg,#778b46,#415a2f)}.tone-work{background:linear-gradient(135deg,#d4ad78,#a9855a)}.tone-life{background:linear-gradient(135deg,#8a9b8b,#536e61)}.recommend-head>b{background:#40543f;color:#fff;border-color:#40543f;font-weight:700}
+.hero-title{display:-webkit-box;overflow:hidden;max-width:570rpx;color:#334025;font-size:56rpx;font-weight:900;line-height:1.22;letter-spacing:-3rpx;text-shadow:0 2rpx 0 rgba(255,255,255,.18);-webkit-line-clamp:2;-webkit-box-orient:vertical}.hero-accent{width:116rpx;height:8rpx;margin:18rpx 0 0 178rpx;border-radius:999rpx;background:#d66d50;transform:rotate(-3deg)}.hero-search{margin-top:38rpx}
 </style>
