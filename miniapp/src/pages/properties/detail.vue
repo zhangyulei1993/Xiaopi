@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onLoad } from "@dcloudio/uni-app";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { API_ORIGIN } from "../../api/client";
 import {
   getPublicConfig,
@@ -40,6 +40,40 @@ const load = async (id = "") => {
 onLoad((query) => load(String(query?.id || "")));
 const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
+const amenityIcons: Record<string, string> = {
+  冰箱: "❄",
+  洗衣机: "◉",
+  空调: "⌁",
+  热水器: "♨",
+  电视: "▣",
+  宽带: "⌁",
+  燃气: "♨",
+  油烟机: "↟",
+  沙发: "▰",
+  衣柜: "▥",
+  书桌: "▱",
+  床: "▭",
+  地铁: "M",
+  电梯: "↕",
+  车位: "P",
+  智能门锁: "◇",
+  阳台: "☀",
+  独立卫浴: "♨",
+};
+const amenities = computed(() => {
+  const match = item.value?.description?.match(/^配套设施：([^\n]*)\n?/);
+  if (!match?.[1]) return [];
+  return match[1]
+    .split(/[、,，]/)
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name) => ({ name, icon: amenityIcons[name] || "＋" }));
+});
+const propertyDescription = computed(() =>
+  String(item.value?.description || "")
+    .replace(/^配套设施：[^\n]*\n?/, "")
+    .trim(),
+);
 const requireUser = () => {
   if (getSession()?.role === "user") return true;
   if (getSession()?.role === "admin") {
@@ -123,9 +157,20 @@ const contact = () => {
       ><view class="row"
         ><text>户型</text><text>{{ item.layout }}</text></view
       ></view
+    ><view v-if="amenities.length" class="card amenity-card"
+      ><view class="title small">配套设施</view
+      ><view class="amenity-grid"
+        ><view
+          v-for="amenity in amenities"
+          :key="amenity.name"
+          class="amenity-item"
+          ><text class="amenity-icon">{{ amenity.icon }}</text
+          ><text class="amenity-name">{{ amenity.name }}</text></view
+        ></view
+      ></view
     ><view class="card"
       ><view class="title small">房源描述</view
-      ><view class="desc">{{ item.description || "暂无描述" }}</view></view
+      ><view class="desc">{{ propertyDescription || "暂无描述" }}</view></view
     ><view class="bottom-space" /><view class="action-bar"
       ><view class="contact-action" @click="contact"
         ><text>☎</text><small>联系小皮</small></view
@@ -208,6 +253,46 @@ const contact = () => {
 }
 .row text:last-child {
   color: #073b3a;
+}
+.amenity-card {
+  padding-bottom: 32rpx;
+}
+.amenity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26rpx 14rpx;
+}
+.amenity-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+}
+.amenity-icon {
+  display: flex;
+  width: 72rpx;
+  height: 72rpx;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx solid #d5eee7;
+  border-radius: 22rpx;
+  background: #eaf8f4;
+  color: #08766d;
+  box-shadow: 0 8rpx 20rpx rgba(26, 111, 100, 0.08);
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+.amenity-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: #315f59;
+  font-size: 24rpx;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .desc {
   line-height: 1.8;
