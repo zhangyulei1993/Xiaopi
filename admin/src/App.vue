@@ -535,7 +535,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <el-form-item label="首页主标题" required><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></el-form-item>
                   <el-form-item label="搜索提示"><el-input v-model="publicConfig.pagePresentations.home.subtitle" maxlength="60" show-word-limit placeholder="例如：搜索小区、地铁或商圈" /></el-form-item>
                   <el-form-item label="首页背景图"><el-input v-model="publicConfig.pagePresentations.home.backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /><div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground('home', $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations.home.backgroundImage" @click="publicConfig.pagePresentations.home.backgroundImage = ''">移除背景图</button></div></el-form-item>
-                  <el-form-item label="首页公告"><el-input v-model="publicConfig.notice" type="textarea" :rows="3" maxlength="120" show-word-limit placeholder="发布签约提醒、服务通知或风险提示" /></el-form-item>
                   <el-form-item label="附近房源关联距离">
                     <el-select v-model="publicConfig.relatedPropertyRadiusKm" placeholder="选择距离" style="width: 100%">
                       <el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" />
