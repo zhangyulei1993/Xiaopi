@@ -6,6 +6,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -o /out/xiaopi-ap
 
 FROM debian:bookworm-slim
 WORKDIR /workspace/backend
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/xiaopi-api /usr/local/bin/xiaopi-api
 EXPOSE 18080
 ENTRYPOINT ["/usr/local/bin/xiaopi-api"]
