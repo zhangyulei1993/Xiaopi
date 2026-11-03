@@ -439,4 +439,14 @@ const toggleFavorite = async (id: string) => {
   font-size: 25rpx;
   font-weight: 700;
 }
+
+/* Community-facing visual layer: warm, compact, and photo-first. */
+.location { margin:18rpx 0 24rpx; color:#29382d; font-size:44rpx; letter-spacing:-2rpx; }
+.location text { color:#83907e; font-size:22rpx; font-weight:500; }
+.search { margin-bottom:16rpx; padding:19rpx 22rpx; border:1rpx solid #e6e2da; border-radius:20rpx; box-shadow:none; }
+.search input { color:#334034; font-size:26rpx; }
+.favorite-filter { margin:2rpx 0 14rpx; border-color:#d9ded2; border-radius:12rpx; color:#697564; }
+.favorite-filter.active { border-color:#e9c9bc; background:#fcf1ed; color:#cc654b; }
+.filter-block { margin:16rpx 0; gap:8rpx; }.filter-label { flex-basis:88rpx; color:#5a6757; font-size:22rpx; }.chips text { padding:12rpx 19rpx; margin-right:10rpx; border:1rpx solid #e8e5df; border-radius:12rpx; background:#fff; color:#6f796e; }.chips .active { border-color:#cbd7ad; background:#e6ecd7; color:#42523b; }
+.grid { grid-template-columns:1fr 1fr; gap:14rpx; margin-top:24rpx; }.property { border:0; border-radius:18rpx; background:transparent; overflow:visible; }.cover { height:250rpx; border-radius:18rpx; background:#dde5d4; }.badge { top:12rpx; left:12rpx; padding:6rpx 10rpx; border-radius:8rpx; background:#536a45; }.favorite { top:10rpx; right:10rpx; width:54rpx; height:54rpx; border-radius:50%; color:#536a45; }.small { margin:15rpx 2rpx 5rpx; color:#29382d; font-size:28rpx; }.summary,.property>.price { margin-left:2rpx; margin-right:2rpx; }.summary { min-height:56rpx; color:#899188; font-size:21rpx; }.property>.price { margin-top:7rpx; margin-bottom:10rpx; color:#d76440; font-size:32rpx; }.property>.price small { font-size:20rpx; }.request-banner { margin-top:34rpx; padding:26rpx; border-radius:20rpx; background:#40543f; }.request-banner>text { color:#dce7ac; }
 </style>
