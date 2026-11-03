@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onLoad } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, reactive, ref } from "vue";
 import { API_ORIGIN, request } from "../../api/client";
 import {
@@ -286,6 +286,12 @@ const mediaCount = computed(
     existingMedia.value.filter((item) => item.type === "image").length +
     images.value.length,
 );
+const existingImages = computed(() =>
+  existingMedia.value.filter((item) => item.type === "image"),
+);
+const existingVideos = computed(() =>
+  existingMedia.value.filter((item) => item.type === "video"),
+);
 const coverImageIndex = ref(0);
 const orderedImages = computed(() => {
   const cover = images.value[coverImageIndex.value];
@@ -381,6 +387,24 @@ onLoad(async (query) => {
     },
   });
 });
+onShow(() => {
+  const result = uni.getStorageSync("xiaopi-property-image-crop-result") as
+    | { index?: number; path?: string; width?: number; height?: number; size?: number }
+    | undefined;
+  if (!result?.path || typeof result.index !== "number") return;
+  const image = images.value[result.index];
+  if (image) {
+    images.value.splice(result.index, 1, {
+      path: result.path,
+      width: Number(result.width) || 1200,
+      height: Number(result.height) || 900,
+      size: Number(result.size) || image.size,
+    });
+    images.value = [...images.value];
+    uni.showToast({ title: "已更新裁切图片", icon: "success" });
+  }
+  uni.removeStorageSync("xiaopi-property-image-crop-result");
+});
 const pick = (type: "image" | "video") => {
   const count =
     type === "image"
@@ -450,7 +474,7 @@ const processPickedMedia = async (type: "image" | "video", files: any[]) => {
     }
   }
   if (accepted.length) {
-    images.value.push(...accepted);
+    images.value = [...images.value, ...accepted];
   }
   if (rejected) {
     uni.showToast({
@@ -458,6 +482,21 @@ const processPickedMedia = async (type: "image" | "video", files: any[]) => {
       icon: "none",
     });
   }
+};
+const cropImage = (index: number) => {
+  const image = images.value[index];
+  if (!image) return;
+  uni.setStorageSync("xiaopi-property-image-crop-source", { ...image, index });
+  uni.navigateTo({ url: "/pages/admin/image-crop" });
+};
+const previewPickedImages = (index: number) => {
+  const current = images.value[index]?.path;
+  if (!current) return;
+  uni.previewImage({ current, urls: images.value.map((image) => image.path) });
+};
+const previewExistingImage = (url: string) => {
+  const urls = existingImages.value.map((item) => mediaUrl(item.url));
+  uni.previewImage({ current: mediaUrl(url), urls });
 };
 const setCover = (index: number) => {
   if (index !== 0) {
@@ -795,41 +834,51 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="media-guidance"
           ><strong>封面与展示</strong
-          ><text>首张图片会作为列表封面，列表按固定比例裁切；建议上传清晰的横图或竖图。</text
-          ><small>单张不超过10MB，短边至少640px；超长图会自动跳过。</small></view
-        ><view
-          v-if="existingMedia.length || images.length || videos.length"
-          class="media-preview"
-          ><view
-            v-for="(media, index) in existingMedia"
-            :key="media.url"
-            class="preview-item"
-            ><image
-              v-if="media.type === 'image'"
-              :src="mediaUrl(media.url)"
-              mode="aspectFill"
-            /><video v-else :src="mediaUrl(media.url)" /><text
-              >已上传 {{ index + 1 }}</text
+          ><text>列表会按 4:3 展示图片；上传后可自己调整每张图片的裁切位置。</text
+          ><small>单张不超过10MB，短边至少640px；支持相册或拍照。</small></view
+        ><view v-if="existingImages.length" class="uploaded-gallery"
+          ><text class="media-group-title">已上传图片</text
+          ><view class="photo-grid"
+            ><view
+              v-for="(media, index) in existingImages"
+              :key="media.url"
+              class="photo-card uploaded-photo"
+              @click="previewExistingImage(media.url)"
+              ><image :src="mediaUrl(media.url)" mode="aspectFill" /><text
+                >已上传 {{ index + 1 }}</text
+              ></view
             ></view
-          ><view
+          ></view
+        ><view v-if="images.length" class="pending-gallery"
+          ><text class="media-group-title">待上传图片 · 点图片可放大查看</text
+          ><view class="photo-grid"
+            ><view
             v-for="(image, index) in images"
             :key="image.path"
-            class="preview-item"
+            class="photo-card"
             :class="{ cover: coverImageIndex === index }"
+            @click="previewPickedImages(index)"
             ><image :src="image.path" mode="aspectFill" /><text
               class="cover-mark"
               >{{ coverImageIndex === index ? "封面" : `${image.width}×${image.height}` }}</text
-            ><view class="media-tools"
-              ><text v-if="coverImageIndex !== index" @click="setCover(index)">设封面</text
+            ><view class="media-tools" @click.stop
+              ><text @click="cropImage(index)">裁切</text
+              ><text v-if="coverImageIndex !== index" @click="setCover(index)">封面</text
               ><text v-if="index > 0" @click="moveImage(index, -1)">←</text
               ><text v-if="index < images.length - 1" @click="moveImage(index, 1)">→</text
               ><text class="remove" @click="removeImage(index)">×</text></view
             ></view
+            ></view
+          ></view
+        ><view v-if="videos.length || existingVideos.length" class="video-preview-list"
+          ><text class="media-group-title">房源视频</text
+          ><view v-for="media in existingVideos" :key="media.url" class="video-card"
+            ><video :src="mediaUrl(media.url)" controls show-center-play-btn object-fit="contain" /><text>已上传视频</text></view
           ><view
             v-for="(path, index) in videos"
             :key="path"
-            class="preview-item"
-            ><video :src="path" /><text
+            class="video-card"
+            ><video :src="path" controls show-center-play-btn object-fit="contain" /><text
               class="remove"
               @click="videos.splice(index, 1)"
               >×</text
@@ -1355,12 +1404,6 @@ const mediaUrl = (url: string) =>
   color: #9ab2ae;
   font-size: 19rpx;
 }
-.media-preview {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12rpx;
-  margin-bottom: 18rpx;
-}
 .media-guidance {
   margin-bottom: 22rpx;
   padding: 20rpx 22rpx;
@@ -1388,22 +1431,39 @@ const mediaUrl = (url: string) =>
   font-size: 19rpx;
   line-height: 1.45;
 }
-.preview-item {
+.uploaded-gallery,
+.pending-gallery,
+.video-preview-list {
+  margin-bottom: 24rpx;
+}
+.media-group-title {
+  display: block;
+  margin: 0 0 12rpx 2rpx;
+  color: #61705d;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+}
+.photo-card {
   position: relative;
-  height: 160rpx;
+  height: 224rpx;
   overflow: hidden;
-  border-radius: 16rpx;
+  border-radius: 18rpx;
   background: #e6f3ef;
 }
-.preview-item.cover {
+.photo-card.cover {
   box-shadow: 0 0 0 3rpx #536a45;
 }
-.preview-item image,
-.preview-item video {
+.photo-card image {
   width: 100%;
   height: 100%;
 }
-.preview-item > text {
+.photo-card > text,
+.video-card > text {
   position: absolute;
   left: 8rpx;
   bottom: 8rpx;
@@ -1413,9 +1473,10 @@ const mediaUrl = (url: string) =>
   color: #fff;
   font-size: 18rpx;
 }
-.preview-item > .cover-mark {
+.photo-card > .cover-mark {
   background: rgba(54, 77, 48, 0.8);
 }
+.uploaded-photo { opacity: 0.9; }
 .media-tools {
   position: absolute;
   top: 8rpx;
@@ -1424,7 +1485,7 @@ const mediaUrl = (url: string) =>
   gap: 6rpx;
 }
 .media-tools text {
-  min-width: 34rpx;
+  min-width: 42rpx;
   height: 34rpx;
   padding: 0 8rpx;
   border-radius: 9rpx;
@@ -1439,6 +1500,19 @@ const mediaUrl = (url: string) =>
   padding: 0;
   background: rgba(160, 62, 52, 0.82);
   font-size: 28rpx;
+}
+.video-card {
+  position: relative;
+  height: 360rpx;
+  overflow: hidden;
+  border-radius: 18rpx;
+  background: #1e2825;
+}
+.video-card + .video-card { margin-top: 14rpx; }
+.video-card video {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .media-actions {
   display: grid;
