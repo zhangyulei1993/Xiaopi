@@ -358,7 +358,7 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	}
 }
 
-func TestCreatePropertyRequiresUserAndUsesTokenOwner(t *testing.T) {
+func TestCreatePropertyRequiresAdmin(t *testing.T) {
 	dataStore := &fakeStore{}
 	server := testServer(dataStore)
 	handler := server.Handler()
@@ -373,11 +373,19 @@ func TestCreatePropertyRequiresUserAndUsesTokenOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created := performRequest(t, handler, http.MethodPost, "/api/v1/properties", payload, userToken)
+	denied := performRequest(t, handler, http.MethodPost, "/api/v1/properties", payload, userToken)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("expected user to be denied, got %d: %s", denied.Code, denied.Body.String())
+	}
+	adminToken, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := performRequest(t, handler, http.MethodPost, "/api/v1/properties", payload, adminToken)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", created.Code, created.Body.String())
 	}
-	if dataStore.createdProperty.OwnerID != "wx-user-1" || dataStore.createdProperty.Status != domain.PropertyDraft {
+	if dataStore.createdProperty.OwnerID != "forged-owner" || dataStore.createdProperty.Status != domain.PropertyDraft {
 		t.Fatalf("server did not enforce owner/status: %#v", dataStore.createdProperty)
 	}
 }
