@@ -287,7 +287,12 @@ const mediaCount = computed(
     images.value.length,
 );
 const coverImageIndex = ref(0);
-const pendingCover = computed(() => images.value[coverImageIndex.value] || null);
+const orderedImages = computed(() => {
+  const cover = images.value[coverImageIndex.value];
+  return cover
+    ? [cover, ...images.value.filter((_, index) => index !== coverImageIndex.value)]
+    : images.value;
+});
 const sectionReady = computed(() => [
   Boolean(
     form.title?.trim() &&
@@ -446,7 +451,6 @@ const processPickedMedia = async (type: "image" | "video", files: any[]) => {
   }
   if (accepted.length) {
     images.value.push(...accepted);
-    if (!pendingCover.value) coverImageIndex.value = 0;
   }
   if (rejected) {
     uni.showToast({
@@ -517,7 +521,7 @@ const save = async (openPreview = false) => {
       : await createProperty(payload);
     id.value = property.id;
     const queue = [
-      ...images.value.map((image, index) => ({
+      ...orderedImages.value.map((image, index) => ({
         path: image.path,
         type: "image",
         sort: existingMedia.value.length + index,
