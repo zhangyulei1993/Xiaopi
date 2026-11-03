@@ -1,0 +1,3 @@
+ALTER TABLE properties
+  ADD COLUMN latitude DECIMAL(10,7) NOT NULL DEFAULT 0 AFTER location,
+  ADD COLUMN longitude DECIMAL(10,7) NOT NULL DEFAULT 0 AFTER latitude;

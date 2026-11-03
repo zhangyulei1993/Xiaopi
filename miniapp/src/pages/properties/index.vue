@@ -18,6 +18,13 @@ const properties = ref<Property[]>([]),
 const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
   configuredLocations = ref<{ label: string; keyword: string }[]>([]),
+  channelFilter = ref<{
+    keyword: string;
+    latitude: number;
+    longitude: number;
+    radiusKm: number;
+    title?: string;
+  } | null>(null),
   loading = ref(false),
   loadFailed = ref(false);
 const priceRanges = [
@@ -39,7 +46,27 @@ const filteredProperties = computed(() => {
     const location = areas.value.find(
       (area) => area.label === selectedArea.value,
     );
+    const channelDistance =
+      channelFilter.value &&
+      channelFilter.value.latitude &&
+      channelFilter.value.longitude &&
+      item.latitude &&
+      item.longitude
+        ? distanceKm(
+            channelFilter.value.latitude,
+            channelFilter.value.longitude,
+            item.latitude,
+            item.longitude,
+          )
+        : null;
+    const channelMatched =
+      !channelFilter.value ||
+      (channelDistance !== null
+        ? channelDistance <= channelFilter.value.radiusKm
+        : !channelFilter.value.keyword ||
+          item.location?.includes(channelFilter.value.keyword));
     return (
+      channelMatched &&
       (!showFavoritesOnly.value || favoriteIDs.value.includes(item.id)) &&
       (!location?.keyword || item.location?.includes(location.keyword)) &&
       (!price.min || item.rentMonthly >= price.min) &&
@@ -51,6 +78,15 @@ const filteredProperties = computed(() => {
     );
   });
 });
+const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const rad = Math.PI / 180,
+    dLat = (lat2 - lat1) * rad,
+    dLon = (lon2 - lon1) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 const load = async () => {
   loading.value = true;
   loadFailed.value = false;
@@ -65,7 +101,13 @@ const load = async () => {
       favoriteIDs.value = await listFavorites().catch(() => []);
     const pending = String(uni.getStorageSync("xiaopi_property_filter") || "");
     if (pending) {
-      keyword.value = pending;
+      try {
+        const parsed = JSON.parse(pending);
+        if (parsed && typeof parsed === "object") channelFilter.value = parsed;
+        else keyword.value = pending;
+      } catch {
+        keyword.value = pending;
+      }
       uni.removeStorageSync("xiaopi_property_filter");
     }
     if (uni.getStorageSync("xiaopi_show_favorites")) {
@@ -129,7 +171,11 @@ const toggleFavorite = async (id: string) => {
         placeholder="搜索小区、位置或户型"
         confirm-type="search"
       /><text v-if="keyword" class="clear" @click="keyword = ''">×</text></view
-    ><view class="favorite-filter" :class="{ active: showFavoritesOnly }" @click="showFavoritesOnly = !showFavoritesOnly">{{ showFavoritesOnly ? '♥ 只看已关注' : '♡ 只看关注' }}</view
+    ><view
+      class="favorite-filter"
+      :class="{ active: showFavoritesOnly }"
+      @click="showFavoritesOnly = !showFavoritesOnly"
+      >{{ showFavoritesOnly ? "♥ 只看已关注" : "♡ 只看关注" }}</view
     ><view class="filter-block"
       ><view class="filter-label">地区</view
       ><scroll-view scroll-x class="chips"

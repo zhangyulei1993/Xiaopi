@@ -23,6 +23,8 @@ const form = reactive<Partial<Property>>({
   title: "",
   community: "",
   location: "",
+  latitude: 0,
+  longitude: 0,
   layout: "",
   rentMonthly: 0,
   feeText: "直租无中介费",
@@ -277,6 +279,19 @@ const mediaUrl = (url: string) =>
             v-model.trim="form.location"
             maxlength="60"
             placeholder="区域 / 地铁站 / 商圈" /></view
+        ><view class="geo-fields"
+          ><view class="field"
+            ><text>纬度（可选）</text
+            ><input
+              v-model.number="form.latitude"
+              type="digit"
+              placeholder="例如 30.512" /></view
+          ><view class="field"
+            ><text>经度（可选）</text
+            ><input
+              v-model.number="form.longitude"
+              type="digit"
+              placeholder="例如 114.421" /></view></view
         ><view class="rent-row"
           ><view class="field"
             ><text>月租 *</text
@@ -551,6 +566,11 @@ const mediaUrl = (url: string) =>
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24rpx;
+}
+.geo-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18rpx;
 }
 .rent-input {
   display: flex;

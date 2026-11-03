@@ -16,10 +16,13 @@ type MiniappLocation struct {
 }
 
 type FeaturedChannel struct {
-	Icon     string `json:"icon"`
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
-	Keyword  string `json:"keyword"`
+	Icon      string  `json:"icon"`
+	Title     string  `json:"title"`
+	Subtitle  string  `json:"subtitle"`
+	Keyword   string  `json:"keyword"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	RadiusKm  float64 `json:"radiusKm"`
 }
 
 type PublicConfig struct {
@@ -44,9 +47,9 @@ func DefaultPublicConfig() PublicConfig {
 			{Label: "街道口", Keyword: "街道口"},
 		},
 		FeaturedChannels: []FeaturedChannel{
-			{Icon: "🏢", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港"},
-			{Icon: "🌳", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷"},
-			{Icon: "🌆", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口"},
+			{Icon: "🏢", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", RadiusKm: 3},
+			{Icon: "🌳", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 3},
+			{Icon: "🌆", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 3},
 		},
 	}
 }
@@ -66,6 +69,9 @@ func (config *PublicConfig) Normalize() {
 		config.FeaturedChannels[index].Title = strings.TrimSpace(config.FeaturedChannels[index].Title)
 		config.FeaturedChannels[index].Subtitle = strings.TrimSpace(config.FeaturedChannels[index].Subtitle)
 		config.FeaturedChannels[index].Keyword = strings.TrimSpace(config.FeaturedChannels[index].Keyword)
+		if config.FeaturedChannels[index].RadiusKm <= 0 {
+			config.FeaturedChannels[index].RadiusKm = 3
+		}
 	}
 }
 
@@ -120,6 +126,12 @@ func (config PublicConfig) Validate() error {
 		}
 		if utf8.RuneCountInString(channel.Icon) > 4 || utf8.RuneCountInString(channel.Title) > 12 || utf8.RuneCountInString(channel.Subtitle) > 20 || utf8.RuneCountInString(channel.Keyword) > 20 {
 			return fmt.Errorf("第 %d 个精选频道内容过长", index+1)
+		}
+		if channel.RadiusKm <= 0 || channel.RadiusKm > 100 {
+			return fmt.Errorf("第 %d 个精选频道关联半径必须在 0 到 100 公里之间", index+1)
+		}
+		if (channel.Latitude == 0) != (channel.Longitude == 0) || channel.Latitude < -90 || channel.Latitude > 90 || channel.Longitude < -180 || channel.Longitude > 180 {
+			return fmt.Errorf("第 %d 个精选频道中心坐标不正确", index+1)
 		}
 		if _, exists := channelKeywords[channel.Keyword]; exists {
 			return errors.New("精选频道搜索关键词不能重复")

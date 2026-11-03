@@ -6,7 +6,7 @@ import AdminSidebar from './components/AdminSidebar.vue'
 import AdminTopbar from './components/AdminTopbar.vue'
 
 type LocationConfig = { label: string; keyword: string }
-type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string }
+type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string; latitude: number; longitude: number; radiusKm: number }
 type PublicConfig = {
   heroTitle: string
   heroSubtitle: string
@@ -70,7 +70,9 @@ async function api<T>(path: string, options: RequestInit = {}) {
 
 const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.stringify(value))
 const applyConfig = (value: PublicConfig, markSaved = false) => {
-  Object.assign(publicConfig, cloneConfig(value))
+  const next = cloneConfig(value)
+  next.featuredChannels = (next.featuredChannels || []).map((item) => ({ latitude: 0, longitude: 0, radiusKm: 3, ...item }))
+  Object.assign(publicConfig, next)
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
 }
 
@@ -155,6 +157,8 @@ const configErrors = computed(() => {
   if (publicConfig.featuredChannels.length > 12) errors.push('精选频道不能超过 12 个')
   publicConfig.featuredChannels.forEach((item, index) => {
     if (!item.title.trim() || !item.subtitle.trim() || !item.keyword.trim()) errors.push(`第 ${index + 1} 个精选频道信息不完整`)
+    if (!item.radiusKm || item.radiusKm <= 0 || item.radiusKm > 100) errors.push(`第 ${index + 1} 个精选频道关联半径需在 0 到 100 公里之间`)
+    if ((item.latitude === 0) !== (item.longitude === 0) || item.latitude < -90 || item.latitude > 90 || item.longitude < -180 || item.longitude > 180) errors.push(`第 ${index + 1} 个精选频道中心坐标不正确`)
   })
   const channelKeywords = publicConfig.featuredChannels.map((item) => item.keyword.trim()).filter(Boolean)
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
@@ -172,7 +176,7 @@ function removeLocation(index: number) {
 
 function addChannel() {
   if (publicConfig.featuredChannels.length >= 12) return
-  publicConfig.featuredChannels.push({ icon: '🏠', title: '', subtitle: '', keyword: '' })
+  publicConfig.featuredChannels.push({ icon: '🏠', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
 }
 
 function removeChannel(index: number) {
@@ -504,7 +508,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                       <label class="icon-field"><span>图标</span><el-input v-model="item.icon" maxlength="4" placeholder="🏠" /></label>
                       <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" /></label>
                       <label><span>副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label>
-                      <label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" /></label>
+                      <label><span>搜索关键词（无坐标兜底）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" /></label>
+                      <label><span>频道中心纬度</span><el-input-number v-model="item.latitude" :min="-90" :max="90" :precision="7" :step="0.0001" controls-position="right" /></label>
+                      <label><span>频道中心经度</span><el-input-number v-model="item.longitude" :min="-180" :max="180" :precision="7" :step="0.0001" controls-position="right" /></label>
+                      <label><span>关联半径（公里）</span><el-input-number v-model="item.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /></label>
                     </div>
                   </article>
                 </div>
