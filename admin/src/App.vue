@@ -7,6 +7,7 @@ import AdminTopbar from './components/AdminTopbar.vue'
 
 type LocationConfig = { label: string; keyword: string }
 type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string; latitude: number; longitude: number; radiusKm: number }
+type PagePresentation = { title: string; subtitle: string; backgroundImage: string }
 type PublicConfig = {
   heroTitle: string
   heroSubtitle: string
@@ -16,6 +17,7 @@ type PublicConfig = {
   relatedPropertyRadiusKm: number
   locations: LocationConfig[]
   featuredChannels: ChannelConfig[]
+  pagePresentations: Record<string, PagePresentation>
 }
 type Property = { title: string; community: string; status: string }
 type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
@@ -56,7 +58,17 @@ const generatingTemporaryCode = ref(false)
 const generatedTemporaryCode = ref('')
 const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
-const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [] })
+const pagePresentationOptions = [
+  { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'detail', label: '房源详情' }, { key: 'me', label: '我的' }, { key: 'requests', label: '找房需求' },
+]
+const defaultPagePresentations = (): Record<string, PagePresentation> => ({
+  home: { title: '今天想住哪里？', subtitle: '搜索小区、地铁或商圈', backgroundImage: '' },
+  properties: { title: '找一处合适的家', subtitle: '按地区和预算筛选', backgroundImage: '' },
+  detail: { title: '房源详情', subtitle: '真实房源，放心查看', backgroundImage: '' },
+  me: { title: '我的', subtitle: '管理关注与找房需求', backgroundImage: '' },
+  requests: { title: '小皮帮你找房', subtitle: '告诉我们你的找房需求', backgroundImage: '' },
+})
+const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations() })
 const channelStyleOptions = [
   { value: 'commute', label: '通勤' },
   { value: 'campus', label: '校园' },
@@ -90,6 +102,7 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
   const next = cloneConfig(value)
   next.relatedPropertyRadiusKm = next.relatedPropertyRadiusKm || 3
   next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ latitude: 0, longitude: 0, ...item, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 5 }))
+  next.pagePresentations = { ...defaultPagePresentations(), ...(next.pagePresentations || {}) }
   Object.assign(publicConfig, next)
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
 }
@@ -235,6 +248,25 @@ async function saveConfig() {
     configMessage.value = error instanceof Error ? error.message : '保存失败'
   } finally {
     savingConfig.value = false
+  }
+}
+
+async function uploadPresentationBackground(key: string, event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const form = new FormData()
+  form.append('file', file)
+  try {
+    const token = localStorage.getItem('xiaopi_admin_token')
+    const response = await fetch(`${apiBase}/v1/media/upload`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form })
+    const body = await response.json()
+    if (!response.ok || body.code !== 0) throw new Error(body.message || '图片上传失败')
+    publicConfig.pagePresentations[key].backgroundImage = body.data.url || body.data.path || ''
+  } catch (error) {
+    configFailed.value = true
+    configMessage.value = error instanceof Error ? error.message : '图片上传失败'
+  } finally {
+    ;(event.target as HTMLInputElement).value = ''
   }
 }
 
@@ -541,6 +573,19 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   </article>
                 </div>
                 <div v-else class="config-empty"><strong>还没有精选频道</strong><span>添加频道后，用户可以从首页直接进入对应房源列表。</span><el-button type="primary" plain :icon="Plus" @click="addChannel">添加第一个频道</el-button></div>
+              </section>
+
+              <section class="surface form-section config-section">
+                <div class="section-heading config-section-heading"><span>04</span><div><h2>页面展示</h2><p>配置标题、辅助文案和背景图；不改变功能与信息架构。</p></div></div>
+                <div class="page-presentation-grid">
+                  <article v-for="page in pagePresentationOptions" :key="page.key" class="page-presentation-card">
+                    <header><strong>{{ page.label }}</strong><span>{{ page.key === 'home' ? '首页首屏' : '页面抬头' }}</span></header>
+                    <label><span>标题</span><el-input v-model="publicConfig.pagePresentations[page.key].title" maxlength="30" /></label>
+                    <label><span>辅助文本</span><el-input v-model="publicConfig.pagePresentations[page.key].subtitle" maxlength="60" /></label>
+                    <label><span>背景图</span><el-input v-model="publicConfig.pagePresentations[page.key].backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /></label>
+                    <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(page.key, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[page.key].backgroundImage" @click="publicConfig.pagePresentations[page.key].backgroundImage = ''">移除</button></div>
+                  </article>
+                </div>
               </section>
             </div>
 

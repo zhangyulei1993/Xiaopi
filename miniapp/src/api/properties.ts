@@ -99,6 +99,11 @@ export interface PublicConfig {
     longitude?: number;
     radiusKm?: number;
   }[];
+  pagePresentations?: Record<string, {
+    title?: string;
+    subtitle?: string;
+    backgroundImage?: string;
+  }>;
 }
 
 export const wechatLogin = (code: string) =>

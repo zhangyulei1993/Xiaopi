@@ -25,15 +25,24 @@ type FeaturedChannel struct {
 	RadiusKm  float64 `json:"radiusKm"`
 }
 
+// PagePresentation is intentionally small: it gives operations control over
+// page-facing copy and an optional background without making layout editable.
+type PagePresentation struct {
+	Title           string `json:"title"`
+	Subtitle        string `json:"subtitle"`
+	BackgroundImage string `json:"backgroundImage"`
+}
+
 type PublicConfig struct {
-	HeroTitle               string            `json:"heroTitle"`
-	HeroSubtitle            string            `json:"heroSubtitle"`
-	HeroDescription         string            `json:"heroDescription"`
-	Notice                  string            `json:"notice"`
-	ContactPhone            string            `json:"contactPhone"`
-	RelatedPropertyRadiusKm float64           `json:"relatedPropertyRadiusKm"`
-	Locations               []MiniappLocation `json:"locations"`
-	FeaturedChannels        []FeaturedChannel `json:"featuredChannels"`
+	HeroTitle               string                      `json:"heroTitle"`
+	HeroSubtitle            string                      `json:"heroSubtitle"`
+	HeroDescription         string                      `json:"heroDescription"`
+	Notice                  string                      `json:"notice"`
+	ContactPhone            string                      `json:"contactPhone"`
+	RelatedPropertyRadiusKm float64                     `json:"relatedPropertyRadiusKm"`
+	Locations               []MiniappLocation           `json:"locations"`
+	FeaturedChannels        []FeaturedChannel           `json:"featuredChannels"`
+	PagePresentations       map[string]PagePresentation `json:"pagePresentations"`
 }
 
 func DefaultPublicConfig() PublicConfig {
@@ -52,6 +61,13 @@ func DefaultPublicConfig() PublicConfig {
 			{Icon: "commute", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", Latitude: 30.456040, Longitude: 114.425337, RadiusKm: 10},
 			{Icon: "campus", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 5},
 			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 5},
+		},
+		PagePresentations: map[string]PagePresentation{
+			"home":       {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈"},
+			"properties": {Title: "找一处合适的家", Subtitle: "按地区和预算筛选"},
+			"detail":     {Title: "房源详情", Subtitle: "真实房源，放心查看"},
+			"me":         {Title: "我的", Subtitle: "管理关注与找房需求"},
+			"requests":   {Title: "小皮帮你找房", Subtitle: "告诉我们你的找房需求"},
 		},
 	}
 }
@@ -77,6 +93,20 @@ func (config *PublicConfig) Normalize() {
 		if config.FeaturedChannels[index].RadiusKm <= 0 {
 			config.FeaturedChannels[index].RadiusKm = 5
 		}
+	}
+	if config.PagePresentations == nil {
+		config.PagePresentations = map[string]PagePresentation{}
+	}
+	for key, fallback := range DefaultPublicConfig().PagePresentations {
+		if _, exists := config.PagePresentations[key]; !exists {
+			config.PagePresentations[key] = fallback
+		}
+	}
+	for key, presentation := range config.PagePresentations {
+		presentation.Title = strings.TrimSpace(presentation.Title)
+		presentation.Subtitle = strings.TrimSpace(presentation.Subtitle)
+		presentation.BackgroundImage = strings.TrimSpace(presentation.BackgroundImage)
+		config.PagePresentations[key] = presentation
 	}
 }
 
@@ -145,6 +175,12 @@ func (config PublicConfig) Validate() error {
 			return errors.New("精选频道搜索关键词不能重复")
 		}
 		channelKeywords[channel.Keyword] = struct{}{}
+	}
+	for _, key := range []string{"home", "properties", "detail", "me", "requests"} {
+		presentation := config.PagePresentations[key]
+		if utf8.RuneCountInString(presentation.Title) > 30 || utf8.RuneCountInString(presentation.Subtitle) > 60 || utf8.RuneCountInString(presentation.BackgroundImage) > 300 {
+			return fmt.Errorf("%s 页面展示配置内容过长", key)
+		}
 	}
 	return nil
 }

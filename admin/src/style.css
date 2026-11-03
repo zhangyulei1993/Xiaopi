@@ -222,6 +222,10 @@ button, input, textarea { font: inherit; }
 .channel-fields { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; }
 .channel-fields label:last-child { grid-column: 1 / -1; }
 .icon-field .el-input__inner { text-align: center; }
+.page-presentation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.page-presentation-card { padding: 16px; border: 1px solid #e9ede6; border-radius: 16px; background: #fbfcf8; }
+.page-presentation-card header { display:flex; align-items:baseline; gap:8px; margin-bottom:12px; }.page-presentation-card header strong { color:var(--color-primary); font-size:14px; }.page-presentation-card header span { color:var(--color-text-secondary); font-size:11px; }
+.page-presentation-card label { display:block; margin-top:10px; }.page-presentation-card label>span { display:block; margin-bottom:5px; color:var(--color-text-secondary); font-size:11px; }.presentation-actions { display:flex; align-items:center; gap:10px; margin-top:10px; }.upload-control { display:inline-flex !important; margin:0 !important; padding:7px 10px; border:1px solid #d7e2d3; border-radius:8px; color:var(--color-heritage-green); font-size:11px; cursor:pointer; }.upload-control input { display:none; }.presentation-actions button { padding:6px 2px; border:0; background:none; color:#c45d51; font-size:11px; cursor:pointer; }
 .config-preview-column { position: sticky; top: 84px; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.78); border-radius: 24px; background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(241, 246, 245, 0.92)); box-shadow: var(--shadow-light); }
 .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; }
 .preview-heading strong, .preview-heading span { display: block; }
@@ -263,6 +267,7 @@ button, input, textarea { font: inherit; }
   .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .config-workspace { grid-template-columns: minmax(0, 1fr) 320px; }
   .channel-editor-grid { grid-template-columns: 1fr; }
+  .page-presentation-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
   .admin-shell { grid-template-columns: minmax(0, 1fr); }
