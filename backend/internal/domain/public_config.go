@@ -49,9 +49,9 @@ func DefaultPublicConfig() PublicConfig {
 			{Label: "街道口", Keyword: "街道口"},
 		},
 		FeaturedChannels: []FeaturedChannel{
-			{Icon: "🏢", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", Latitude: 30.456040, Longitude: 114.425337, RadiusKm: 10},
-			{Icon: "🌳", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 5},
-			{Icon: "🌆", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 5},
+			{Icon: "commute", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", Latitude: 30.456040, Longitude: 114.425337, RadiusKm: 10},
+			{Icon: "campus", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 5},
+			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 5},
 		},
 	}
 }
@@ -132,7 +132,7 @@ func (config PublicConfig) Validate() error {
 		if channel.Title == "" || channel.Subtitle == "" || channel.Keyword == "" {
 			return fmt.Errorf("第 %d 个精选频道信息不完整", index+1)
 		}
-		if utf8.RuneCountInString(channel.Icon) > 4 || utf8.RuneCountInString(channel.Title) > 12 || utf8.RuneCountInString(channel.Subtitle) > 20 || utf8.RuneCountInString(channel.Keyword) > 20 {
+		if utf8.RuneCountInString(channel.Icon) > 16 || utf8.RuneCountInString(channel.Title) > 12 || utf8.RuneCountInString(channel.Subtitle) > 20 || utf8.RuneCountInString(channel.Keyword) > 20 {
 			return fmt.Errorf("第 %d 个精选频道内容过长", index+1)
 		}
 		if channel.RadiusKm <= 0 || channel.RadiusKm > 100 {

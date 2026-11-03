@@ -57,6 +57,16 @@ const generatedTemporaryCode = ref('')
 const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
 const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [] })
+const channelStyleOptions = [
+  { value: 'commute', label: '通勤' },
+  { value: 'campus', label: '校园' },
+  { value: 'work', label: '职场' },
+  { value: 'life', label: '生活' },
+]
+const normalizeChannelStyle = (value: string, index: number) => {
+  const legacy: Record<string, string> = { '🏢': 'work', '🌳': 'campus', '🌆': 'life', '🏠': 'life' }
+  return legacy[value] || (channelStyleOptions.some((item) => item.value === value) ? value : channelStyleOptions[index % channelStyleOptions.length].value)
+}
 
 async function api<T>(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('xiaopi_admin_token')
@@ -73,7 +83,7 @@ const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.strin
 const applyConfig = (value: PublicConfig, markSaved = false) => {
   const next = cloneConfig(value)
   next.relatedPropertyRadiusKm = next.relatedPropertyRadiusKm || 3
-  next.featuredChannels = (next.featuredChannels || []).map((item) => ({ latitude: 0, longitude: 0, radiusKm: 5, ...item }))
+  next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ latitude: 0, longitude: 0, ...item, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 5 }))
   Object.assign(publicConfig, next)
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
 }
@@ -179,7 +189,7 @@ function removeLocation(index: number) {
 
 function addChannel() {
   if (publicConfig.featuredChannels.length >= 12) return
-  publicConfig.featuredChannels.push({ icon: '🏠', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 5 })
+  publicConfig.featuredChannels.push({ icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 5 })
 }
 
 function removeChannel(index: number) {
@@ -512,9 +522,9 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道</h2></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
                 <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                   <article v-for="(item, index) in publicConfig.featuredChannels" :key="`channel-${index}`" class="channel-editor-card">
-                    <header><div class="channel-order"><span>{{ item.icon || '🏠' }}</span><strong>频道 {{ index + 1 }}</strong></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.featuredChannels, index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="下移" @click="moveItem(publicConfig.featuredChannels, index, 1)" /><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
+                    <header><div class="channel-order"><span>{{ channelStyleOptions.find((style) => style.value === item.icon)?.label || '频道' }}</span><strong>频道 {{ index + 1 }}</strong></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.featuredChannels, index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="下移" @click="moveItem(publicConfig.featuredChannels, index, 1)" /><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
                     <div class="channel-fields">
-                      <label class="icon-field"><span>图标</span><el-input v-model="item.icon" maxlength="4" placeholder="🏠" /></label>
+                      <label class="icon-field"><span>频道样式</span><el-select v-model="item.icon"><el-option v-for="style in channelStyleOptions" :key="style.value" :label="style.label" :value="style.value" /></el-select></label>
                       <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" /></label>
                       <label><span>副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label>
                       <label><span>搜索关键词（无坐标兜底）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" /></label>
