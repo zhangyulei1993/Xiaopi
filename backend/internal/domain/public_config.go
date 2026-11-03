@@ -47,9 +47,9 @@ func DefaultPublicConfig() PublicConfig {
 			{Label: "街道口", Keyword: "街道口"},
 		},
 		FeaturedChannels: []FeaturedChannel{
-			{Icon: "🏢", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", RadiusKm: 3},
-			{Icon: "🌳", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 3},
-			{Icon: "🌆", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 3},
+			{Icon: "🏢", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", RadiusKm: 5},
+			{Icon: "🌳", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 5},
+			{Icon: "🌆", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 5},
 		},
 	}
 }
@@ -70,7 +70,7 @@ func (config *PublicConfig) Normalize() {
 		config.FeaturedChannels[index].Subtitle = strings.TrimSpace(config.FeaturedChannels[index].Subtitle)
 		config.FeaturedChannels[index].Keyword = strings.TrimSpace(config.FeaturedChannels[index].Keyword)
 		if config.FeaturedChannels[index].RadiusKm <= 0 {
-			config.FeaturedChannels[index].RadiusKm = 3
+			config.FeaturedChannels[index].RadiusKm = 5
 		}
 	}
 }

@@ -21,21 +21,21 @@ const defaultConfig: PublicConfig = {
       title: "金融港",
       subtitle: "通勤优选",
       keyword: "金融港",
-      radiusKm: 3,
+      radiusKm: 5,
     },
     {
       icon: "🌳",
       title: "光谷",
       subtitle: "品质房源",
       keyword: "光谷",
-      radiusKm: 3,
+      radiusKm: 5,
     },
     {
       icon: "🌆",
       title: "街道口",
       subtitle: "生活便利",
       keyword: "街道口",
-      radiusKm: 3,
+      radiusKm: 5,
     },
   ],
 };
@@ -64,7 +64,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
       keyword: channel.keyword,
       latitude: channel.latitude || 0,
       longitude: channel.longitude || 0,
-      radiusKm: channel.radiusKm || 3,
+      radiusKm: channel.radiusKm || 5,
       title: channel.title,
     }),
   );

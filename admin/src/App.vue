@@ -71,7 +71,7 @@ async function api<T>(path: string, options: RequestInit = {}) {
 const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.stringify(value))
 const applyConfig = (value: PublicConfig, markSaved = false) => {
   const next = cloneConfig(value)
-  next.featuredChannels = (next.featuredChannels || []).map((item) => ({ latitude: 0, longitude: 0, radiusKm: 3, ...item }))
+  next.featuredChannels = (next.featuredChannels || []).map((item) => ({ latitude: 0, longitude: 0, radiusKm: 5, ...item }))
   Object.assign(publicConfig, next)
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
 }
@@ -176,7 +176,7 @@ function removeLocation(index: number) {
 
 function addChannel() {
   if (publicConfig.featuredChannels.length >= 12) return
-  publicConfig.featuredChannels.push({ icon: '🏠', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
+  publicConfig.featuredChannels.push({ icon: '🏠', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 5 })
 }
 
 function removeChannel(index: number) {
