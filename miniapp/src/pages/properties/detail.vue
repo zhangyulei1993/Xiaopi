@@ -58,6 +58,40 @@ const propertyDescription = computed(() =>
     .replace(/^配套设施：[^\n]*\n?/, "")
     .trim(),
 );
+const hasLocation = computed(() =>
+  Boolean(Number(item.value?.latitude) && Number(item.value?.longitude)),
+);
+const propertyMarkers = computed(() =>
+  hasLocation.value && item.value
+    ? [
+        {
+          id: 1,
+          latitude: Number(item.value.latitude),
+          longitude: Number(item.value.longitude),
+          width: 30,
+          height: 30,
+          callout: {
+            content: item.value.community || "房源位置",
+            display: "ALWAYS",
+            padding: 6,
+            borderRadius: 6,
+            color: "#173f3c",
+            bgColor: "#ffffff",
+          },
+        },
+      ]
+    : [],
+);
+const openPropertyLocation = () => {
+  if (!item.value || !hasLocation.value) return;
+  uni.openLocation({
+    latitude: Number(item.value.latitude),
+    longitude: Number(item.value.longitude),
+    name: item.value.community || item.value.title,
+    address: item.value.location,
+    scale: 16,
+  });
+};
 const requireUser = () => {
   if (getSession()?.role === "user") return true;
   if (getSession()?.role === "admin") {
@@ -132,6 +166,20 @@ const contact = () => {
         ><text>{{ item.community }}</text
         ><text>{{ item.feeText || "租房信息" }}</text></view
       ></view
+    ><view v-if="hasLocation" class="card location-card"
+      ><view class="location-heading"
+        ><view
+          ><strong>位置与周边</strong><small>{{ item.location }}</small></view
+        ><text @click="openPropertyLocation">打开地图</text></view
+      ><map
+        class="detail-map"
+        :latitude="Number(item.latitude)"
+        :longitude="Number(item.longitude)"
+        :markers="propertyMarkers"
+        :scale="16"
+      /><button class="navigate-button" @click="openPropertyLocation">
+        ⌁ 导航去这里
+      </button></view
     ><view class="card"
       ><view class="title small">房源信息</view
       ><view class="row"
@@ -197,6 +245,53 @@ const contact = () => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+}
+.location-card {
+  padding: 28rpx;
+}
+.location-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 18rpx;
+}
+.location-heading strong,
+.location-heading small {
+  display: block;
+}
+.location-heading strong {
+  color: #173f3c;
+  font-size: 32rpx;
+}
+.location-heading small {
+  margin-top: 8rpx;
+  color: #78a39d;
+  font-size: 21rpx;
+}
+.location-heading > text {
+  flex: none;
+  color: #0e8177;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+.detail-map {
+  width: 100%;
+  height: 380rpx;
+  overflow: hidden;
+  border-radius: 18rpx;
+}
+.navigate-button {
+  margin: 18rpx 0 0;
+  border: 0;
+  border-radius: 14rpx;
+  background: #edf5f2;
+  color: #0e8177;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+.navigate-button::after {
+  border: 0;
 }
 .price small {
   font-size: 22rpx;
