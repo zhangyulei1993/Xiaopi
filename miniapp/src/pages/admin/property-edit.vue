@@ -127,9 +127,9 @@ const channelCircles = computed(() => [
     latitude: channelLatitude.value,
     longitude: channelLongitude.value,
     radius: channelRadiusKm.value * 1000,
-    color: "#0E8177CC",
-    fillColor: "#0E81772B",
-    strokeWidth: 2,
+    color: "#397E7866",
+    fillColor: "#397E780D",
+    strokeWidth: 1,
   },
 ]);
 const mapMarkers = computed(() =>
@@ -143,7 +143,7 @@ const mapMarkers = computed(() =>
           height: 30,
           callout: {
             content: form.community || form.location || "房源位置",
-            display: "ALWAYS",
+            display: "BYCLICK",
             padding: 6,
             borderRadius: 6,
             color: "#173f3c",
@@ -555,7 +555,7 @@ const mediaUrl = (url: string) =>
             :longitude="mapLongitude"
             :markers="mapMarkers"
             :circles="channelCircles"
-            :scale="11"
+            :scale="geoReady ? 15 : 11"
             show-location
             @tap="selectPointOnMap"
           /><view class="map-picker-footer"
