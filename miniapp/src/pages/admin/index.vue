@@ -102,7 +102,7 @@ const changeStatus = async (property: Property, status: string) => {
 const publish = (property: Property) => {
   uni.showModal({
     title: "确认发布房源",
-    content: "请先确认标题、位置、租金和图片无误。发布后将立即对用户可见。",
+    content: "确认后立即上架。",
     confirmText: "确认发布",
     success: (result) => result.confirm && changeStatus(property, "published"),
   });
@@ -114,7 +114,7 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
     ><view class="work-head"
       ><view
         ><view class="title">房源运营工作台</view
-        ><view class="muted">录入、查看、发布与下架统一处理</view></view
+        ></view
       ><view class="refresh" @click="load">刷新</view></view
     ><view class="summary"
       ><view
@@ -139,7 +139,7 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
       ><text>＋</text
       ><view
         ><strong>录入新房源</strong
-        ><small>创建草稿、上传素材并确认发布</small></view
+        ></view
       ><text>›</text></view
     ><view v-if="loading" class="muted empty">加载中...</view
     ><template v-else-if="tab === 'leads'"

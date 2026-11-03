@@ -432,9 +432,7 @@ const save = async (openPreview = false) => {
     currentStatus.value = property.status;
     uni.showModal({
       title: openPreview ? "房源已保存" : "草稿已保存",
-      content: openPreview
-        ? "现在查看用户将看到的内容；确认无误后，可在工作台直接发布。"
-        : "可继续补充素材，稍后再查看并发布。",
+      content: openPreview ? "确认无误后即可发布。" : "可继续编辑。",
       showCancel: false,
       success: () => {
         if (openPreview) {
@@ -459,8 +457,7 @@ const mediaUrl = (url: string) =>
   <view class="page"
     ><view class="editor-hero"
       ><view
-        ><text>{{ id ? "编辑房源" : "录入新房源" }}</text
-          ><small>按步骤完善信息，保存后查看无误即可发布</small></view
+        ><text>{{ id ? "编辑房源" : "录入新房源" }}</text></view
       ><view class="completion"
         ><strong>{{ completionCount }}/4</strong><small>已完成</small></view
       ></view
@@ -485,8 +482,7 @@ const mediaUrl = (url: string) =>
         ><view class="section-head"
           ><text>01</text
           ><view
-            ><strong>基础信息</strong
-            ><small>用户最先看到的标题、位置和租金</small></view
+            ><strong>基础信息</strong></view
           ></view
         ><view class="field"
           ><text>房源标题 *</text
@@ -508,8 +504,7 @@ const mediaUrl = (url: string) =>
             placeholder="区域 / 地铁站 / 商圈" /></view
         ><view class="map-section-heading"
           ><view
-            ><strong>位置与周边</strong
-              ><small>默认以当前位置显示；搜索小区可自动精确落点</small></view
+            ><strong>位置</strong></view
           ><text @click="choosePropertyLocation">搜索地址</text></view
         ><view class="location-search"
           ><view class="location-search-box"
@@ -601,8 +596,7 @@ const mediaUrl = (url: string) =>
         ><view class="section-head"
           ><text>02</text
           ><view
-            ><strong>户型与租住方式</strong
-            ><small>点击每一项调整，系统自动生成户型摘要</small></view
+            ><strong>户型与方式</strong></view
           ></view
         ><view class="picker-grid"
           ><picker
@@ -655,8 +649,7 @@ const mediaUrl = (url: string) =>
         ><view class="section-head"
           ><text>03</text
           ><view
-            ><strong>配套与描述</strong
-            ><small>准确描述可减少重复咨询</small></view
+            ><strong>配套与描述</strong></view
           ></view
         ><checkbox-group
           class="amenity-grid"
@@ -687,8 +680,7 @@ const mediaUrl = (url: string) =>
         ><view class="section-head"
           ><text>04</text
           ><view
-            ><strong>图片与视频</strong
-            ><small>建议首图展示客厅或卧室全景，最多 9 图 1 视频</small></view
+            ><strong>图片与视频</strong></view
           ></view
         ><view
           v-if="existingMedia.length || images.length || videos.length"
