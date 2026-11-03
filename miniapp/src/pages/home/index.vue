@@ -9,16 +9,25 @@ import heartIcon from "../../static/icons/heart.svg";
 import editIcon from "../../static/icons/edit.svg";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", heroSubtitle: "在武汉，住得更省心", heroDescription: "真实房源 · 可靠服务", notice: "", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 5 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 5 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 5 }] };
-const priceRanges = ["¥1,500 以下", "¥1,500–2,500", "¥2,500–4,000", "¥4,000+"];
+const priceRanges = [
+  { label: "¥1,500 以下", min: 0, max: 1500 },
+  { label: "¥1,500–2,500", min: 1500, max: 2500 },
+  { label: "¥2,500–4,000", min: 2500, max: 4000 },
+  { label: "¥4,000+", min: 4000, max: 0 },
+];
 const properties = ref<Property[]>([]);
 const config = ref<PublicConfig>(defaultConfig);
 const activeKind = ref("推荐");
+const selectedArea = ref("全部");
+const selectedPrice = ref<number | null>(null);
 const kindOptions = ["推荐", "整租", "合租", "一居", "两居", "三居+"];
 const homeProperties = computed(() => properties.value.filter((item) => {
-  if (activeKind.value === "推荐") return true;
   const subject = `${item.title || ""} ${item.layout || ""} ${item.location || ""}`;
-  if (activeKind.value === "整租" || activeKind.value === "合租") return subject.includes(activeKind.value);
-  return subject.includes(activeKind.value);
+  const range = selectedPrice.value === null ? null : priceRanges[selectedPrice.value];
+  const kindMatched = activeKind.value === "推荐" || subject.includes(activeKind.value);
+  const areaMatched = selectedArea.value === "全部" || subject.includes(selectedArea.value);
+  const priceMatched = !range || (!range.min || item.rentMonthly >= range.min) && (!range.max || item.rentMonthly <= range.max);
+  return kindMatched && areaMatched && priceMatched;
 }));
 const coverUrl = (item?: Property) => {
   const cover = item?.media?.find((media) => media.type === "image")?.url;
@@ -31,6 +40,13 @@ onShow(async () => {
 });
 const open = (id: string) => uni.navigateTo({ url: `/pages/properties/detail?id=${id}` });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
+const browseFiltered = () => {
+  uni.setStorageSync("xiaopi_property_filter", JSON.stringify({
+    area: selectedArea.value,
+    priceIndex: selectedPrice.value === null ? 0 : selectedPrice.value + 1,
+  }));
+  browse();
+};
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
 const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
   uni.setStorageSync("xiaopi_property_filter", JSON.stringify({ keyword: channel.keyword, latitude: channel.latitude || 0, longitude: channel.longitude || 0, radiusKm: channel.radiusKm || 5, title: channel.title }));
@@ -46,13 +62,13 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
       <view class="hero-copy"><strong>今天想住哪里？</strong><i></i></view>
       <view class="hero-search" @click="browse"><image :src="searchIcon" mode="aspectFit" /><span>搜索小区、地铁或商圈</span><b>搜索</b></view>
     </view>
-    <scroll-view scroll-x class="area-scroll" :show-scrollbar="false"><view class="area-row"><text class="selected" @click="browse"><image :src="pinIcon" mode="aspectFit" />{{ config.locations[0]?.label || "金融港" }}</text><text v-for="location in config.locations.slice(1)" :key="location.label" @click="browse">{{ location.label }}</text><text @click="browse">附近</text></view></scroll-view>
-    <scroll-view scroll-x class="price-scroll" :show-scrollbar="false"><view class="price-row"><b>租金预算</b><text v-for="price in priceRanges" :key="price" @click="browse">{{ price }}</text></view></scroll-view>
+    <scroll-view scroll-x class="area-scroll" :show-scrollbar="false"><view class="area-row"><text :class="{ selected: selectedArea === '全部' }" @click="selectedArea = '全部'"><image :src="pinIcon" mode="aspectFit" />附近</text><text v-for="location in config.locations" :key="location.label" :class="{ selected: selectedArea === location.label }" @click="selectedArea = location.label">{{ location.label }}</text></view></scroll-view>
+    <scroll-view scroll-x class="price-scroll" :show-scrollbar="false"><view class="price-row"><b>租金预算</b><text v-for="(price, index) in priceRanges" :key="price.label" :class="{ selected: selectedPrice === index }" @click="selectedPrice = selectedPrice === index ? null : index">{{ price.label }}</text></view></scroll-view>
 
     <view class="section-head"><strong>精选频道</strong><text @click="browse">全部频道 <b>›</b></text></view>
-    <scroll-view scroll-x class="channel-scroll" :show-scrollbar="false"><view class="channels"><view v-for="(channel, index) in config.featuredChannels" :key="channel.title" class="channel" :class="`tone-${index % 4}`" @click="openChannel(channel)"><view class="channel-mark"><text>{{ channel.icon || "⌂" }}</text></view><strong>{{ channel.title }}</strong><small>{{ channel.subtitle || "发现附近好房" }}</small><b>查看房源 ›</b></view></view></scroll-view>
+    <scroll-view scroll-x class="channel-scroll" :show-scrollbar="false"><view class="channels"><view v-for="(channel, index) in config.featuredChannels" :key="channel.title" class="channel" :class="`tone-${index % 4}`" @click="openChannel(channel)"><view class="channel-mark" :class="`mark-${index % 3}`"><i></i></view><strong>{{ channel.title }}</strong><small>{{ channel.subtitle || "发现附近好房" }}</small><b>查看房源 ›</b></view></view></scroll-view>
 
-    <view class="recommend-head"><scroll-view scroll-x :show-scrollbar="false" class="kind-scroll"><view class="kind-row"><text v-for="kind in kindOptions" :key="kind" :class="{ active: activeKind === kind }" @click="activeKind = kind">{{ kind }}</text></view></scroll-view><b @click="browse">筛选</b></view>
+    <view class="recommend-head"><scroll-view scroll-x :show-scrollbar="false" class="kind-scroll"><view class="kind-row"><text v-for="kind in kindOptions" :key="kind" :class="{ active: activeKind === kind }" @click="activeKind = kind">{{ kind }}</text></view></scroll-view><b @click="browseFiltered">查看房源</b></view>
     <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ item.title || item.community }}</strong><small>{{ item.layout || "户型待补充" }} · {{ item.location }}</small><view class="tags"><text>真实核验</text><text>{{ item.feeText || "拎包入住" }}</text></view><b>¥ {{ item.rentMonthly }}<i>/月</i></b></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
     <view class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
@@ -64,4 +80,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 
 /* Detail pass: a single spacing scale, native-style icons, and deliberate type hierarchy. */
 .hero{height:528rpx;padding:42rpx 32rpx 0}.hero:after{background:linear-gradient(90deg,rgba(249,233,215,.98) 0%,rgba(249,233,215,.74) 57%,rgba(249,233,215,.1) 100%)}.city{display:flex;align-items:center;gap:8rpx;margin-top:0;padding:12rpx 18rpx;background:rgba(255,255,255,.76);font-size:25rpx;line-height:1}.city image{width:28rpx;height:28rpx}.city text{margin-left:2rpx;font-size:19rpx}.hero-copy{margin-top:44rpx}.hero-copy strong{font-size:54rpx;font-weight:800;line-height:1.1;letter-spacing:-3rpx}.hero-copy i{width:116rpx;height:8rpx;margin:16rpx 0 30rpx 178rpx}.hero-search{gap:16rpx;padding:13rpx 14rpx 13rpx 22rpx;border:1rpx solid rgba(255,255,255,.76);border-radius:28rpx;box-shadow:0 10rpx 24rpx rgba(93,66,40,.06)}.hero-search image{width:37rpx;height:37rpx;flex:none}.hero-search span{font-size:25rpx;letter-spacing:-.4rpx}.hero-search b{padding:16rpx 25rpx;border-radius:19rpx;font-size:25rpx;font-weight:700}.area-row{gap:12rpx;padding:22rpx 30rpx 18rpx}.area-row text{padding:13rpx 22rpx;border:1rpx solid #eee5da;font-size:24rpx;line-height:1}.area-row .selected{display:flex;align-items:center;gap:6rpx;border-color:#5e6d2e}.area-row .selected image{width:25rpx;height:25rpx;filter:brightness(0) invert(1)}.price-row{margin:0 30rpx;padding:17rpx 8rpx;border:1rpx solid #eee6dc;border-radius:18rpx;box-shadow:none}.price-row b,.price-row text{padding:0 14rpx;font-size:22rpx;line-height:31rpx}.price-row b{display:block;color:#43513c;font-size:24rpx;white-space:nowrap}.section-head{margin:52rpx 32rpx 23rpx}.section-head strong{font-size:38rpx}.section-head text{font-size:23rpx}.section-head text b{font-size:30rpx;font-weight:400}.channels{gap:14rpx;padding:0 32rpx}.channel{width:214rpx;height:192rpx;padding:18rpx 18rpx 16rpx;border-radius:20rpx}.channel-mark{display:flex;align-items:center;justify-content:center;width:48rpx;height:48rpx;border-radius:14rpx;background:rgba(255,255,255,.18);font-size:25rpx}.channel strong{margin-top:18rpx;font-size:28rpx;letter-spacing:-1rpx}.channel small{overflow:hidden;margin-top:5rpx;font-size:20rpx;text-overflow:ellipsis}.channel b{position:static;width:auto;height:auto;margin-top:10rpx;background:none;color:rgba(255,255,255,.9);font-size:19rpx;line-height:1}.recommend-head{gap:14rpx;margin:56rpx 32rpx 22rpx}.kind-scroll{min-width:0;flex:1;white-space:nowrap}.kind-row{display:inline-flex;gap:26rpx;align-items:center}.recommend-head text{position:relative;padding:0 1rpx;font-size:27rpx}.recommend-head text.active{color:#354126;font-size:38rpx;font-weight:800;letter-spacing:-2rpx}.recommend-head text.active:after{position:absolute;bottom:-12rpx;left:1rpx;width:58rpx;height:7rpx;border-radius:99rpx;background:#d66d50;content:""}.recommend-head>b{display:block;flex:none;padding:13rpx 16rpx;border:1rpx solid #eee4d8;border-radius:18rpx;font-size:22rpx;line-height:1}.property-list{padding:0 24rpx}.listing{gap:18rpx;margin-bottom:18rpx;padding:12rpx;border:1rpx solid rgba(239,228,215,.82);border-radius:22rpx;box-shadow:none}.listing-image{width:300rpx;height:210rpx;border-radius:16rpx}.heart-button{position:absolute;top:12rpx;right:12rpx;display:flex;align-items:center;justify-content:center;width:48rpx;height:48rpx;border-radius:50%;background:rgba(48,45,35,.32)}.heart-button image{width:30rpx;height:30rpx}.listing-info{padding:5rpx 4rpx 0 0}.listing-info strong{font-size:29rpx;line-height:1.35}.listing-info small{display:-webkit-box;overflow:hidden;margin-top:8rpx;font-size:20rpx;line-height:1.5;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal}.tags{gap:7rpx;margin-top:9rpx}.tags text{padding:6rpx 9rpx;font-size:18rpx}.listing-info>b{margin-top:11rpx;font-size:34rpx;letter-spacing:-1rpx}.listing-info>b i{margin-left:3rpx;font-size:19rpx;color:#8b8a7f}.request-fab{right:28rpx;bottom:132rpx;display:flex;align-items:center;gap:8rpx;padding:19rpx 23rpx;border:1rpx solid rgba(255,255,255,.18);font-size:26rpx}.request-fab image{width:32rpx;height:32rpx}
+
+/* Acceptance pass: every choice must visibly select and carry into the results page. */
+.price-row text.selected{border-radius:12rpx;background:#5e6d2e;color:#fff;font-weight:700}.channel-mark{position:relative}.channel-mark i{display:block;width:22rpx;height:22rpx;border:3rpx solid rgba(255,255,255,.92);border-radius:50%;box-sizing:border-box}.channel-mark i:after{display:block;width:8rpx;height:8rpx;margin:4rpx;border-radius:50%;background:rgba(255,255,255,.92);content:""}.channel-mark.mark-1 i{border-radius:4rpx}.channel-mark.mark-1 i:after{width:12rpx;height:3rpx;margin:7rpx 2rpx;border-radius:3rpx}.channel-mark.mark-2 i{border:0;border-radius:0;background:linear-gradient(90deg,rgba(255,255,255,.92) 0 28%,transparent 28% 37%,rgba(255,255,255,.92) 37% 63%,transparent 63% 72%,rgba(255,255,255,.92) 72%)}.channel-mark.mark-2 i:after{display:none}.recommend-head>b{background:#40543f;color:#fff;border-color:#40543f;font-weight:700}
 </style>

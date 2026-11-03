@@ -105,9 +105,27 @@ const load = async () => {
     const pending = String(uni.getStorageSync("xiaopi_property_filter") || "");
     if (pending) {
       try {
-        const parsed = JSON.parse(pending);
-        if (parsed && typeof parsed === "object") channelFilter.value = parsed;
-        else keyword.value = pending;
+        const parsed: unknown = JSON.parse(pending);
+        if (parsed && typeof parsed === "object") {
+          const filter = parsed as Record<string, unknown>;
+          if (typeof filter.area === "string") selectedArea.value = filter.area;
+          if (typeof filter.priceIndex === "number")
+            selectedPrice.value = Math.max(0, Math.min(priceRanges.length - 1, filter.priceIndex));
+          if (typeof filter.keyword === "string") keyword.value = filter.keyword;
+          if (
+            typeof filter.latitude === "number" &&
+            typeof filter.longitude === "number" &&
+            typeof filter.radiusKm === "number"
+          ) {
+            channelFilter.value = {
+              keyword: typeof filter.keyword === "string" ? filter.keyword : "",
+              latitude: filter.latitude,
+              longitude: filter.longitude,
+              radiusKm: filter.radiusKm,
+              title: typeof filter.title === "string" ? filter.title : undefined,
+            };
+          }
+        } else keyword.value = pending;
       } catch {
         keyword.value = pending;
       }
