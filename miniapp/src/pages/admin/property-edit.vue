@@ -14,6 +14,7 @@ import { amenityIcon } from "../../utils/amenities";
 
 const id = ref(""),
   currentStatus = ref("draft"),
+  activeSection = ref(0),
   saving = ref(false),
   loading = ref(false),
   uploadProgress = ref(""),
@@ -101,6 +102,11 @@ const requiredReady = computed(() =>
     Number(form.rentMonthly) > 0,
   ),
 );
+const sectionSteps = ["位置租金", "户型方式", "配套描述", "房源素材"];
+const goToSection = (index: number) => {
+  activeSection.value = Math.max(0, Math.min(sectionSteps.length - 1, index));
+  uni.pageScrollTo({ scrollTop: 0, duration: 220 });
+};
 const geoReady = computed(() =>
   Boolean(Number(form.latitude) && Number(form.longitude)),
 );
@@ -201,6 +207,21 @@ const mediaCount = computed(
   () =>
     existingMedia.value.filter((item) => item.type === "image").length +
     images.value.length,
+);
+const sectionReady = computed(() => [
+  Boolean(
+    form.title?.trim() &&
+    form.community?.trim() &&
+    form.location?.trim() &&
+    Number(form.rentMonthly) > 0 &&
+    geoReady.value,
+  ),
+  Boolean(form.layout?.trim()),
+  amenities.value.length > 0,
+  mediaCount.value > 0,
+]);
+const completionCount = computed(
+  () => sectionReady.value.filter(Boolean).length,
 );
 const syncLayout = () => {
   form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
@@ -379,13 +400,28 @@ const mediaUrl = (url: string) =>
     ><view class="editor-hero"
       ><view
         ><text>{{ id ? "编辑房源" : "录入新房源" }}</text
-        ><small>完成必填信息后先保存草稿，确认素材无误再提交审核。</small></view
-      ><view class="step">{{
-        requiredReady ? "基础信息已完整" : "完善必填项"
-      }}</view></view
+        ><small>按步骤完善信息，随时可以保存草稿</small></view
+      ><view class="completion"
+        ><strong>{{ completionCount }}/4</strong><small>已完成</small></view
+      ></view
+    ><scroll-view class="step-nav" scroll-x :show-scrollbar="false"
+      ><view class="step-track"
+        ><view
+          v-for="(step, index) in sectionSteps"
+          :key="step"
+          class="step-item"
+          :class="{
+            active: activeSection === index,
+            done: sectionReady[index],
+          }"
+          @click="goToSection(index)"
+          ><text>{{ sectionReady[index] ? "✓" : index + 1 }}</text
+          ><small>{{ step }}</small></view
+        ></view
+      ></scroll-view
     ><view v-if="loading" class="card loading">正在加载房源...</view
     ><template v-else
-      ><view class="section-card"
+      ><view v-show="activeSection === 0" class="section-card"
         ><view class="section-head"
           ><text>01</text
           ><view
@@ -470,7 +506,7 @@ const mediaUrl = (url: string) =>
               v-model.trim="form.feeText"
               maxlength="30"
               placeholder="押一付一" /></view></view></view
-      ><view class="section-card"
+      ><view v-show="activeSection === 1" class="section-card"
         ><view class="section-head"
           ><text>02</text
           ><view
@@ -524,7 +560,7 @@ const mediaUrl = (url: string) =>
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
         ></view
-      ><view class="section-card"
+      ><view v-show="activeSection === 2" class="section-card"
         ><view class="section-head"
           ><text>03</text
           ><view
@@ -556,7 +592,7 @@ const mediaUrl = (url: string) =>
           ></textarea
           ><text>{{ String(form.description || "").length }}/800</text></view
         ></view
-      ><view class="section-card"
+      ><view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
           ><text>04</text
           ><view
@@ -606,7 +642,21 @@ const mediaUrl = (url: string) =>
         ></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
-        ><view class="save-actions"
+        ><view v-if="activeSection < 3" class="step-actions"
+          ><button
+            v-if="activeSection > 0"
+            class="back-button"
+            @click="goToSection(activeSection - 1)"
+          >
+            上一步</button
+          ><view v-else class="draft-link" @click="save(false)">保存草稿</view
+          ><button
+            class="primary next-button"
+            @click="goToSection(activeSection + 1)"
+          >
+            下一步 · {{ sectionSteps[activeSection + 1] }}
+          </button></view
+        ><view v-else class="save-actions"
           ><button :disabled="saving" @click="save(false)">保存草稿</button
           ><button
             class="primary"
@@ -638,10 +688,16 @@ const mediaUrl = (url: string) =>
   align-items: center;
   justify-content: space-between;
   gap: 20rpx;
-  margin-bottom: 24rpx;
-  padding: 32rpx;
-  border-radius: 30rpx;
-  background: linear-gradient(135deg, #173f3c, #287168);
+  margin: -28rpx -32rpx 0;
+  padding: 38rpx 32rpx 64rpx;
+  border-radius: 0 0 44rpx 44rpx;
+  background:
+    radial-gradient(
+      circle at 88% 10%,
+      rgba(229, 196, 133, 0.22),
+      transparent 38%
+    ),
+    #173f3c;
   color: #fff;
 }
 .editor-hero view:first-child > text,
@@ -649,8 +705,9 @@ const mediaUrl = (url: string) =>
   display: block;
 }
 .editor-hero view:first-child > text {
-  font-size: 38rpx;
+  font-size: 42rpx;
   font-weight: 800;
+  letter-spacing: -1rpx;
 }
 .editor-hero small {
   margin-top: 10rpx;
@@ -658,24 +715,85 @@ const mediaUrl = (url: string) =>
   font-size: 22rpx;
   line-height: 1.55;
 }
-.step {
+.completion {
   flex: none;
-  padding: 10rpx 16rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.12);
-  color: #f4d9a1;
+  text-align: right;
+}
+.completion strong,
+.completion small {
+  display: block;
+}
+.completion strong {
+  color: #f0cf8d;
+  font-size: 36rpx;
+  font-variant-numeric: tabular-nums;
+}
+.completion small {
+  margin-top: 2rpx;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 19rpx;
+}
+.step-nav {
+  position: relative;
+  z-index: 2;
+  width: auto;
+  margin: -36rpx 0 24rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 18rpx 42rpx rgba(23, 63, 60, 0.12);
+}
+.step-track {
+  display: flex;
+  min-width: 680rpx;
+  padding: 14rpx 10rpx;
+}
+.step-item {
+  display: flex;
+  min-width: 150rpx;
+  flex: 1;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 10rpx;
+  color: #8aa7a0;
+}
+.step-item text {
+  display: flex;
+  width: 34rpx;
+  height: 34rpx;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #edf4f1;
+  font-size: 19rpx;
+  font-weight: 700;
+}
+.step-item small {
   font-size: 20rpx;
+  white-space: nowrap;
+}
+.step-item.active {
+  color: #173f3c;
+  font-weight: 700;
+}
+.step-item.active text {
+  background: #173f3c;
+  color: #fff;
+}
+.step-item.done:not(.active) text {
+  background: #dcefe8;
+  color: #0e8177;
 }
 .loading {
   text-align: center;
   color: #78a39d;
 }
 .section-card {
-  margin-bottom: 24rpx;
-  padding: 30rpx;
-  border-radius: 30rpx;
+  margin-bottom: 20rpx;
+  padding: 34rpx 30rpx 40rpx;
+  border-radius: 26rpx;
   background: #fff;
-  box-shadow: 0 10rpx 34rpx rgba(15, 129, 119, 0.06);
+  box-shadow: 0 12rpx 36rpx rgba(23, 63, 60, 0.055);
 }
 .section-head {
   display: flex;
@@ -689,8 +807,8 @@ const mediaUrl = (url: string) =>
   height: 52rpx;
   align-items: center;
   justify-content: center;
-  border-radius: 16rpx;
-  background: #e8f7f2;
+  border-radius: 14rpx;
+  background: #edf5f2;
   color: #0e8177;
   font-size: 21rpx;
   font-weight: 800;
@@ -709,28 +827,31 @@ const mediaUrl = (url: string) =>
   font-size: 21rpx;
 }
 .field {
-  padding: 22rpx 0;
-  border-bottom: 1rpx solid #edf4f1;
+  margin-top: 18rpx;
+  padding: 20rpx 22rpx;
+  border: 1rpx solid #e3eeea;
+  border-radius: 16rpx;
+  background: #fbfdfc;
 }
 .field > text {
   display: block;
   margin-bottom: 12rpx;
-  color: #4f7974;
-  font-size: 24rpx;
-  font-weight: 700;
+  color: #6d8e89;
+  font-size: 21rpx;
+  font-weight: 600;
 }
 .field input {
   width: 100%;
   color: #073b3a;
-  font-size: 28rpx;
+  font-size: 27rpx;
 }
 .rent-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24rpx;
+  gap: 14rpx;
 }
 .channel-scope {
-  margin-top: 24rpx;
+  margin-top: 28rpx;
 }
 .channel-scope > text {
   display: block;
@@ -744,9 +865,9 @@ const mediaUrl = (url: string) =>
   align-items: center;
   justify-content: space-between;
   padding: 20rpx;
-  border: 1rpx solid #d6eee8;
-  border-radius: 18rpx;
-  background: #f4fbf8;
+  border: 0;
+  border-radius: 16rpx;
+  background: #edf6f3;
 }
 .channel-picker strong,
 .channel-picker small {
@@ -767,15 +888,15 @@ const mediaUrl = (url: string) =>
   font-weight: 700;
 }
 .map-picker {
-  margin: 20rpx 0 8rpx;
+  margin: 14rpx 0 8rpx;
   overflow: hidden;
-  border: 1rpx solid #d6eee8;
-  border-radius: 22rpx;
+  border: 1rpx solid #dfeae6;
+  border-radius: 20rpx;
   background: #f4fbf8;
 }
 .property-map {
   width: 100%;
-  height: 300rpx;
+  height: 330rpx;
 }
 .map-picker-footer {
   display: flex;
@@ -809,7 +930,7 @@ const mediaUrl = (url: string) =>
   flex: none;
   margin: 0;
   border: 0;
-  border-radius: 14rpx;
+  border-radius: 12rpx;
   background: #0e8177;
   color: #fff;
   font-size: 22rpx;
@@ -829,34 +950,36 @@ const mediaUrl = (url: string) =>
 }
 .picker-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 14rpx;
 }
 .picker-item {
-  padding: 20rpx 8rpx;
-  text-align: center;
-  border: 1rpx solid #d6eee8;
-  border-radius: 18rpx;
-  background: #f7fcfa;
+  position: relative;
+  padding: 24rpx 22rpx;
+  text-align: left;
+  border: 1rpx solid #e1ece8;
+  border-radius: 16rpx;
+  background: #fbfdfc;
 }
 .picker-item strong,
 .picker-item small {
   display: block;
 }
 .picker-item strong {
-  color: #0e8177;
-  font-size: 25rpx;
+  color: #173f3c;
+  font-size: 28rpx;
 }
 .picker-item small {
   margin-top: 6rpx;
-  color: #78a39d;
+  color: #86a19c;
   font-size: 20rpx;
 }
 .layout-preview {
-  margin-top: 18rpx;
-  padding: 20rpx;
-  border-radius: 18rpx;
-  background: #eef8f5;
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-left: 6rpx solid #d9b876;
+  border-radius: 4rpx 16rpx 16rpx 4rpx;
+  background: #f7f4ed;
 }
 .layout-preview text,
 .layout-preview strong {
@@ -886,7 +1009,7 @@ const mediaUrl = (url: string) =>
   gap: 8rpx;
   padding: 14rpx 8rpx 12rpx;
   border: 1rpx solid #e2eeea;
-  border-radius: 14rpx;
+  border-radius: 16rpx;
   color: #5f8580;
   font-size: 23rpx;
   text-align: center;
@@ -916,8 +1039,9 @@ const mediaUrl = (url: string) =>
   position: relative;
   margin-top: 22rpx;
   padding: 18rpx;
-  border-radius: 18rpx;
-  background: #f6faf9;
+  border: 1rpx solid #e2ece9;
+  border-radius: 16rpx;
+  background: #fbfdfc;
 }
 .description textarea {
   width: 100%;
@@ -977,9 +1101,9 @@ const mediaUrl = (url: string) =>
   gap: 14rpx;
 }
 .media-actions > view {
-  padding: 26rpx 12rpx;
+  padding: 34rpx 12rpx;
   border: 2rpx dashed #b7dcd4;
-  border-radius: 18rpx;
+  border-radius: 16rpx;
   text-align: center;
 }
 .media-actions strong,
@@ -1004,7 +1128,7 @@ const mediaUrl = (url: string) =>
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 18rpx 32rpx calc(18rpx + env(safe-area-inset-bottom));
+  padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 -8rpx 28rpx rgba(15, 70, 65, 0.09);
 }
@@ -1019,10 +1143,50 @@ const mediaUrl = (url: string) =>
   grid-template-columns: 0.8fr 1.2fr;
   gap: 14rpx;
 }
+.step-actions {
+  display: grid;
+  grid-template-columns: minmax(150rpx, 0.7fr) minmax(0, 1.5fr);
+  align-items: center;
+  gap: 14rpx;
+}
+.step-actions button,
+.save-actions button {
+  height: 88rpx;
+  line-height: 88rpx;
+}
+.draft-link {
+  color: #5f807b;
+  font-size: 25rpx;
+  font-weight: 600;
+  text-align: center;
+}
+.back-button {
+  margin: 0;
+  border: 0;
+  border-radius: 16rpx;
+  background: #edf4f1;
+  color: #315f5a;
+  font-size: 25rpx;
+}
+.next-button {
+  margin: 0;
+  border: 0;
+  border-radius: 16rpx;
+  background: #173f3c;
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+.next-button:active,
+.back-button:active,
+.media-actions > view:active,
+.picker-item:active {
+  transform: scale(0.985);
+}
 .save-actions button {
   margin: 0;
   border: 0;
-  border-radius: 999rpx;
+  border-radius: 16rpx;
   background: #edf6f3;
   color: #0e8177;
   font-size: 27rpx;
