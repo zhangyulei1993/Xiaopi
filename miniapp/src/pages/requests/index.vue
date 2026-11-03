@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onLoad } from "@dcloudio/uni-app";
 import { reactive, ref } from "vue";
+import { API_ORIGIN } from "../../api/client";
 import { createRentalRequest, getPublicConfig } from "../../api/properties";
 import { getSession } from "../../auth/session";
 
 const propertyID = ref(""),
   propertyTitle = ref(""),
   contactPhone = ref(""),
+  pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false);
 const form = reactive({
   phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
@@ -20,9 +22,9 @@ const form = reactive({
 onLoad(async (query) => {
   propertyID.value = String(query?.propertyId || "");
   propertyTitle.value = decodeURIComponent(String(query?.title || ""));
-  contactPhone.value = (
-    await getPublicConfig().catch(() => ({ contactPhone: "" }))
-  ).contactPhone;
+  const config = await getPublicConfig().catch(() => null);
+  contactPhone.value = config?.contactPhone || "";
+  pagePresentation.value = config?.pagePresentations?.requests || pagePresentation.value;
 });
 const ensureLogin = () => {
   if (getSession()?.role === "user") return true;
@@ -79,16 +81,16 @@ const call = () =>
     : uni.showToast({ title: "联系电话尚未配置", icon: "none" });
 </script>
 <template>
-  <view class="page"
+  <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.94), rgba(247,246,241,.98)), url(${pagePresentation.backgroundImage.startsWith('http') ? pagePresentation.backgroundImage : API_ORIGIN.replace(/\/api$/, '') + pagePresentation.backgroundImage})`, backgroundSize: 'cover' } : {}"
     ><view class="request-hero"
-      ><text>{{ propertyID ? "预约房源" : "小皮帮你找房" }}</text
+      ><text>{{ propertyID ? "预约房源" : pagePresentation.title }}</text
       ><view>{{
         propertyID ? propertyTitle : "说清需求，比反复筛选更高效"
       }}</view
       ><small>{{
         propertyID
           ? "提交后由运营人员联系确认看房时间"
-          : "填写预算、区域和入住要求，我们继续为你匹配"
+          : pagePresentation.subtitle
       }}</small></view
     ><view class="card form"
       ><view class="field"

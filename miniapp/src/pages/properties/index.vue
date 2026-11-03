@@ -21,6 +21,7 @@ const properties = ref<Property[]>([]),
 const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
   configuredLocations = ref<{ label: string; keyword: string }[]>([]),
+  pagePresentation = ref({ title: "找一处合适的家", subtitle: "按地区和预算筛选", backgroundImage: "" }),
   channelFilter = ref<{
     keyword: string;
     latitude: number;
@@ -100,6 +101,7 @@ const load = async () => {
     ]);
     properties.value = items;
     configuredLocations.value = config?.locations || [];
+    pagePresentation.value = config?.pagePresentations?.properties || pagePresentation.value;
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
     const pending = String(uni.getStorageSync("xiaopi_property_filter") || "");
@@ -182,9 +184,10 @@ const toggleFavorite = async (id: string) => {
 };
 </script>
 <template>
-  <view class="page"
+  <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.92), rgba(247,246,241,.96)), url(${pagePresentation.backgroundImage.startsWith('http') ? pagePresentation.backgroundImage : API_ORIGIN.replace(/\/api$/, '') + pagePresentation.backgroundImage})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : {}"
     ><view class="location"
-      >找一处合适的家 <text>{{ filteredProperties.length }} 套可租</text></view
+      >{{ pagePresentation.title || "找一处合适的家" }} <text>{{ filteredProperties.length }} 套可租</text></view
+    ><view v-if="pagePresentation.subtitle" class="page-subtitle">{{ pagePresentation.subtitle }}</view
     ><view class="search card"
       ><image :src="searchIcon" mode="aspectFit" />
       ><input
@@ -473,4 +476,5 @@ const toggleFavorite = async (id: string) => {
 
 /* Search results use the same calm, photo-first rhythm as the home page. */
 .location{margin:18rpx 0 22rpx;font-size:42rpx;line-height:1.15}.location text{padding-top:10rpx;font-size:22rpx}.search{gap:13rpx;padding:18rpx 20rpx;border-color:#ece5da;border-radius:18rpx}.search image{width:32rpx;height:32rpx;flex:none}.search input{font-size:26rpx}.favorite-filter{display:flex;align-items:center;gap:7rpx;margin:2rpx 0 16rpx;padding:10rpx 15rpx;border-radius:12rpx;font-size:22rpx}.favorite-filter image{width:24rpx;height:24rpx}.favorite-filter:not(.active) image{filter:invert(39%) sepia(10%) saturate(709%) hue-rotate(50deg)}.filter-block{margin:14rpx 0}.filter-label{font-size:22rpx}.chips text{padding:11rpx 17rpx;font-size:22rpx}.grid{display:block;margin-top:26rpx}.property{position:relative;display:flex;gap:18rpx;align-items:stretch;margin-bottom:18rpx;padding:12rpx;border:1rpx solid #eee6dc;border-radius:20rpx;background:#fffdf9;overflow:hidden}.cover{flex:none;width:244rpx;height:192rpx;border-radius:14rpx}.cover>text{color:#fff;font-size:27rpx}.badge{top:9rpx;left:9rpx;padding:5rpx 8rpx;font-size:18rpx}.favorite{top:9rpx;right:9rpx;width:44rpx;height:44rpx;background:rgba(47,44,34,.33)}.favorite image{width:28rpx;height:28rpx}.favorite.active{background:#d66d50}.property .small{min-width:0;flex:1;margin:9rpx 0 0;font-size:28rpx;line-height:1.3}.property .summary{position:absolute;display:-webkit-box;overflow:hidden;margin:50rpx 8rpx 0 274rpx;min-height:0;color:#7e867d;font-size:20rpx;line-height:1.45;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.price{position:absolute;margin:139rpx 0 0 274rpx;color:#d76440;font-size:32rpx}.property>.price small{margin-left:3rpx;color:#8a8f85;font-size:19rpx}.request-banner{margin:32rpx 0 12rpx;padding:25rpx 24rpx;border-radius:18rpx}.request-banner>text{display:flex;align-items:center;gap:5rpx;font-size:22rpx}.request-banner>text image{width:22rpx;height:22rpx;filter:brightness(0) invert(1)}
+.page-subtitle{margin:-15rpx 0 20rpx;color:#7e867d;font-size:22rpx}
 </style>
