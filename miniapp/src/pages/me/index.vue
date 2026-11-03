@@ -87,7 +87,7 @@ const logout = () => {
 
 <template>
   <view class="page" :style="pageStyle">
-    <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
+    <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ isAdmin ? "房源运营与客户跟进" : presentation.subtitle }}</text></view>
     <view class="profile card" @click="!isLoggedIn && login()">
       <view class="avatar">{{ isAdmin ? "管" : "小" }}</view>
       <view class="profile-copy">

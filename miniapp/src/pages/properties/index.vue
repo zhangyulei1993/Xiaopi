@@ -260,7 +260,7 @@ const toggleFavorite = async (id: string) => {
     ><view v-else class="empty-match card"
       ><view class="empty-icon">⌕</view
       ><view class="empty-title">暂时没有完全匹配的房源</view
-      ><view class="muted">留下地区、预算和入住需求，小皮会为你继续匹配。</view
+      ><view class="muted">{{ isAdmin ? "可调整地区、预算或关键词后重新查看。" : "留下地区、预算和入住需求，小皮会为你继续匹配。" }}</view
       ><view v-if="!isAdmin" class="request-button" @click="requestHome"
         >提交找房需求</view
       ></view

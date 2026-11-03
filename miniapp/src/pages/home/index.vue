@@ -8,6 +8,7 @@ import searchIcon from "../../static/icons/search.svg";
 import heartIcon from "../../static/icons/heart.svg";
 import editIcon from "../../static/icons/edit.svg";
 import heroFallback from "../../static/home-lifestyle-hero.png";
+import { getSession } from "../../auth/session";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", heroSubtitle: "在武汉，住得更省心", heroDescription: "真实房源 · 可靠服务", notice: "", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 5 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 5 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 5 }] };
 const priceRanges = [
@@ -21,6 +22,7 @@ const config = ref<PublicConfig>(defaultConfig);
 const activeKind = ref("推荐");
 const selectedArea = ref("全部");
 const selectedPrice = ref<number | null>(null);
+const isAdmin = ref(false);
 const kindOptions = ["推荐", "整租", "合租", "一居", "两居", "三居+"];
 const channelStyle = (icon: string, index: number) => {
   const legacy: Record<string, string> = { "🏢": "work", "🌳": "campus", "🌆": "life" };
@@ -41,6 +43,7 @@ const coverUrl = (item?: Property) => {
   return cover ? (cover.startsWith("http") ? cover : `${API_ORIGIN}${cover}`) : "";
 };
 onShow(async () => {
+  isAdmin.value = getSession()?.role === "admin";
   const [propertyResult, configResult] = await Promise.allSettled([listProperties(), getPublicConfig()]);
   if (propertyResult.status === "fulfilled") properties.value = propertyResult.value;
   if (configResult.status === "fulfilled") {
@@ -82,9 +85,9 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <scroll-view scroll-x class="channel-scroll" :show-scrollbar="false"><view class="channels"><view v-for="(channel, index) in config.featuredChannels" :key="channel.title" class="channel" :class="`tone-${channelStyle(channel.icon, index)}`" @click="openChannel(channel)"><view class="channel-mark" :class="`mark-${channelStyle(channel.icon, index)}`"><view class="channel-glyph"></view></view><view class="channel-title">{{ channel.title }}</view><view class="channel-subtitle">{{ channel.subtitle || "发现附近好房" }}</view></view></view></scroll-view>
 
     <view class="recommend-head"><scroll-view scroll-x :show-scrollbar="false" class="kind-scroll"><view class="kind-row"><text v-for="kind in kindOptions" :key="kind" :class="{ active: activeKind === kind }" @click="activeKind = kind">{{ kind }}</text></view></scroll-view><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ item.title || item.community }}</strong><small>{{ item.layout || "户型待补充" }} · {{ item.location }}</small><view class="tags"><text>真实核验</text><text>{{ item.feeText || "拎包入住" }}</text></view><b>¥ {{ item.rentMonthly }}<i>/月</i></b></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ item.title || item.community }}</strong><small>{{ item.layout || "户型待补充" }} · {{ item.location }}</small><view class="tags"><text>真实核验</text><text>{{ item.feeText || "拎包入住" }}</text></view><b>¥ {{ item.rentMonthly }}<i>/月</i></b></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
-    <view class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
+    <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
   </view>
 </template>
 

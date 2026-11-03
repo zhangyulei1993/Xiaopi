@@ -20,6 +20,10 @@ const form = reactive({
   note: "",
 });
 onLoad(async (query) => {
+  if (getSession()?.role === "admin") {
+    uni.switchTab({ url: "/pages/me/index" });
+    return;
+  }
   propertyID.value = String(query?.propertyId || "");
   propertyTitle.value = decodeURIComponent(String(query?.title || ""));
   const config = await getPublicConfig().catch(() => null);
