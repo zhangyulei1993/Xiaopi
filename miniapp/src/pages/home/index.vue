@@ -43,7 +43,10 @@ const coverUrl = (item?: Property) => {
 onShow(async () => {
   const [propertyResult, configResult] = await Promise.allSettled([listProperties(), getPublicConfig()]);
   if (propertyResult.status === "fulfilled") properties.value = propertyResult.value;
-  if (configResult.status === "fulfilled") config.value = { ...defaultConfig, ...configResult.value };
+  if (configResult.status === "fulfilled") {
+    config.value = { ...defaultConfig, ...configResult.value };
+    uni.setNavigationBarTitle({ title: config.value.heroTitle || "小皮租房" });
+  }
 });
 const open = (id: string) => uni.navigateTo({ url: `/pages/properties/detail?id=${id}` });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });

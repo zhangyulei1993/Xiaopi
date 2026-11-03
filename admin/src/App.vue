@@ -179,8 +179,6 @@ const configDirty = computed(() => Boolean(savedConfigJSON.value) && JSON.string
 const configErrors = computed(() => {
   const errors: string[] = []
   if (!publicConfig.heroTitle.trim()) errors.push('品牌标题不能为空')
-  if (!publicConfig.heroSubtitle.trim()) errors.push('首页主标题不能为空')
-  if (!publicConfig.heroDescription.trim()) errors.push('首页副标题不能为空')
   if (publicConfig.contactPhone && !/^\+?\d{6,20}$/.test(publicConfig.contactPhone.trim())) errors.push('联系电话格式不正确')
   if (!publicConfig.relatedPropertyRadiusKm || publicConfig.relatedPropertyRadiusKm < 0.5 || publicConfig.relatedPropertyRadiusKm > 20) errors.push('附近房源关联距离需在 0.5 到 20 公里之间')
   if (!publicConfig.locations.length) errors.push('至少配置一个地理位置')
@@ -606,13 +604,13 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content">
-                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong>{{ publicConfig.heroSubtitle || '今天想住哪里？' }}</strong><i></i><div class="mini-search">搜索小区、地铁或商圈 <b>搜索</b></div></section>
+                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong>{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
                   <div class="mini-locations"><span class="active">附近</span><span v-for="(item, index) in publicConfig.locations.slice(0, 3)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
                   <div class="mini-budget"><b>租金预算</b><span>¥1,500 以下</span><span>¥1,500–2,500</span></div>
                   <div class="mini-section-title">精选频道</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
                   <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b>查看房源</b></div>
-                  <div class="mini-listing"><div></div><section><strong>正在加载附近好房</strong><span>{{ publicConfig.heroDescription || '真实房源 · 可靠服务' }}</span><b>¥ 租金/月</b></section></div>
+                  <div class="mini-listing"><div></div><section><strong>正在加载附近好房</strong><span>真实房源 · 可靠服务</span><b>¥ 租金/月</b></section></div>
                 </div>
                 <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
               </div>
