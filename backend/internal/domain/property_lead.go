@@ -21,6 +21,7 @@ type PropertyLead struct {
 	Layout              string             `json:"layout"`
 	ExpectedRentMonthly int64              `json:"expectedRentMonthly"`
 	Note                string             `json:"note"`
+	FollowUpNote        string             `json:"followUpNote"`
 	Status              PropertyLeadStatus `json:"status"`
 	ConvertedPropertyID string             `json:"convertedPropertyId,omitempty"`
 	CreatedAt           time.Time          `json:"createdAt"`

@@ -96,7 +96,7 @@ func (s *MySQL) UpdateProperty(ctx context.Context, p domain.Property) error {
 }
 
 func (s *MySQL) ListPropertyLeads(ctx context.Context) ([]domain.PropertyLead, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,source_name,source_phone,community,location,layout,expected_rent_monthly,note,status,COALESCE(converted_property_id,''),created_at,updated_at FROM property_leads ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,source_name,source_phone,community,location,layout,expected_rent_monthly,note,follow_up_note,status,COALESCE(converted_property_id,''),created_at,updated_at FROM property_leads ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *MySQL) ListPropertyLeads(ctx context.Context) ([]domain.PropertyLead, e
 	items := make([]domain.PropertyLead, 0)
 	for rows.Next() {
 		var lead domain.PropertyLead
-		if err := rows.Scan(&lead.ID, &lead.SourceName, &lead.SourcePhone, &lead.Community, &lead.Location, &lead.Layout, &lead.ExpectedRentMonthly, &lead.Note, &lead.Status, &lead.ConvertedPropertyID, &lead.CreatedAt, &lead.UpdatedAt); err != nil {
+		if err := rows.Scan(&lead.ID, &lead.SourceName, &lead.SourcePhone, &lead.Community, &lead.Location, &lead.Layout, &lead.ExpectedRentMonthly, &lead.Note, &lead.FollowUpNote, &lead.Status, &lead.ConvertedPropertyID, &lead.CreatedAt, &lead.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, lead)
@@ -118,7 +118,7 @@ func (s *MySQL) CreatePropertyLead(ctx context.Context, lead domain.PropertyLead
 }
 
 func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,status,created_at FROM rental_requests ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,39 @@ func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest,
 	items := make([]domain.RentalRequest, 0)
 	for rows.Next() {
 		var item domain.RentalRequest
-		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.Phone, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.Status, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.Phone, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) UpdatePropertyLeadFollowUp(ctx context.Context, id, status, note string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE property_leads SET status=?,follow_up_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, status, note, id)
+	return err
+}
+
+func (s *MySQL) UpdateRentalRequestFollowUp(ctx context.Context, id, status, note string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rental_requests SET status=?,follow_up_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, status, note, id)
+	return err
+}
+
+func (s *MySQL) CreateOperationLog(ctx context.Context, item domain.OperationLog) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO operation_logs (id,operator_id,target_type,target_id,action,detail,created_at) VALUES (?,?,?,?,?,?,?)`, item.ID, item.OperatorID, item.TargetType, item.TargetID, item.Action, item.Detail, item.CreatedAt)
+	return err
+}
+
+func (s *MySQL) ListOperationLogs(ctx context.Context, limit int) ([]domain.OperationLog, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,operator_id,target_type,target_id,action,detail,created_at FROM operation_logs ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.OperationLog, 0)
+	for rows.Next() {
+		var item domain.OperationLog
+		if err := rows.Scan(&item.ID, &item.OperatorID, &item.TargetType, &item.TargetID, &item.Action, &item.Detail, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

@@ -39,6 +39,9 @@ func (f *fakeStore) ListPropertyLeads(context.Context) ([]domain.PropertyLead, e
 	return f.leads, nil
 }
 func (*fakeStore) CreatePropertyLead(context.Context, domain.PropertyLead) error { return nil }
+func (*fakeStore) UpdatePropertyLeadFollowUp(context.Context, string, string, string) error {
+	return nil
+}
 func (f *fakeStore) UpdatePropertyStatus(context.Context, string, string, string, string) error {
 	return f.statusErr
 }
@@ -51,6 +54,13 @@ func (f *fakeStore) ListRentalRequests(context.Context) ([]domain.RentalRequest,
 func (f *fakeStore) CreateRentalRequest(_ context.Context, item domain.RentalRequest) error {
 	f.rentalRequests = append(f.rentalRequests, item)
 	return nil
+}
+func (*fakeStore) UpdateRentalRequestFollowUp(context.Context, string, string, string) error {
+	return nil
+}
+func (*fakeStore) CreateOperationLog(context.Context, domain.OperationLog) error { return nil }
+func (*fakeStore) ListOperationLogs(context.Context, int) ([]domain.OperationLog, error) {
+	return nil, nil
 }
 func (f *fakeStore) ListFavoritePropertyIDs(_ context.Context, userID string) ([]string, error) {
 	return f.favorites[userID], nil

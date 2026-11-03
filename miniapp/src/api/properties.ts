@@ -50,6 +50,7 @@ export interface PropertyLead {
   expectedRentMonthly: number;
   note: string;
   status: string;
+	followUpNote?: string;
 }
 export const createPropertyLead = (lead: Partial<PropertyLead>) =>
   request<PropertyLead>("/v1/property-leads", { method: "POST", data: lead });
@@ -65,8 +66,10 @@ export interface RentalRequest {
   moveInDate: string;
   note: string;
   status?: string;
+	followUpNote?: string;
   createdAt?: string;
 }
+export interface OperationLog { id: string; targetType: string; targetId: string; action: string; detail: string; createdAt: string }
 export const createRentalRequest = (item: RentalRequest) =>
   request<RentalRequest>("/v1/rental-requests", { method: "POST", data: item });
 export const listFavorites = () => request<string[]>("/v1/favorites");

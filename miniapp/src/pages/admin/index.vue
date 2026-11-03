@@ -2,13 +2,14 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { request } from "../../api/client";
-import { type Property, type PropertyLead, type RentalRequest } from "../../api/properties";
+import { type Property, type PropertyLead, type RentalRequest, type OperationLog } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
 const tab = ref<"leads" | "properties" | "requests">("properties"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
   requests = ref<RentalRequest[]>([]),
+  activities = ref<OperationLog[]>([]),
   loading = ref(false),
   workingID = ref("");
 const statusLabel = (status: string) =>
@@ -27,10 +28,11 @@ const summary = computed(() => ({
 const load = async () => {
   loading.value = true;
   try {
-    [leads.value, properties.value, requests.value] = await Promise.all([
+    [leads.value, properties.value, requests.value, activities.value] = await Promise.all([
       request<PropertyLead[]>("/v1/property-leads"),
       request<Property[]>("/v1/properties"),
       request<RentalRequest[]>("/v1/admin/rental-requests"),
+      request<OperationLog[]>("/v1/admin/operation-logs").catch(() => []),
     ]);
   } catch (error) {
     uni.showToast({
@@ -111,6 +113,12 @@ const publish = (property: Property) => {
   });
 };
 const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
+const followUp = async (type: "lead" | "request", id: string) => {
+  try {
+    await request(type === "lead" ? "/v1/property-leads/follow-up" : "/v1/admin/rental-requests/follow-up", { method:"PATCH", data:{ id, status:"contacted", followUpNote:"已在工作台联系客户" } });
+    uni.showToast({ title:"已标记为已联系" }); await load();
+  } catch (error) { uni.showToast({ title:error instanceof Error ? error.message : "更新失败", icon:"none" }); }
+};
 const copyProperty = async (property: Property) => {
   if (workingID.value) return;
   workingID.value = property.id;
@@ -177,6 +185,7 @@ const copyProperty = async (property: Property) => {
         ><view class="note">{{ lead.note || "暂无补充说明" }}</view
         ><view class="actions"
           ><button @click="contactLead(lead.sourcePhone)">联系客户</button
+          ><button @click="followUp('lead', lead.id)">标记已联系</button
           ><button class="primary" @click="convert(lead)">
             转为房源草稿
           </button></view
@@ -190,7 +199,7 @@ const copyProperty = async (property: Property) => {
         ><view class="muted info">{{ item.location || '地区待确认' }} · {{ item.layout || '户型不限' }}</view
         ><view class="property-meta"><text>¥ {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} / 月</text><text>{{ item.moveInDate || '入住时间待定' }}</text></view
         ><view v-if="item.note" class="note">{{ item.note }}</view
-        ><view class="actions"><button @click="contactLead(item.phone)">联系客户</button><button class="primary" @click="tab = 'properties'">匹配房源</button></view
+        ><view class="actions"><button @click="contactLead(item.phone)">联系客户</button><button @click="followUp('request', String(item.id))">标记已联系</button><button class="primary" @click="tab = 'properties'">匹配房源</button></view
         ></view
       ><view v-if="!requests.length" class="empty muted">暂无客户需求</view
       ></template
@@ -239,6 +248,7 @@ const copyProperty = async (property: Property) => {
       ><view v-if="!properties.length" class="empty muted"
         >暂无正式房源</view
       ></template
+    ><view v-if="activities.length" class="activity card"><view class="title small">最近操作</view><view v-for="item in activities.slice(0, 5)" :key="item.id" class="muted">{{ item.action }} · {{ item.detail }}</view></view
     ></view
   >
 </template>

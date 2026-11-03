@@ -24,12 +24,16 @@ type Store interface {
 	UpdateProperty(context.Context, domain.Property) error
 	ListPropertyLeads(context.Context) ([]domain.PropertyLead, error)
 	CreatePropertyLead(context.Context, domain.PropertyLead) error
+	UpdatePropertyLeadFollowUp(context.Context, string, string, string) error
 	UpdatePropertyStatus(context.Context, string, string, string, string) error
 	ConvertLeadToProperty(context.Context, string, domain.Property) error
 	AddPropertyMedia(context.Context, domain.PropertyMedia) error
 	UpsertUser(context.Context, domain.User) error
 	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
 	CreateRentalRequest(context.Context, domain.RentalRequest) error
+	UpdateRentalRequestFollowUp(context.Context, string, string, string) error
+	CreateOperationLog(context.Context, domain.OperationLog) error
+	ListOperationLogs(context.Context, int) ([]domain.OperationLog, error)
 	ListFavoritePropertyIDs(context.Context, string) ([]string, error)
 	SetPropertyFavorite(context.Context, string, string, bool) error
 }
@@ -88,12 +92,79 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/property-leads", s.requireRoles(s.listPropertyLeads, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads", s.createPropertyLead)
+	mux.HandleFunc("PATCH /api/v1/property-leads/follow-up", s.requireRoles(s.updatePropertyLeadFollowUp, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/rental-requests", s.requireRoles(s.listRentalRequests, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/rental-requests/follow-up", s.requireRoles(s.updateRentalRequestFollowUp, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/operation-logs", s.requireRoles(s.listOperationLogs, roleAdmin))
 	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))
 	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
 	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
 	mux.HandleFunc("DELETE /api/v1/favorites/{propertyID}", s.requireRoles(s.unfavoriteProperty, roleUser))
 	return logging(cors(mux))
+}
+
+func (s *Server) logOperation(ctx context.Context, operator, targetType, targetID, action, detail string) {
+	if s.store == nil {
+		return
+	}
+	id, err := newID()
+	if err != nil {
+		return
+	}
+	_ = s.store.CreateOperationLog(ctx, domain.OperationLog{ID: id, OperatorID: operator, TargetType: targetType, TargetID: targetID, Action: action, Detail: detail, CreatedAt: time.Now()})
+}
+
+func validFollowUpStatus(status string) bool {
+	switch status {
+	case "new", "contacted", "matched", "completed", "closed", "invalid", "inspection_pending":
+		return true
+	}
+	return false
+}
+
+func (s *Server) updatePropertyLeadFollowUp(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ID           string `json:"id"`
+		Status       string `json:"status"`
+		FollowUpNote string `json:"followUpNote"`
+	}
+	if decodeJSON(w, r, &input) != nil || input.ID == "" || !validFollowUpStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "invalid follow-up")
+		return
+	}
+	if err := s.store.UpdatePropertyLeadFollowUp(r.Context(), input.ID, input.Status, strings.TrimSpace(input.FollowUpNote)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update lead")
+		return
+	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "lead", input.ID, "更新客户线索", input.Status)
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+}
+
+func (s *Server) updateRentalRequestFollowUp(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ID           string `json:"id"`
+		Status       string `json:"status"`
+		FollowUpNote string `json:"followUpNote"`
+	}
+	if decodeJSON(w, r, &input) != nil || input.ID == "" || !validFollowUpStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "invalid follow-up")
+		return
+	}
+	if err := s.store.UpdateRentalRequestFollowUp(r.Context(), input.ID, input.Status, strings.TrimSpace(input.FollowUpNote)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update request")
+		return
+	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "request", input.ID, "更新客户需求", input.Status)
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+}
+
+func (s *Server) listOperationLogs(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListOperationLogs(r.Context(), 30)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list operation logs")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
 }
 
 func (s *Server) listRentalRequests(w http.ResponseWriter, r *http.Request) {
