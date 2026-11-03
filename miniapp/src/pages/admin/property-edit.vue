@@ -186,6 +186,15 @@ const loadChannels = async () => {
     channels.value = [financialHarbor];
   }
 };
+const selectPointOnMap = (event: {
+  detail?: { latitude?: number; longitude?: number };
+}) => {
+  const latitude = Number(event.detail?.latitude);
+  const longitude = Number(event.detail?.longitude);
+  if (!latitude || !longitude) return;
+  form.latitude = Number(latitude.toFixed(7));
+  form.longitude = Number(longitude.toFixed(7));
+};
 const choosePropertyLocation = () => {
   uni.chooseLocation({
     latitude: geoReady.value ? Number(form.latitude) : channelLatitude.value,
@@ -470,6 +479,7 @@ const mediaUrl = (url: string) =>
             :circles="channelCircles"
             :scale="11"
             show-location
+            @tap="selectPointOnMap"
           /><view class="map-picker-footer"
             ><view
               ><strong :class="{ warning: geoReady && !propertyInChannel }">{{
@@ -484,10 +494,10 @@ const mediaUrl = (url: string) =>
                 {{ Number(form.latitude).toFixed(6) }},
                 {{ Number(form.longitude).toFixed(6) }}</small
               ><small v-else
-                >点击后可搜索小区名称或详细地址，选点后自动回填</small
+                >直接点击地图即可落点，也可以搜索小区或详细地址</small
               ></view
             ><button size="mini" @click="choosePropertyLocation">
-              {{ geoReady ? "重新选点" : "按地址选点" }}
+              搜索地址
             </button></view
           ></view
         ><view class="rent-row"
