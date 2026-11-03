@@ -4,6 +4,7 @@ import { computed, reactive, ref } from "vue";
 import { API_ORIGIN, request } from "../../api/client";
 import {
   createProperty,
+  getPublicConfig,
   listProperties,
   updateProperty,
   type Property,
@@ -58,27 +59,70 @@ const rooms = ["一室", "两室", "三室", "四室", "五室及以上"],
   roomTypes = ["单间", "主卧", "次卧", "床位"],
   toilets = ["独卫", "非独卫"],
   windows = ["带飘窗", "不带飘窗"];
+type FeaturedChannel = {
+  title: string;
+  keyword: string;
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+};
+const financialHarbor = {
+  title: "金融港",
+  keyword: "金融港",
+  latitude: 30.45604,
+  longitude: 114.425337,
+  radiusKm: 10,
+};
+const channels = ref<FeaturedChannel[]>([financialHarbor]);
+const selectedChannelIndex = ref(0);
+const selectedChannel = computed(
+  () => channels.value[selectedChannelIndex.value] || financialHarbor,
+);
+const channelLatitude = computed(
+  () => Number(selectedChannel.value.latitude) || financialHarbor.latitude,
+);
+const channelLongitude = computed(
+  () => Number(selectedChannel.value.longitude) || financialHarbor.longitude,
+);
+const channelRadiusKm = computed(
+  () => Number(selectedChannel.value.radiusKm) || financialHarbor.radiusKm,
+);
+const channelTitles = computed(() =>
+  channels.value.map(
+    (channel) => `${channel.title} · ${Number(channel.radiusKm) || 5}公里`,
+  ),
+);
 const requiredReady = computed(() =>
   Boolean(
     form.title?.trim() &&
-      form.community?.trim() &&
-      form.location?.trim() &&
-      form.layout?.trim() &&
-      Number(form.rentMonthly) > 0,
+    form.community?.trim() &&
+    form.location?.trim() &&
+    form.layout?.trim() &&
+    Number(form.rentMonthly) > 0,
   ),
 );
 const geoReady = computed(() =>
   Boolean(Number(form.latitude) && Number(form.longitude)),
 );
-const mapLatitude = computed(() => Number(form.latitude) || 30.5928);
-const mapLongitude = computed(() => Number(form.longitude) || 114.3055);
+const mapLatitude = computed(() => channelLatitude.value);
+const mapLongitude = computed(() => channelLongitude.value);
+const channelCircles = computed(() => [
+  {
+    latitude: channelLatitude.value,
+    longitude: channelLongitude.value,
+    radius: channelRadiusKm.value * 1000,
+    color: "#0E8177CC",
+    fillColor: "#0E81772B",
+    strokeWidth: 2,
+  },
+]);
 const mapMarkers = computed(() =>
   geoReady.value
     ? [
         {
           id: 1,
-          latitude: mapLatitude.value,
-          longitude: mapLongitude.value,
+          latitude: Number(form.latitude),
+          longitude: Number(form.longitude),
           width: 30,
           height: 30,
           callout: {
@@ -93,10 +137,53 @@ const mapMarkers = computed(() =>
       ]
     : [],
 );
+const distanceKm = (
+  latitude1: number,
+  longitude1: number,
+  latitude2: number,
+  longitude2: number,
+) => {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const latitudeDelta = toRadians(latitude2 - latitude1);
+  const longitudeDelta = toRadians(longitude2 - longitude1);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(latitude1)) *
+      Math.cos(toRadians(latitude2)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const propertyDistance = computed(() =>
+  geoReady.value
+    ? distanceKm(
+        channelLatitude.value,
+        channelLongitude.value,
+        Number(form.latitude),
+        Number(form.longitude),
+      )
+    : 0,
+);
+const propertyInChannel = computed(
+  () => geoReady.value && propertyDistance.value <= channelRadiusKm.value,
+);
+const loadChannels = async () => {
+  try {
+    const config = await getPublicConfig();
+    if (config.featuredChannels?.length) {
+      channels.value = config.featuredChannels;
+      const index = channels.value.findIndex((channel) =>
+        channel.title.includes("金融港"),
+      );
+      selectedChannelIndex.value = Math.max(0, index);
+    }
+  } catch {
+    channels.value = [financialHarbor];
+  }
+};
 const choosePropertyLocation = () => {
   uni.chooseLocation({
-    latitude: geoReady.value ? mapLatitude.value : undefined,
-    longitude: geoReady.value ? mapLongitude.value : undefined,
+    latitude: geoReady.value ? Number(form.latitude) : channelLatitude.value,
+    longitude: geoReady.value ? Number(form.longitude) : channelLongitude.value,
     success: (result) => {
       form.latitude = Number(result.latitude.toFixed(7));
       form.longitude = Number(result.longitude.toFixed(7));
@@ -174,6 +261,7 @@ onLoad((query) => {
   }
   id.value = String(query?.id || "");
   syncLayout();
+  loadChannels();
   loadProperty();
 });
 const pick = (type: "image" | "video") => {
@@ -322,27 +410,48 @@ const mediaUrl = (url: string) =>
             v-model.trim="form.location"
             maxlength="60"
             placeholder="区域 / 地铁站 / 商圈" /></view
+        ><view class="channel-scope"
+          ><text>精选频道关联范围</text
+          ><picker
+            :range="channelTitles"
+            :value="selectedChannelIndex"
+            @change="selectedChannelIndex = Number($event.detail.value)"
+            ><view class="channel-picker"
+              ><view
+                ><strong>{{ selectedChannel.title }}</strong
+                ><small
+                  >以频道中心为圆心，半径 {{ channelRadiusKm }} 公里</small
+                ></view
+              ><text>切换 ›</text></view
+            ></picker
+          ></view
         ><view class="map-picker"
           ><map
             class="property-map"
             :latitude="mapLatitude"
             :longitude="mapLongitude"
             :markers="mapMarkers"
-            :scale="geoReady ? 15 : 10"
+            :circles="channelCircles"
+            :scale="11"
             show-location
           /><view class="map-picker-footer"
             ><view
-              ><strong>{{
-                geoReady ? "已定位房源" : "尚未选择地图位置"
+              ><strong :class="{ warning: geoReady && !propertyInChannel }">{{
+                geoReady
+                  ? propertyInChannel
+                    ? `已在${selectedChannel.title}范围内`
+                    : `超出${selectedChannel.title}范围`
+                  : `请在${selectedChannel.title}圆形范围内选点`
               }}</strong
               ><small v-if="geoReady"
-                >{{ Number(form.latitude).toFixed(6) }},
+                >距频道中心 {{ propertyDistance.toFixed(2) }} 公里 ·
+                {{ Number(form.latitude).toFixed(6) }},
                 {{ Number(form.longitude).toFixed(6) }}</small
               ><small v-else
-                >选点后自动回填位置和坐标，用于 5 公里频道关联</small
+                >点击后可搜索小区名称或详细地址，选点后自动回填</small
               ></view
             ><button size="mini" @click="choosePropertyLocation">
-              {{ geoReady ? "重新选点" : "地图选点" }}
+              {{ geoReady ? "重新选点" : "按地址选点" }}
             </button></view
           ></view
         ><view class="rent-row"
@@ -620,6 +729,43 @@ const mediaUrl = (url: string) =>
   grid-template-columns: 1fr 1fr;
   gap: 24rpx;
 }
+.channel-scope {
+  margin-top: 24rpx;
+}
+.channel-scope > text {
+  display: block;
+  margin-bottom: 12rpx;
+  color: #4f7974;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+.channel-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx;
+  border: 1rpx solid #d6eee8;
+  border-radius: 18rpx;
+  background: #f4fbf8;
+}
+.channel-picker strong,
+.channel-picker small {
+  display: block;
+}
+.channel-picker strong {
+  color: #173f3c;
+  font-size: 25rpx;
+}
+.channel-picker small {
+  margin-top: 6rpx;
+  color: #78a39d;
+  font-size: 20rpx;
+}
+.channel-picker > text {
+  color: #0e8177;
+  font-size: 22rpx;
+  font-weight: 700;
+}
 .map-picker {
   margin: 20rpx 0 8rpx;
   overflow: hidden;
@@ -649,6 +795,9 @@ const mediaUrl = (url: string) =>
 .map-picker-footer strong {
   color: #173f3c;
   font-size: 24rpx;
+}
+.map-picker-footer strong.warning {
+  color: #c36b2b;
 }
 .map-picker-footer small {
   margin-top: 6rpx;

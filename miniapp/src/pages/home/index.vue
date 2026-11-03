@@ -21,7 +21,9 @@ const defaultConfig: PublicConfig = {
       title: "金融港",
       subtitle: "通勤优选",
       keyword: "金融港",
-      radiusKm: 5,
+      latitude: 30.45604,
+      longitude: 114.425337,
+      radiusKm: 10,
     },
     {
       icon: "🌳",
