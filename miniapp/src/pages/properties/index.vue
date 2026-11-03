@@ -244,11 +244,13 @@ const toggleFavorite = async (id: string) => {
             @click.stop="toggleFavorite(item.id)"
             ><image :src="heartIcon" mode="aspectFit" /></view
           ></view
-        ><view class="title small">{{ item.title || item.community }}</view
-        ><view class="muted summary"
-          >{{ item.layout }} · {{ item.location }}</view
-        ><view class="price"
-          >{{ item.rentMonthly }} <small>元/月</small></view
+        ><view class="property-copy"
+          ><view class="title small">{{ item.title || item.community }}</view
+          ><view class="muted summary"
+            >{{ item.layout }} · {{ item.location }}</view
+          ><view class="price"
+            >{{ item.rentMonthly }} <small>元/月</small></view
+          ></view
         ></view
       ></view
     ><view v-else class="empty-match card"
@@ -479,4 +481,6 @@ const toggleFavorite = async (id: string) => {
 .page-subtitle{margin:-15rpx 0 20rpx;color:#7e867d;font-size:22rpx}
 .location{margin:18rpx 0 12rpx}.page-subtitle{margin:0 0 24rpx;line-height:1.55}.search{margin-bottom:20rpx}.filter-block{margin:18rpx 0}.grid{margin-top:30rpx}.request-banner{margin-top:40rpx}
 .location{display:flex;align-items:flex-end;justify-content:space-between;gap:18rpx;font-size:44rpx;line-height:1.18}.location text{float:none;flex:none;padding:0 0 4rpx;font-size:22rpx;line-height:1.2}.filter-label{margin-bottom:10rpx;font-weight:600;line-height:1.25}.chips text{line-height:1.2}.property .small{font-weight:700}.property .summary{line-height:1.5}.request-banner strong{font-size:29rpx;line-height:1.3}.request-banner>view>text{display:block;margin-top:7rpx;line-height:1.45}
+.location{min-width:0}.location>text:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property-copy{display:flex;min-width:0;flex:1;flex-direction:column;padding:9rpx 4rpx 3rpx 0}.property .small{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property .summary{position:static;display:-webkit-box;margin:9rpx 0 0;min-height:0;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.property-copy>.price{position:static;margin:12rpx 0 0;font-size:34rpx;line-height:1.1}.property>.property-copy>.price small{font-size:19rpx}.property{min-height:216rpx;box-sizing:border-box}
+.property>.property-copy>.price{margin-top:auto;padding-top:12rpx}
 </style>

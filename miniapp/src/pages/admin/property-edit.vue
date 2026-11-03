@@ -139,8 +139,8 @@ const channelCircles = computed(() => [
     latitude: channelLatitude.value,
     longitude: channelLongitude.value,
     radius: channelRadiusKm.value * 1000,
-    color: "#397E7866",
-    fillColor: "#397E780D",
+    color: "#397E7833",
+    fillColor: "#397E7808",
     strokeWidth: 1,
   },
 ]);

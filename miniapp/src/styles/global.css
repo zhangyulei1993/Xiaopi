@@ -6,4 +6,4 @@ page { background:#f7f6f1; color:#29382d; font-family:-apple-system,BlinkMacSyst
 .price { color:#d76440; font-size:42rpx; font-weight:800; font-variant-numeric:tabular-nums; }
 .button { margin-top:22rpx; padding:22rpx; border-radius:16rpx; background:#40543f; color:#fff; text-align:center; }
 .section-title { margin:34rpx 4rpx 20rpx; color:#29382d; font-size:36rpx; font-weight:800; letter-spacing:-1rpx; }
-.page-presentation-head { margin:8rpx 4rpx 22rpx; }.page-presentation-title,.page-presentation-head text { display:block; }.page-presentation-title { color:#29382d; font-size:42rpx; font-weight:800; letter-spacing:-2rpx; }.page-presentation-head text { margin-top:8rpx; color:#7e867d; font-size:23rpx; }
+.page-presentation-head { margin:8rpx 4rpx 22rpx; }.page-presentation-title,.page-presentation-head text { display:block; }.page-presentation-title { overflow:hidden;max-width:620rpx;color:#29382d;font-size:42rpx;font-weight:800;line-height:1.26;letter-spacing:-2rpx;word-break:break-all; }.page-presentation-head text { margin-top:10rpx; color:#7e867d; font-size:23rpx;line-height:1.55;word-break:break-all; }
