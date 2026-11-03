@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLoad } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { API_ORIGIN } from "../../api/client";
+import { API_ORIGIN, request } from "../../api/client";
 import {
   getPublicConfig,
   listFavorites,
@@ -9,23 +9,27 @@ import {
   setFavorite,
   type Property,
 } from "../../api/properties";
-import { getSession } from "../../auth/session";
+import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   loading = ref(true),
   loadFailed = ref(false),
   favorite = ref(false);
+const relatedRadiusKm = ref(3);
+const allProperties = ref<Property[]>([]);
 const load = async (id = "") => {
   loading.value = true;
   loadFailed.value = false;
   try {
     const [items, config] = await Promise.all([
       listProperties(),
-      getPublicConfig().catch(() => ({ contactPhone: "" })),
+      getPublicConfig().catch(() => null),
     ]);
+    allProperties.value = items;
     item.value = items.find((property) => property.id === id) || null;
-    contactPhone.value = config.contactPhone;
+    contactPhone.value = config?.contactPhone || "";
+    relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
     if (getSession()?.role === "user")
       favorite.value = (await listFavorites().catch(() => [])).includes(id);
   } catch (error) {
@@ -61,6 +65,39 @@ const propertyDescription = computed(() =>
 const hasLocation = computed(() =>
   Boolean(Number(item.value?.latitude) && Number(item.value?.longitude)),
 );
+const isAdmin = computed(() => hasRole("admin"));
+const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const nearbyProperties = computed(() => {
+  if (!item.value || !hasLocation.value) return [];
+  return allProperties.value
+    .filter(
+      (property) =>
+        property.id !== item.value?.id &&
+        property.status === "published" &&
+        Number(property.latitude) &&
+        Number(property.longitude),
+    )
+    .map((property) => ({
+      ...property,
+      distance: distanceKm(
+        Number(item.value?.latitude),
+        Number(item.value?.longitude),
+        Number(property.latitude),
+        Number(property.longitude),
+      ),
+    }))
+    .filter((property) => property.distance <= relatedRadiusKm.value)
+    .sort((left, right) => left.distance - right.distance)
+    .slice(0, 4);
+});
 const propertyMarkers = computed(() =>
   hasLocation.value && item.value
     ? [
@@ -119,6 +156,41 @@ const reserve = () => {
   if (!item.value || !requireUser()) return;
   uni.navigateTo({
     url: `/pages/requests/index?propertyId=${item.value.id}&title=${encodeURIComponent(item.value.title || item.value.community)}`,
+  });
+};
+const openProperty = (id: string) =>
+  uni.redirectTo({ url: `/pages/properties/detail?id=${id}` });
+const editProperty = () => {
+  if (!item.value) return;
+  uni.navigateTo({ url: `/pages/admin/property-edit?id=${item.value.id}` });
+};
+const publishFromPreview = () => {
+  if (!item.value || !["draft", "offline", "pending_review"].includes(item.value.status))
+    return;
+  uni.showModal({
+    title: "确认发布房源",
+    content: "该房源会立即在用户端显示。",
+    confirmText: "确认发布",
+    success: async (result) => {
+      if (!result.confirm || !item.value) return;
+      try {
+        await request("/v1/properties/status", {
+          method: "PATCH",
+          data: {
+            propertyId: item.value.id,
+            status: "published",
+            note: "管理员预览确认后发布",
+          },
+        });
+        item.value.status = "published";
+        uni.showToast({ title: "房源已发布" });
+      } catch (error) {
+        uni.showToast({
+          title: error instanceof Error ? error.message : "发布失败",
+          icon: "none",
+        });
+      }
+    },
   });
 };
 const contact = () => {
@@ -204,7 +276,28 @@ const contact = () => {
     ><view class="card"
       ><view class="title small">房源描述</view
       ><view class="desc">{{ propertyDescription || "暂无描述" }}</view></view
-    ><view class="bottom-space" /><view class="action-bar"
+    ><view v-if="nearbyProperties.length" class="card nearby-card"
+      ><view class="nearby-heading"
+        ><view><view class="title small">附近房源</view><small>距此房源 {{ relatedRadiusKm }} 公里内</small></view
+        ><text>{{ nearbyProperties.length }} 套</text></view
+      ><view
+        v-for="property in nearbyProperties"
+        :key="property.id"
+        class="nearby-item"
+        @click="openProperty(property.id)"
+        ><view><strong>{{ property.title || property.community }}</strong><small>{{ property.community }} · {{ property.layout }}</small></view
+        ><view class="nearby-price"><strong>{{ property.rentMonthly }} 元/月</strong><small>{{ property.distance.toFixed(1) }}km</small></view
+      ></view></view
+    ><view class="bottom-space" /><view v-if="isAdmin" class="action-bar admin-action-bar"
+      ><view class="contact-action" @click="editProperty"
+        ><text>✎</text><small>继续编辑</small></view
+      ><view
+        v-if="['draft', 'offline', 'pending_review'].includes(item.status)"
+        class="reserve"
+        @click="publishFromPreview"
+        >确认发布</view
+      ><view v-else class="reserve disabled">已发布</view></view
+    ><view v-else class="action-bar"
       ><view class="contact-action" @click="contact"
         ><text>☎</text><small>联系小皮</small></view
       ><view class="reserve" @click="reserve">预约房源</view></view
@@ -263,6 +356,50 @@ const contact = () => {
 .location-heading strong {
   color: #173f3c;
   font-size: 32rpx;
+}
+.nearby-card {
+  padding: 28rpx;
+}
+.nearby-heading,
+.nearby-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+.nearby-heading {
+  margin-bottom: 12rpx;
+}
+.nearby-heading small,
+.nearby-item small {
+  display: block;
+  margin-top: 6rpx;
+  color: #78a39d;
+  font-size: 22rpx;
+}
+.nearby-heading > text {
+  color: #0e8177;
+  font-size: 23rpx;
+}
+.nearby-item {
+  min-height: 104rpx;
+  border-top: 1rpx solid #edf4f1;
+}
+.nearby-item > view:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.nearby-item strong {
+  color: #173f3c;
+  font-size: 27rpx;
+}
+.nearby-price {
+  text-align: right;
+  flex: none;
+}
+.nearby-price strong {
+  color: #d47d32;
+  font-size: 24rpx;
 }
 .location-heading small {
   margin-top: 8rpx;
@@ -413,5 +550,8 @@ const contact = () => {
   color: #fff;
   font-size: 30rpx;
   font-weight: 700;
+}
+.reserve.disabled {
+  background: #b9cbc7;
 }
 </style>

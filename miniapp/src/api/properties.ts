@@ -88,6 +88,7 @@ export interface PublicConfig {
   heroDescription: string;
   notice: string;
   contactPhone: string;
+  relatedPropertyRadiusKm?: number;
   locations: { label: string; keyword: string }[];
   featuredChannels: {
     icon: string;

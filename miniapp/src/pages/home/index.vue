@@ -14,6 +14,7 @@ const defaultConfig: PublicConfig = {
   heroDescription: "真实房源 · 可靠服务",
   notice: "签约前请核对合同条款与费用明细，保障自身权益。",
   contactPhone: "",
+  relatedPropertyRadiusKm: 3,
   locations: [],
   featuredChannels: [
     {

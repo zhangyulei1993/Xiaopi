@@ -198,6 +198,7 @@ button, input, textarea { font: inherit; }
 .config-section { min-width: 0; }
 .basic-config-form { max-width: 880px; }
 .form-row.two-columns { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr); gap: 16px; }
+.form-tip { margin-top: 8px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 .config-section-heading { align-items: center; }
 .config-section-heading > div { min-width: 0; flex: 1; }
 .structured-list { display: grid; gap: 10px; }

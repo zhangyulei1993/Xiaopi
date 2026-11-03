@@ -23,6 +23,7 @@ const id = ref(""),
   images = ref<string[]>([]),
   videos = ref<string[]>([]),
   existingMedia = ref<{ type: string; url: string }[]>([]);
+const currentLocation = ref<{ latitude: number; longitude: number } | null>(null);
 const locationQuery = ref("");
 const locationSearching = ref(false);
 const locationResults = ref<LocationSearchItem[]>([]);
@@ -105,6 +106,7 @@ const requiredReady = computed(() =>
     form.community?.trim() &&
     form.location?.trim() &&
     form.layout?.trim() &&
+    geoReady.value &&
     Number(form.rentMonthly) > 0,
   ),
 );
@@ -117,10 +119,14 @@ const geoReady = computed(() =>
   Boolean(Number(form.latitude) && Number(form.longitude)),
 );
 const mapLatitude = computed(() =>
-  geoReady.value ? Number(form.latitude) : channelLatitude.value,
+  geoReady.value
+    ? Number(form.latitude)
+    : currentLocation.value?.latitude || channelLatitude.value,
 );
 const mapLongitude = computed(() =>
-  geoReady.value ? Number(form.longitude) : channelLongitude.value,
+  geoReady.value
+    ? Number(form.longitude)
+    : currentLocation.value?.longitude || channelLongitude.value,
 );
 const channelCircles = computed(() => [
   {
@@ -242,8 +248,8 @@ const applyLocationResult = (item: LocationSearchItem) => {
 };
 const choosePropertyLocation = () => {
   uni.chooseLocation({
-    latitude: geoReady.value ? Number(form.latitude) : channelLatitude.value,
-    longitude: geoReady.value ? Number(form.longitude) : channelLongitude.value,
+    latitude: mapLatitude.value,
+    longitude: mapLongitude.value,
     success: (result) => {
       form.latitude = Number(result.latitude.toFixed(7));
       form.longitude = Number(result.longitude.toFixed(7));
@@ -339,6 +345,15 @@ onLoad((query) => {
   syncLayout();
   loadChannels();
   loadProperty();
+  uni.getLocation({
+    type: "gcj02",
+    success: (result) => {
+      currentLocation.value = {
+        latitude: Number(result.latitude.toFixed(7)),
+        longitude: Number(result.longitude.toFixed(7)),
+      };
+    },
+  });
 });
 const pick = (type: "image" | "video") => {
   const count =
@@ -380,17 +395,13 @@ const upload = (path: string, type: string, propertyId: string) =>
       fail: reject,
     }),
   );
-const save = async (submitReview = false) => {
+const save = async (openPreview = false) => {
   if (saving.value) return;
   if (!requiredReady.value) {
     uni.showToast({
-      title: "请完成标题、小区、位置、户型和月租",
+      title: "请完成标题、小区、位置、地图定位、户型和月租",
       icon: "none",
     });
-    return;
-  }
-  if (submitReview && !["draft", "offline"].includes(currentStatus.value)) {
-    uni.showToast({ title: "当前状态无需重复提交审核", icon: "none" });
     return;
   }
   saving.value = true;
@@ -418,24 +429,18 @@ const save = async (submitReview = false) => {
     }
     images.value = [];
     videos.value = [];
-    if (submitReview) {
-      uploadProgress.value = "提交审核";
-      await request("/v1/properties/status", {
-        method: "PATCH",
-        data: {
-          propertyId: property.id,
-          status: "pending_review",
-          note: "管理员录入后提交审核",
-        },
-      });
-    }
+    currentStatus.value = property.status;
     uni.showModal({
-      title: submitReview ? "已提交审核" : "草稿已保存",
-      content: submitReview
-        ? "可在工作台审核并发布。"
-        : "可继续补充素材，稍后再提交审核。",
+      title: openPreview ? "房源已保存" : "草稿已保存",
+      content: openPreview
+        ? "现在查看用户将看到的内容；确认无误后，可在工作台直接发布。"
+        : "可继续补充素材，稍后再查看并发布。",
       showCancel: false,
-      success: () => submitReview && uni.navigateBack(),
+      success: () => {
+        if (openPreview) {
+          uni.navigateTo({ url: `/pages/properties/detail?id=${property.id}` });
+        }
+      },
     });
   } catch (error) {
     uni.showToast({
@@ -455,7 +460,7 @@ const mediaUrl = (url: string) =>
     ><view class="editor-hero"
       ><view
         ><text>{{ id ? "编辑房源" : "录入新房源" }}</text
-        ><small>按步骤完善信息，随时可以保存草稿</small></view
+          ><small>按步骤完善信息，保存后查看无误即可发布</small></view
       ><view class="completion"
         ><strong>{{ completionCount }}/4</strong><small>已完成</small></view
       ></view
@@ -504,7 +509,7 @@ const mediaUrl = (url: string) =>
         ><view class="map-section-heading"
           ><view
             ><strong>位置与周边</strong
-            ><small>点击地图落点，或按名称搜索准确位置</small></view
+              ><small>默认以当前位置显示；搜索小区可自动精确落点</small></view
           ><text @click="choosePropertyLocation">搜索地址</text></view
         ><view class="location-search"
           ><view class="location-search-box"
@@ -572,7 +577,7 @@ const mediaUrl = (url: string) =>
                 {{ Number(form.latitude).toFixed(6) }},
                 {{ Number(form.longitude).toFixed(6) }}</small
               ><small v-else
-                >直接点击地图即可落点，也可以搜索小区或详细地址</small
+                >地图以当前位置显示，也可以搜索小区或直接点击落点</small
               ></view
             ><text class="map-hint">轻触地图调整位置</text></view
           ></view
@@ -746,21 +751,13 @@ const mediaUrl = (url: string) =>
           ><button :disabled="saving" @click="save(false)">保存草稿</button
           ><button
             class="primary"
-            :disabled="
-              saving ||
-              !requiredReady ||
-              !['draft', 'offline'].includes(currentStatus)
-            "
+            :disabled="saving || !requiredReady"
             @click="save(true)"
           >
             {{
               saving
                 ? "处理中..."
-                : currentStatus === "pending_review"
-                  ? "已在审核中"
-                  : currentStatus === "published"
-                    ? "已发布"
-                    : "保存并提交审核"
+                : "保存并查看"
             }}
           </button></view
         ></view
