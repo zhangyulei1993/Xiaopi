@@ -455,8 +455,13 @@ const mediaUrl = (url: string) =>
             v-model.trim="form.location"
             maxlength="60"
             placeholder="区域 / 地铁站 / 商圈" /></view
+        ><view class="map-section-heading"
+          ><view
+            ><strong>位置与周边</strong
+            ><small>点击地图落点，或按名称搜索准确位置</small></view
+          ><text @click="choosePropertyLocation">搜索地址</text></view
         ><view class="channel-scope"
-          ><text>精选频道关联范围</text
+          ><text>关联范围</text
           ><picker
             :range="channelTitles"
             :value="selectedChannelIndex"
@@ -496,9 +501,7 @@ const mediaUrl = (url: string) =>
               ><small v-else
                 >直接点击地图即可落点，也可以搜索小区或详细地址</small
               ></view
-            ><button size="mini" @click="choosePropertyLocation">
-              搜索地址
-            </button></view
+            ><text class="map-hint">轻触地图调整位置</text></view
           ></view
         ><view class="rent-row"
           ><view class="field"
@@ -861,7 +864,34 @@ const mediaUrl = (url: string) =>
   gap: 14rpx;
 }
 .channel-scope {
-  margin-top: 28rpx;
+  margin-top: 16rpx;
+}
+.map-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 34rpx;
+}
+.map-section-heading strong,
+.map-section-heading small {
+  display: block;
+}
+.map-section-heading strong {
+  color: #173f3c;
+  font-size: 30rpx;
+}
+.map-section-heading small {
+  margin-top: 7rpx;
+  color: #86a19c;
+  font-size: 20rpx;
+}
+.map-section-heading > text {
+  flex: none;
+  padding-top: 4rpx;
+  color: #0e8177;
+  font-size: 23rpx;
+  font-weight: 700;
 }
 .channel-scope > text {
   display: block;
@@ -944,6 +974,11 @@ const mediaUrl = (url: string) =>
   background: #0e8177;
   color: #fff;
   font-size: 22rpx;
+}
+.map-hint {
+  flex: none;
+  color: #0e8177;
+  font-size: 20rpx;
 }
 .rent-input {
   display: flex;
