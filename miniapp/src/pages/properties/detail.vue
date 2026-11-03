@@ -19,6 +19,9 @@ const item = ref<Property | null>(null),
   favorite = ref(false);
 const relatedRadiusKm = ref(3);
 const allProperties = ref<Property[]>([]);
+const activeMediaIndex = ref(0);
+const playingVideoIndex = ref(-1);
+const mapExpanded = ref(false);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "propertyDetail",
   "房源详情",
@@ -35,6 +38,9 @@ const load = async (id = "") => {
     ]);
     allProperties.value = items;
     item.value = items.find((property) => property.id === id) || null;
+    activeMediaIndex.value = 0;
+    playingVideoIndex.value = -1;
+    mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
     if (getSession()?.role === "user")
@@ -52,6 +58,24 @@ const load = async (id = "") => {
 onLoad((query) => load(String(query?.id || "")));
 const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
+const mediaItems = computed(() => item.value?.media || []);
+const videoPoster = computed(() => {
+  const image = mediaItems.value.find((media) => media.type === "image");
+  return image ? mediaUrl(image.url) : "";
+});
+const handleMediaChange = (event: { detail: { current: number } }) => {
+  activeMediaIndex.value = event.detail.current;
+  playingVideoIndex.value = -1;
+};
+const previewImage = (url: string) => {
+  const urls = mediaItems.value
+    .filter((media) => media.type === "image")
+    .map((media) => mediaUrl(media.url));
+  if (urls.length) uni.previewImage({ current: mediaUrl(url), urls });
+};
+const playVideo = (index: number) => {
+  playingVideoIndex.value = index;
+};
 const amenities = computed(() => {
   const match = item.value?.description?.match(/^配套设施：([^\n]*)\n?/);
   if (!match?.[1]) return [];
@@ -151,7 +175,7 @@ const toggle = async () => {
   try {
     await setFavorite(item.value.id, next);
     favorite.value = next;
-    uni.showToast({ title: next ? "已关注" : "已取消关注" });
+    uni.showToast({ title: next ? "已收藏" : "已取消收藏" });
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : "操作失败",
@@ -218,21 +242,31 @@ const contact = () => {
     >房源加载失败，请返回重试</view
   ><view v-else-if="item" class="page detail-page" :style="pageStyle"
     ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
-    ><view v-if="!item.media?.length" class="detail-cover">🏠</view
-    ><view v-else class="media-list"
-      ><block
-        v-for="(media, index) in item.media"
-        :key="`${media.url}-${index}`"
-        ><image
-          v-if="media.type === 'image'"
-          class="media-image"
-          :src="mediaUrl(media.url)"
-          mode="aspectFill" /><video
-          v-else
-          class="media-video"
-          :src="mediaUrl(media.url)"
-          controls
-          object-fit="contain" /></block></view
+    ><view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
+      ><text class="detail-cover-icon">⌂</text><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
+    ><view v-else class="media-gallery"
+      ><swiper class="media-swiper" circular :current="activeMediaIndex" @change="handleMediaChange"
+        ><swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`"
+          ><image
+            v-if="media.type === 'image'"
+            class="media-image"
+            :src="mediaUrl(media.url)"
+            mode="aspectFill"
+            @click="previewImage(media.url)" /><view v-else class="video-stage"
+            ><video
+              class="media-video"
+              :src="mediaUrl(media.url)"
+              :poster="videoPoster"
+              :controls="playingVideoIndex === index"
+              :autoplay="playingVideoIndex === index"
+              object-fit="cover"
+              @ended="playingVideoIndex = -1" /><view v-if="playingVideoIndex !== index" class="play-video" @click.stop="playVideo(index)"
+              ><text>▶</text><small>播放视频</small></view
+            ></view
+          ></swiper-item
+        ></swiper
+      ><view class="media-counter">{{ activeMediaIndex + 1 }} / {{ mediaItems.length }}</view
+      ><view v-if="mediaItems[activeMediaIndex]?.type === 'video'" class="media-kind">视频</view></view
     ><view class="card overview"
       ><view class="overview-top"
         ><view class="price">{{ item.rentMonthly }} <small>元/月</small></view
@@ -242,22 +276,27 @@ const contact = () => {
         ></view
       ><view class="title">{{ item.title || item.community }}</view
       ><view class="muted">{{ item.layout }} · {{ item.location }}</view
-      ><view class="tags"
-        ><text>{{ item.community }}</text
-        ><text>{{ item.feeText || "租房信息" }}</text></view
+      ><scroll-view class="key-facts" scroll-x
+        ><view class="key-facts-row"><view><strong>{{ item.layout || "户型待确认" }}</strong><small>户型</small></view
+        ><view><strong>{{ item.community || "小区待确认" }}</strong><small>所在小区</small></view
+        ><view><strong>{{ item.feeText || "费用待确认" }}</strong><small>费用说明</small></view></view></scroll-view
       ></view
     ><view v-if="hasLocation" class="card location-card"
       ><view class="location-heading"
         ><view
           ><strong>位置与周边</strong><small>{{ item.location }}</small></view
         ><text @click="openPropertyLocation">打开地图</text></view
+      ><view class="map-summary" @click="mapExpanded = !mapExpanded"
+        ><view><strong>{{ mapExpanded ? "收起地图" : "查看地图位置" }}</strong><small>已保存房源定位</small></view
+        ><text>{{ mapExpanded ? "⌃" : "›" }}</text></view
       ><map
+        v-if="mapExpanded"
         class="detail-map"
         :latitude="Number(item.latitude)"
         :longitude="Number(item.longitude)"
         :markers="propertyMarkers"
         :scale="16"
-      /><button class="navigate-button" @click="openPropertyLocation">
+      /><button v-if="mapExpanded" class="navigate-button" @click="openPropertyLocation">
         ⌁ 导航去这里
       </button></view
     ><view class="card"
@@ -567,4 +606,5 @@ const contact = () => {
 .detail-page { padding-bottom:164rpx; }.detail-cover,.media-image,.media-video { border-radius:24rpx; background:#dce4d5; }.detail-cover { height:440rpx; }.media-list { gap:14rpx; }.media-image,.media-video { height:440rpx; }.overview { margin-top:18rpx; border:0; border-radius:24rpx; }.overview .title { margin-top:18rpx; font-size:40rpx; }.overview .muted { margin-top:8rpx; font-size:25rpx; }.overview .price { color:#d76440; }.heart { color:#657162; }.heart.active { color:#d76440; }.tags text { border-radius:8rpx; background:#edf0e6; color:#5b6956; }.location-card,.nearby-card { border:0; border-radius:24rpx; }.location-heading strong { color:#29382d; }.location-heading > text,.navigate-button { color:#536a45; }.navigate-button { border-radius:12rpx; background:#e9eee0; }.detail-map { border-radius:16rpx; }.row { border-color:#eeece7; }.row text:first-child { color:#8a9389; }.desc { color:#64705f; }.amenity-icon { background:#edf0e6; }.nearby-heading > text,.nearby-price strong { color:#d76440; }.nearby-item { border-color:#eeece7; }.action-bar { background:rgba(255,255,255,.97); box-shadow:0 -6rpx 24rpx rgba(45,55,43,.07); }.contact-action { color:#5a6657; }.reserve { border-radius:16rpx; background:#40543f; }.reserve.disabled { background:#b5bdb0; }
 .detail-page .page-presentation-head{margin-bottom:28rpx}.detail-page .overview{margin-top:22rpx}.detail-page .card{margin-bottom:24rpx}.overview .title{line-height:1.35}.amenity-grid{row-gap:14rpx}
 .overview .price{font-size:50rpx;line-height:1.1}.overview .price small{font-size:23rpx}.overview .tags{margin-top:16rpx}.detail-page .title.small{font-size:33rpx;line-height:1.3}.row{min-height:82rpx;padding:24rpx 0;align-items:center}.row text:last-child{max-width:70%;line-height:1.45;text-align:right}.desc{margin-top:14rpx;font-size:26rpx;line-height:1.72}.location-heading small{margin-top:8rpx;line-height:1.45}.nearby-item{padding:22rpx 0}.nearby-item small{margin-top:7rpx;line-height:1.4}.action-bar{padding-top:18rpx;padding-bottom:calc(18rpx + env(safe-area-inset-bottom))}
+.media-gallery{position:relative;overflow:hidden;border-radius:24rpx;background:#dce4d5}.media-swiper{width:100%;height:440rpx}.media-gallery .media-image,.media-gallery .media-video,.video-stage{display:block;width:100%;height:100%;border-radius:0}.video-stage{position:relative;background:#40543f}.play-video{position:absolute;top:50%;left:50%;display:flex;align-items:center;gap:12rpx;padding:18rpx 26rpx;border-radius:999rpx;transform:translate(-50%,-50%);background:rgba(25,37,27,.76);color:#fff}.play-video text{font-size:28rpx;line-height:1}.play-video small{font-size:24rpx;white-space:nowrap}.media-counter,.media-kind{position:absolute;bottom:22rpx;padding:9rpx 16rpx;border-radius:999rpx;background:rgba(24,34,25,.64);color:#fff;font-size:22rpx;font-variant-numeric:tabular-nums}.media-counter{right:22rpx}.media-kind{left:22rpx}.detail-cover-empty{flex-direction:column;gap:10rpx;background:linear-gradient(145deg,#e8e2d5,#d7dfcd);color:#465440;font-size:31rpx;font-weight:650}.detail-cover-empty .detail-cover-icon{font-size:116rpx;line-height:1}.detail-cover-empty small{color:#788071;font-size:23rpx;font-weight:400}.overview{padding:30rpx 28rpx}.overview-top .price{flex:1;min-width:0;white-space:nowrap}.heart{flex:none}.overview .title{margin-top:16rpx;color:#263227;font-size:40rpx;font-weight:750;letter-spacing:-.6rpx}.overview .muted{margin-top:9rpx;color:#6d766b;font-size:26rpx}.key-facts{width:100%;margin-top:24rpx;white-space:normal}.key-facts-row{display:inline-flex;gap:12rpx;white-space:nowrap}.key-facts-row>view{box-sizing:border-box;width:224rpx;padding:16rpx 14rpx;border-radius:14rpx;background:#eeece5}.key-facts strong{display:block;overflow:hidden;color:#384438;font-size:24rpx;font-weight:650;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.key-facts small{display:block;margin-top:7rpx;color:#8a9087;font-size:19rpx}.map-summary{display:flex;align-items:center;justify-content:space-between;padding:20rpx 0 2rpx}.map-summary strong,.map-summary small{display:block}.map-summary strong{color:#425240;font-size:27rpx}.map-summary small{margin-top:6rpx;color:#879087;font-size:21rpx}.map-summary>text{color:#596b52;font-size:38rpx;line-height:1}.play-video:active,.map-summary:active{opacity:.8}.heart:active,.reserve:active,.contact-action:active{transform:scale(.98);opacity:.86}
 </style>
