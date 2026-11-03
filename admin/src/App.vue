@@ -334,7 +334,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
         <div class="login-mark">小</div>
         <span>小皮租房</span>
         <h1>运营管理后台</h1>
-        <p>管理房源、客户线索与小程序首页内容。</p>
+        <p>运营管理</p>
       </div>
       <el-form label-position="top" @submit.prevent="login">
         <el-form-item label="管理员账号"><el-input v-model.trim="username" autocomplete="username" :disabled="loading" /></el-form-item>
@@ -354,20 +354,20 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <template v-if="tab === '运营总览'">
           <section class="dashboard-hero">
-            <div><span class="dashboard-kicker">XIAOPI OPERATIONS</span><h1>租住业务运营总览</h1><p>集中查看房源、线索与用户状态，并维护小程序对外展示的地区和精选频道。</p></div>
+            <div><span class="dashboard-kicker">XIAOPI OPERATIONS</span><h1>运营总览</h1></div>
             <div class="hero-meter"><span>当前待跟进线索</span><strong>{{ leads.length }}</strong></div>
           </section>
           <div v-loading="loading" class="stats-grid dashboard-grid">
-            <button class="surface stat-card" @click="tab = '房源审核'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong><em>查看房源审核</em></button>
-            <button class="surface stat-card" @click="tab = '线索管理'"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong><em>跟进租住意向</em></button>
-            <button class="surface stat-card" @click="tab = '微信用户'"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong><em>查看手机号绑定</em></button>
-            <button class="surface stat-card" @click="tab = '小程序配置'"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong><em>维护展示内容</em></button>
+            <button class="surface stat-card" @click="tab = '房源审核'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong></button>
+            <button class="surface stat-card" @click="tab = '线索管理'"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong></button>
+            <button class="surface stat-card" @click="tab = '微信用户'"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong></button>
+            <button class="surface stat-card" @click="tab = '小程序配置'"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong></button>
           </div>
         </template>
 
         <template v-else-if="tab === '微信用户'">
           <section class="page-header">
-            <div><span>用户与权限</span><h1>微信用户</h1><p>展示已通过小程序微信登录的用户；绑定手机号后，才可以按手机号指定管理员。</p></div>
+            <div><span>用户与权限</span><h1>微信用户</h1></div>
             <el-button :loading="loading" @click="load">刷新数据</el-button>
           </section>
           <section class="surface table-panel">
@@ -384,14 +384,14 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
         </template>
 
         <template v-else-if="tab === '租客需求'">
-          <section class="page-header"><div><span>业务管理</span><h1>租客需求</h1><p>集中处理用户预约的具体房源和无法自行匹配时提交的找房需求。</p></div><el-button :loading="loading" @click="load">刷新数据</el-button></section>
+          <section class="page-header"><div><span>业务管理</span><h1>租客需求</h1></div><el-button :loading="loading" @click="load">刷新数据</el-button></section>
           <div class="stats-grid list-stats"><section class="surface compact-stat"><span>需求总数</span><strong>{{ rentalRequests.length }}</strong></section><section class="surface compact-stat"><span>预约房源</span><strong>{{ rentalRequests.filter(item => item.requestType === 'appointment').length }}</strong></section><section class="surface compact-stat"><span>自主找房</span><strong>{{ rentalRequests.filter(item => item.requestType === 'general').length }}</strong></section></div>
           <section class="surface table-panel"><div class="table-heading"><div><h2>需求记录</h2><p>优先联系新提交的用户，并按预算与区域推荐房源</p></div></div><el-table :data="rentalRequests" empty-text="暂无租客需求"><el-table-column label="类型" width="110"><template #default="scope"><el-tag :type="scope.row.requestType === 'appointment' ? 'warning' : 'success'">{{ scope.row.requestType === 'appointment' ? '预约房源' : '帮我找房' }}</el-tag></template></el-table-column><el-table-column prop="phone" label="联系电话" min-width="145"/><el-table-column label="地区与户型" min-width="190"><template #default="scope">{{ scope.row.location || '未指定地区' }}<br/><span class="muted-table-text">{{ scope.row.layout || '户型不限' }}</span></template></el-table-column><el-table-column label="月租预算" min-width="145"><template #default="scope">{{ scope.row.budgetMin || 0 }}–{{ scope.row.budgetMax || '不限' }} 元</template></el-table-column><el-table-column label="入住日期" min-width="125"><template #default="scope">{{ scope.row.moveInDate || '待沟通' }}</template></el-table-column><el-table-column prop="note" label="补充要求" min-width="220" show-overflow-tooltip/><el-table-column label="提交时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column></el-table></section>
         </template>
 
         <template v-else-if="tab === '管理员列表'">
           <section class="page-header">
-            <div><span>平台设置</span><h1>管理员列表</h1><p>先按手机号搜索已绑定的微信用户，确认用户身份后再授予运营权限。</p></div>
+            <div><span>平台设置</span><h1>管理员列表</h1></div>
           </section>
           <section class="surface admin-search-panel">
             <div class="admin-search-heading"><h2>搜索微信用户</h2><p>只有已经出现在“微信用户”列表并绑定手机号的用户可以成为管理员。</p></div>
@@ -427,7 +427,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <template v-else-if="tab === '临时访问码'">
           <section class="page-header">
-            <div><span>平台设置</span><h1>临时访问码</h1><p>微信登录暂不可用期间，为指定手机号生成独立访问码。用户使用手机号和访问码登录，不会与其他用户串号。</p></div>
+            <div><span>平台设置</span><h1>临时访问码</h1></div>
           </section>
           <section class="surface temporary-access-panel">
             <div class="temporary-form">
@@ -454,7 +454,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <template v-else-if="tab === '小程序配置'">
           <section class="page-header">
-            <div><span>内容与运营</span><h1>小程序配置中心</h1><p>统一维护首页文案、公告、地区入口和精选频道。右侧预览会随编辑实时更新。</p></div>
+            <div><span>内容与运营</span><h1>小程序配置中心</h1></div>
           </section>
           <section class="surface config-toolbar">
             <div class="publish-state">
@@ -471,7 +471,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <div v-loading="loading" class="config-workspace">
             <div class="config-editor">
               <section class="surface form-section config-section">
-                <div class="section-heading"><span>01</span><div><h2>首页基础信息</h2><p>这些内容显示在首页首屏和公告区域。</p></div></div>
+                <div class="section-heading"><span>01</span><div><h2>首页信息</h2></div></div>
                 <el-form label-position="top" class="basic-config-form">
                   <div class="form-row two-columns">
                     <el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item>
@@ -484,13 +484,13 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <el-select v-model="publicConfig.relatedPropertyRadiusKm" placeholder="选择距离" style="width: 100%">
                       <el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" />
                     </el-select>
-                    <div class="form-tip">系统按房源保存的地图坐标自动计算；同一半径内的已发布房源会在详情页展示为“附近房源”。</div>
+                    <div class="form-tip">按地图坐标自动关联。</div>
                   </el-form-item>
                 </el-form>
               </section>
 
               <section class="surface form-section config-section">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>地理位置入口</h2><p>用户点击后会使用搜索关键词筛选房源，顺序与小程序一致。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 20" @click="addLocation">新增地区</el-button></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>地区入口</h2></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 20" @click="addLocation">新增地区</el-button></div>
                 <div v-if="publicConfig.locations.length" class="structured-list">
                   <article v-for="(item, index) in publicConfig.locations" :key="`location-${index}`" class="config-list-item">
                     <div class="item-index">{{ String(index + 1).padStart(2, '0') }}</div>
@@ -509,7 +509,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               </section>
 
               <section class="surface form-section config-section">
-                <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道</h2><p>频道会以横向卡片展示，建议保留 3–6 个重点入口。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
+                <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道</h2></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
                 <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                   <article v-for="(item, index) in publicConfig.featuredChannels" :key="`channel-${index}`" class="channel-editor-card">
                     <header><div class="channel-order"><span>{{ item.icon || '🏠' }}</span><strong>频道 {{ index + 1 }}</strong></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.featuredChannels, index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="下移" @click="moveItem(publicConfig.featuredChannels, index, 1)" /><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
@@ -529,7 +529,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </div>
 
             <aside class="config-preview-column">
-              <div class="preview-heading"><div><strong>小程序首页预览</strong><span>按实际配置实时更新</span></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
+              <div class="preview-heading"><div><strong>小程序首页预览</strong></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
               <div class="config-preview-actions">
                 <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button>
                 <el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
