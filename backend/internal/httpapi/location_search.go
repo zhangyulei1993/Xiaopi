@@ -15,7 +15,7 @@ type locationSearchItem struct {
 	District  string  `json:"district"`
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
-	Distance  int     `json:"distance,omitempty"`
+	Distance  float64 `json:"distance,omitempty"`
 }
 
 func (s *Server) searchLocations(w http.ResponseWriter, r *http.Request) {
@@ -55,10 +55,10 @@ func (s *Server) searchLocations(w http.ResponseWriter, r *http.Request) {
 		Status  int    `json:"status"`
 		Message string `json:"message"`
 		Data    []struct {
-			ID       string `json:"id"`
-			Title    string `json:"title"`
-			Address  string `json:"address"`
-			Distance int    `json:"_distance"`
+			ID       string  `json:"id"`
+			Title    string  `json:"title"`
+			Address  string  `json:"address"`
+			Distance float64 `json:"_distance"`
 			Location struct {
 				Lat float64 `json:"lat"`
 				Lng float64 `json:"lng"`
