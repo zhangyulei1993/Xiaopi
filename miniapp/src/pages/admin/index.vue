@@ -389,4 +389,5 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
   text-align: center;
   padding: 100rpx 0;
 }
+.page-presentation-head{margin-bottom:28rpx}.work-head{margin-bottom:20rpx}.work-head .title{font-size:36rpx;line-height:1.3}.summary{margin-bottom:28rpx}.tabs{margin-bottom:28rpx}.new-property{margin-bottom:28rpx}.item{margin-bottom:22rpx}.item .title{line-height:1.35}.info{line-height:1.55}.actions{margin-top:28rpx}
 </style>

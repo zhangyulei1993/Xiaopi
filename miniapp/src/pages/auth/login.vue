@@ -97,4 +97,5 @@ const loginTemporarily = async () => {
 .divider text { position: relative; padding: 0 20rpx; background: #fff; }
 .wechat-button { background: #edf7f3; color: #0f8177; border-radius: 999rpx; }
 .wechat-button::after { border: 0; }
+.page-presentation-head{margin-bottom:26rpx}.login-card{margin-top:0;padding:42rpx 32rpx}.logo{margin-bottom:28rpx}.login-card .title{line-height:1.3}.login-card>.muted{display:block;margin-top:12rpx;line-height:1.65}.temporary-form{margin-top:32rpx}.button{margin-top:36rpx;padding-top:22rpx;padding-bottom:22rpx}.divider{margin:30rpx 0 22rpx}
 </style>

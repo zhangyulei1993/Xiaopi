@@ -232,4 +232,5 @@ const call = () =>
   color: #0e8177;
   font-size: 26rpx;
 }
+.request-hero{margin-bottom:28rpx;padding:42rpx 34rpx}.request-hero>view{line-height:1.28}.form{padding:12rpx 28rpx}.field{padding:28rpx 0}.privacy{margin-top:8rpx;line-height:1.7}.contact{margin-top:32rpx;padding-bottom:12rpx}
 </style>

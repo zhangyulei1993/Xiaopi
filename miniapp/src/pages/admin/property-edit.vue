@@ -461,7 +461,7 @@ const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
 </script>
 <template>
-  <view class="page" :style="pageStyle"
+  <view class="page editor-page" :style="pageStyle"
     ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view class="editor-hero"
       ><view
@@ -1389,4 +1389,5 @@ const mediaUrl = (url: string) =>
 .save-actions button[disabled] {
   opacity: 0.5;
 }
+.editor-page .page-presentation-head{margin-bottom:26rpx}.editor-hero{margin:8rpx -32rpx 0;padding-top:34rpx;padding-bottom:58rpx}.step-nav{margin-top:-30rpx;margin-bottom:28rpx}.section-card{margin-bottom:24rpx;padding:36rpx 30rpx 42rpx}.section-head{margin-bottom:22rpx}.field{margin-top:20rpx;padding:22rpx}.map-section-heading{margin-top:38rpx;margin-bottom:18rpx}
 </style>

@@ -256,4 +256,5 @@ const logout = () => {
 }
 
 .profile { margin-top:18rpx; padding:32rpx; border:0; border-radius:24rpx; background:#e8eedc; box-shadow:none; }.avatar { width:96rpx; height:96rpx; border-radius:26rpx 26rpx 10rpx; background:#40543f; font-size:40rpx; }.profile .title { font-size:34rpx; }.role-badge { border-radius:8rpx; background:#f8f7f1; color:#63705e; }.role-badge.admin { background:#d9e5bc; color:#44563d; }.menu { border:0; border-radius:24rpx; box-shadow:none; }.menu view { padding:27rpx 0; border-color:#eeece7; color:#354235; }.menu text { color:#a0a79e; }.phone-card { border:0; border-radius:24rpx; box-shadow:none; }.phone-card button { border-radius:12rpx; background:#40543f; }.bound { color:#607856; }.logout { color:#bd725f; }
+.page-presentation-head{margin-bottom:26rpx}.profile{margin-top:0}.profile .muted{margin-top:8rpx;line-height:1.55}.menu{margin-top:24rpx}.phone-card{margin-top:24rpx}.logout{margin-top:24rpx;padding-bottom:14rpx}
 </style>

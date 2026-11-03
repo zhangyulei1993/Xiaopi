@@ -101,4 +101,5 @@ const submit = async () => {
 .button { width: 100%; border: 0; font-size: 30rpx; line-height: 1.4; }
 .button::after { border: 0; }
 .checking { padding-top: 180rpx; text-align: center; }
+.tip{margin-bottom:24rpx;padding:30rpx;line-height:1.72}.tip .muted{margin-top:10rpx;line-height:1.65}.field{padding:27rpx 0}.field:first-child{padding-top:6rpx}.column{padding-bottom:8rpx}.button{margin-top:28rpx;padding-top:24rpx;padding-bottom:24rpx}
 </style>
