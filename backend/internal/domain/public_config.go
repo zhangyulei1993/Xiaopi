@@ -63,11 +63,15 @@ func DefaultPublicConfig() PublicConfig {
 			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 5},
 		},
 		PagePresentations: map[string]PagePresentation{
-			"home":       {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈"},
-			"properties": {Title: "找一处合适的家", Subtitle: "按地区和预算筛选"},
-			"detail":     {Title: "房源详情", Subtitle: "真实房源，放心查看"},
-			"me":         {Title: "我的", Subtitle: "管理关注与找房需求"},
-			"requests":   {Title: "小皮帮你找房", Subtitle: "告诉我们你的找房需求"},
+			"home":              {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈"},
+			"properties":        {Title: "找一处合适的家", Subtitle: "按地区和预算筛选"},
+			"propertyDetail":    {Title: "房源详情", Subtitle: "真实房源，放心查看"},
+			"requests":          {Title: "小皮帮你找房", Subtitle: "告诉我们你的找房需求"},
+			"publish":           {Title: "发布房源", Subtitle: "提交真实房源线索"},
+			"me":                {Title: "我的", Subtitle: "管理关注与找房需求"},
+			"adminWorkbench":    {Title: "小皮工作台", Subtitle: "房源运营与数据处理"},
+			"adminPropertyEdit": {Title: "编辑房源", Subtitle: "完善房源信息后发布"},
+			"authLogin":         {Title: "微信登录", Subtitle: "登录后管理你的找房服务"},
 		},
 	}
 }
@@ -176,7 +180,7 @@ func (config PublicConfig) Validate() error {
 		}
 		channelKeywords[channel.Keyword] = struct{}{}
 	}
-	for _, key := range []string{"home", "properties", "detail", "me", "requests"} {
+	for _, key := range []string{"home", "properties", "propertyDetail", "requests", "publish", "me", "adminWorkbench", "adminPropertyEdit", "authLogin"} {
 		presentation := config.PagePresentations[key]
 		if utf8.RuneCountInString(presentation.Title) > 30 || utf8.RuneCountInString(presentation.Subtitle) > 60 || utf8.RuneCountInString(presentation.BackgroundImage) > 300 {
 			return fmt.Errorf("%s 页面展示配置内容过长", key)

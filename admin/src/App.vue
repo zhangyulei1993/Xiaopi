@@ -40,6 +40,7 @@ const configMessage = ref('')
 const configFailed = ref(false)
 const savedConfigJSON = ref('')
 const configLastSavedAt = ref('')
+const configPage = ref('home')
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
 const adminCandidate = ref<WechatUser | null>(null)
@@ -59,14 +60,18 @@ const generatedTemporaryCode = ref('')
 const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
 const pagePresentationOptions = [
-  { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'detail', label: '房源详情' }, { key: 'me', label: '我的' }, { key: 'requests', label: '找房需求' },
+  { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'propertyDetail', label: '房源详情' }, { key: 'requests', label: '找房需求' }, { key: 'publish', label: '发布房源' }, { key: 'me', label: '我的' }, { key: 'adminWorkbench', label: '运营工作台' }, { key: 'adminPropertyEdit', label: '编辑房源' }, { key: 'authLogin', label: '微信登录' },
 ]
 const defaultPagePresentations = (): Record<string, PagePresentation> => ({
   home: { title: '今天想住哪里？', subtitle: '搜索小区、地铁或商圈', backgroundImage: '' },
   properties: { title: '找一处合适的家', subtitle: '按地区和预算筛选', backgroundImage: '' },
-  detail: { title: '房源详情', subtitle: '真实房源，放心查看', backgroundImage: '' },
+  propertyDetail: { title: '房源详情', subtitle: '真实房源，放心查看', backgroundImage: '' },
   me: { title: '我的', subtitle: '管理关注与找房需求', backgroundImage: '' },
   requests: { title: '小皮帮你找房', subtitle: '告诉我们你的找房需求', backgroundImage: '' },
+  publish: { title: '发布房源', subtitle: '提交真实房源线索', backgroundImage: '' },
+  adminWorkbench: { title: '小皮工作台', subtitle: '房源运营与数据处理', backgroundImage: '' },
+  adminPropertyEdit: { title: '编辑房源', subtitle: '完善房源信息后发布', backgroundImage: '' },
+  authLogin: { title: '微信登录', subtitle: '登录后管理你的找房服务', backgroundImage: '' },
 })
 const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations() })
 const channelStyleOptions = [
@@ -511,6 +516,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </div>
             <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
           </section>
+          <section class="surface page-config-nav">
+            <div><strong>选择小程序页面</strong><span>每页单独维护展示文案与背景图</span></div>
+            <div class="page-config-tabs"><button v-for="page in pagePresentationOptions" :key="page.key" :class="{ active: configPage === page.key }" @click="configPage = page.key">{{ page.label }}</button></div>
+          </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section v-if="configErrors.length" class="config-validation">
             <strong>发布前需要处理 {{ configErrors.length }} 项</strong>
@@ -518,15 +527,16 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
           <div v-loading="loading" class="config-workspace">
             <div class="config-editor">
-              <section class="surface form-section config-section">
-                <div class="section-heading"><span>01</span><div><h2>首页信息</h2></div></div>
+              <section v-if="configPage === 'home'" class="surface form-section config-section">
+                <div class="section-heading"><span>01</span><div><h2>首页页面配置</h2></div></div>
                 <el-form label-position="top" class="basic-config-form">
                   <div class="form-row two-columns">
                     <el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item>
                     <el-form-item label="联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /></el-form-item>
                   </div>
-                  <el-form-item label="首页主标题" required><el-input v-model="publicConfig.heroSubtitle" maxlength="30" show-word-limit placeholder="一句话说明服务区域或核心价值" /></el-form-item>
-                  <el-form-item label="首页副标题" required><el-input v-model="publicConfig.heroDescription" maxlength="40" show-word-limit placeholder="补充可信度或服务特色" /></el-form-item>
+                  <el-form-item label="首页主标题" required><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></el-form-item>
+                  <el-form-item label="搜索提示"><el-input v-model="publicConfig.pagePresentations.home.subtitle" maxlength="60" show-word-limit placeholder="例如：搜索小区、地铁或商圈" /></el-form-item>
+                  <el-form-item label="首页背景图"><el-input v-model="publicConfig.pagePresentations.home.backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /><div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground('home', $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations.home.backgroundImage" @click="publicConfig.pagePresentations.home.backgroundImage = ''">移除背景图</button></div></el-form-item>
                   <el-form-item label="首页公告"><el-input v-model="publicConfig.notice" type="textarea" :rows="3" maxlength="120" show-word-limit placeholder="发布签约提醒、服务通知或风险提示" /></el-form-item>
                   <el-form-item label="附近房源关联距离">
                     <el-select v-model="publicConfig.relatedPropertyRadiusKm" placeholder="选择距离" style="width: 100%">
@@ -537,7 +547,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </el-form>
               </section>
 
-              <section class="surface form-section config-section">
+              <section v-if="configPage === 'home'" class="surface form-section config-section">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>地区入口</h2></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 20" @click="addLocation">新增地区</el-button></div>
                 <div v-if="publicConfig.locations.length" class="structured-list">
                   <article v-for="(item, index) in publicConfig.locations" :key="`location-${index}`" class="config-list-item">
@@ -556,7 +566,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div v-else class="config-empty"><strong>还没有地理位置</strong><span>至少添加一个地区，用户才能从首页快速筛选房源。</span><el-button type="primary" plain :icon="Plus" @click="addLocation">添加第一个地区</el-button></div>
               </section>
 
-              <section class="surface form-section config-section">
+              <section v-if="configPage === 'home'" class="surface form-section config-section">
                 <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道</h2></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
                 <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                   <article v-for="(item, index) in publicConfig.featuredChannels" :key="`channel-${index}`" class="channel-editor-card">
@@ -575,27 +585,24 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div v-else class="config-empty"><strong>还没有精选频道</strong><span>添加频道后，用户可以从首页直接进入对应房源列表。</span><el-button type="primary" plain :icon="Plus" @click="addChannel">添加第一个频道</el-button></div>
               </section>
 
-              <section class="surface form-section config-section">
-                <div class="section-heading config-section-heading"><span>04</span><div><h2>页面展示</h2><p>配置标题、辅助文案和背景图；不改变功能与信息架构。</p></div></div>
-                <div class="page-presentation-grid">
-                  <article v-for="page in pagePresentationOptions" :key="page.key" class="page-presentation-card">
-                    <header><strong>{{ page.label }}</strong><span>{{ page.key === 'home' ? '首页首屏' : '页面抬头' }}</span></header>
-                    <label><span>标题</span><el-input v-model="publicConfig.pagePresentations[page.key].title" maxlength="30" /></label>
-                    <label><span>辅助文本</span><el-input v-model="publicConfig.pagePresentations[page.key].subtitle" maxlength="60" /></label>
-                    <label><span>背景图</span><el-input v-model="publicConfig.pagePresentations[page.key].backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /></label>
-                    <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(page.key, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[page.key].backgroundImage" @click="publicConfig.pagePresentations[page.key].backgroundImage = ''">移除</button></div>
-                  </article>
-                </div>
+              <section v-if="configPage !== 'home'" class="surface form-section config-section selected-page-config">
+                <div class="section-heading config-section-heading"><span>01</span><div><h2>{{ pagePresentationOptions.find(page => page.key === configPage)?.label }}配置</h2><p>仅调整该页面的展示文案和背景，不影响页面功能。</p></div></div>
+                <el-form label-position="top" class="basic-config-form">
+                  <el-form-item label="页面标题"><el-input v-model="publicConfig.pagePresentations[configPage].title" maxlength="30" show-word-limit /></el-form-item>
+                  <el-form-item label="辅助文本"><el-input v-model="publicConfig.pagePresentations[configPage].subtitle" maxlength="60" show-word-limit /></el-form-item>
+                  <el-form-item label="背景图"><el-input v-model="publicConfig.pagePresentations[configPage].backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /></el-form-item>
+                  <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(configPage, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[configPage].backgroundImage" @click="publicConfig.pagePresentations[configPage].backgroundImage = ''">移除背景图</button></div>
+                </el-form>
               </section>
             </div>
 
             <aside class="config-preview-column">
-              <div class="preview-heading"><div><strong>小程序首页预览</strong></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
+              <div class="preview-heading"><div><strong>{{ pagePresentationOptions.find(page => page.key === configPage)?.label }}预览</strong></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
               <div class="config-preview-actions">
                 <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button>
                 <el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
               </div>
-              <div class="phone-preview">
+              <div v-if="configPage === 'home'" class="phone-preview">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content">
@@ -609,7 +616,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
                 <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
               </div>
-              <p class="preview-note">此处与小程序首页使用同一套频道、地区和标题配置；预览按手机比例缩放。</p>
+              <div v-else class="selected-page-preview" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.88),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}"><span>小程序页面</span><strong>{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</strong><p>{{ publicConfig.pagePresentations[configPage].subtitle || '辅助文本将在页面标题区域展示' }}</p><div></div></div>
+              <p class="preview-note">预览只反映当前选择的页面配置，实际尺寸会随设备自适应。</p>
             </aside>
           </div>
         </template>
