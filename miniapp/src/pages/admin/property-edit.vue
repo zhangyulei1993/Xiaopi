@@ -15,13 +15,25 @@ import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { usePagePresentation } from "../../utils/presentation";
 
+type PendingImage = {
+  path: string;
+  width: number;
+  height: number;
+  size: number;
+};
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MIN_IMAGE_EDGE = 640;
+const imageRatioIsAccepted = (width: number, height: number) => {
+  const ratio = width / height;
+  return ratio >= 0.5 && ratio <= 2.4;
+};
 const id = ref(""),
   currentStatus = ref("draft"),
   activeSection = ref(0),
   saving = ref(false),
   loading = ref(false),
   uploadProgress = ref(""),
-  images = ref<string[]>([]),
+  images = ref<PendingImage[]>([]),
   videos = ref<string[]>([]),
   existingMedia = ref<{ type: string; url: string }[]>([]);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
@@ -274,6 +286,8 @@ const mediaCount = computed(
     existingMedia.value.filter((item) => item.type === "image").length +
     images.value.length,
 );
+const coverImageIndex = ref(0);
+const pendingCover = computed(() => images.value[coverImageIndex.value] || null);
 const sectionReady = computed(() => [
   Boolean(
     form.title?.trim() &&
@@ -381,20 +395,96 @@ const pick = (type: "image" | "video") => {
     maxDuration: 60,
     sizeType: ["compressed"],
     success: (res) => {
-      const paths = res.tempFiles.map((item: any) => item.tempFilePath);
-      if (type === "image") images.value.push(...paths);
-      else videos.value = paths.slice(0, 1);
+      void processPickedMedia(type, res.tempFiles as any[]);
     },
   });
 };
-const upload = (path: string, type: string, propertyId: string) =>
+const imageInfo = (path: string) =>
+  new Promise<{ width: number; height: number }>((resolve, reject) =>
+    uni.getImageInfo({
+      src: path,
+      success: (result) => resolve({ width: result.width, height: result.height }),
+      fail: reject,
+    }),
+  );
+const processPickedMedia = async (type: "image" | "video", files: any[]) => {
+  if (type === "video") {
+    const video = files[0];
+    if (!video) return;
+    if (Number(video.size || 0) > 20 * 1024 * 1024) {
+      uni.showToast({ title: "视频需小于20MB", icon: "none" });
+      return;
+    }
+    if (Number(video.duration || 0) > 60) {
+      uni.showToast({ title: "视频最长60秒", icon: "none" });
+      return;
+    }
+    videos.value = [video.tempFilePath];
+    return;
+  }
+  const accepted: PendingImage[] = [];
+  let rejected = 0;
+  for (const file of files) {
+    const path = String(file.tempFilePath || "");
+    if (!path || Number(file.size || 0) > MAX_IMAGE_SIZE) {
+      rejected++;
+      continue;
+    }
+    try {
+      const info = await imageInfo(path);
+      if (
+        Math.min(info.width, info.height) < MIN_IMAGE_EDGE ||
+        !imageRatioIsAccepted(info.width, info.height)
+      ) {
+        rejected++;
+        continue;
+      }
+      accepted.push({ path, width: info.width, height: info.height, size: Number(file.size || 0) });
+    } catch {
+      rejected++;
+    }
+  }
+  if (accepted.length) {
+    images.value.push(...accepted);
+    if (!pendingCover.value) coverImageIndex.value = 0;
+  }
+  if (rejected) {
+    uni.showToast({
+      title: "已跳过不合规格图片",
+      icon: "none",
+    });
+  }
+};
+const setCover = (index: number) => {
+  if (index !== 0) {
+    const [cover] = images.value.splice(index, 1);
+    images.value.unshift(cover);
+  }
+  coverImageIndex.value = 0;
+  uni.showToast({ title: "已设为封面" });
+};
+const moveImage = (index: number, direction: -1 | 1) => {
+  const target = index + direction;
+  if (target < 0 || target >= images.value.length) return;
+  const items = [...images.value];
+  [items[index], items[target]] = [items[target], items[index]];
+  images.value = items;
+  if (coverImageIndex.value === index) coverImageIndex.value = target;
+  else if (coverImageIndex.value === target) coverImageIndex.value = index;
+};
+const removeImage = (index: number) => {
+  images.value.splice(index, 1);
+  if (coverImageIndex.value >= images.value.length)
+    coverImageIndex.value = Math.max(0, images.value.length - 1);
+};
+const upload = (path: string, type: string, propertyId: string, sort: number) =>
   new Promise<void>((resolve, reject) =>
     uni.uploadFile({
       url: `${API_ORIGIN}/api/v1/media/upload`,
       filePath: path,
       name: "file",
       header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
-      formData: { propertyId, mediaType: type },
+      formData: { propertyId, mediaType: type, sort: String(sort) },
       success: (res) => {
         if (res.statusCode >= 200 && res.statusCode < 300) resolve();
         else reject(new Error("素材上传失败"));
@@ -427,14 +517,23 @@ const save = async (openPreview = false) => {
       : await createProperty(payload);
     id.value = property.id;
     const queue = [
-      ...images.value.map((path) => ({ path, type: "image" })),
-      ...videos.value.map((path) => ({ path, type: "video" })),
+      ...images.value.map((image, index) => ({
+        path: image.path,
+        type: "image",
+        sort: existingMedia.value.length + index,
+      })),
+      ...videos.value.map((path) => ({
+        path,
+        type: "video",
+        sort: existingMedia.value.length + images.value.length,
+      })),
     ];
     for (let index = 0; index < queue.length; index++) {
       uploadProgress.value = `上传素材 ${index + 1}/${queue.length}`;
-      await upload(queue[index].path, queue[index].type, property.id);
+      await upload(queue[index].path, queue[index].type, property.id, queue[index].sort);
     }
     images.value = [];
+    coverImageIndex.value = 0;
     videos.value = [];
     currentStatus.value = property.status;
     uni.showModal({
@@ -690,6 +789,10 @@ const mediaUrl = (url: string) =>
           ><view
             ><strong>图片与视频</strong></view
           ></view
+        ><view class="media-guidance"
+          ><strong>封面与展示</strong
+          ><text>首张图片会作为列表封面，列表按固定比例裁切；建议上传清晰的横图或竖图。</text
+          ><small>单张不超过10MB，短边至少640px；超长图会自动跳过。</small></view
         ><view
           v-if="existingMedia.length || images.length || videos.length"
           class="media-preview"
@@ -705,13 +808,18 @@ const mediaUrl = (url: string) =>
               >已上传 {{ index + 1 }}</text
             ></view
           ><view
-            v-for="(path, index) in images"
-            :key="path"
+            v-for="(image, index) in images"
+            :key="image.path"
             class="preview-item"
-            ><image :src="path" mode="aspectFill" /><text
-              class="remove"
-              @click="images.splice(index, 1)"
-              >×</text
+            :class="{ cover: coverImageIndex === index }"
+            ><image :src="image.path" mode="aspectFill" /><text
+              class="cover-mark"
+              >{{ coverImageIndex === index ? "封面" : `${image.width}×${image.height}` }}</text
+            ><view class="media-tools"
+              ><text v-if="coverImageIndex !== index" @click="setCover(index)">设封面</text
+              ><text v-if="index > 0" @click="moveImage(index, -1)">←</text
+              ><text v-if="index < images.length - 1" @click="moveImage(index, 1)">→</text
+              ><text class="remove" @click="removeImage(index)">×</text></view
             ></view
           ><view
             v-for="(path, index) in videos"
@@ -725,7 +833,7 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="media-actions"
           ><view @click="pick('image')"
-            ><strong>＋ 添加图片</strong><small>{{ mediaCount }}/9</small></view
+            ><strong>＋ 添加图片</strong><small>{{ mediaCount }}/9 · 相册/拍照自动压缩</small></view
           ><view @click="pick('video')"
             ><strong>＋ 添加视频</strong
             ><small>{{ videos.length }}/1 · 最长60秒</small></view
@@ -1249,12 +1357,42 @@ const mediaUrl = (url: string) =>
   gap: 12rpx;
   margin-bottom: 18rpx;
 }
+.media-guidance {
+  margin-bottom: 22rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 16rpx;
+  background: #f1f5ea;
+}
+.media-guidance strong,
+.media-guidance text,
+.media-guidance small {
+  display: block;
+}
+.media-guidance strong {
+  color: #40543f;
+  font-size: 25rpx;
+}
+.media-guidance text {
+  margin-top: 8rpx;
+  color: #61705d;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+.media-guidance small {
+  margin-top: 7rpx;
+  color: #879082;
+  font-size: 19rpx;
+  line-height: 1.45;
+}
 .preview-item {
   position: relative;
   height: 160rpx;
   overflow: hidden;
   border-radius: 16rpx;
   background: #e6f3ef;
+}
+.preview-item.cover {
+  box-shadow: 0 0 0 3rpx #536a45;
 }
 .preview-item image,
 .preview-item video {
@@ -1271,17 +1409,32 @@ const mediaUrl = (url: string) =>
   color: #fff;
   font-size: 18rpx;
 }
-.preview-item > .remove {
-  left: auto;
-  right: 8rpx;
+.preview-item > .cover-mark {
+  background: rgba(54, 77, 48, 0.8);
+}
+.media-tools {
+  position: absolute;
   top: 8rpx;
-  bottom: auto;
-  width: 38rpx;
-  height: 38rpx;
-  padding: 0;
-  border-radius: 50%;
+  right: 8rpx;
+  display: flex;
+  gap: 6rpx;
+}
+.media-tools text {
+  min-width: 34rpx;
+  height: 34rpx;
+  padding: 0 8rpx;
+  border-radius: 9rpx;
+  background: rgba(25, 33, 25, 0.66);
+  color: #fff;
+  font-size: 18rpx;
+  line-height: 34rpx;
   text-align: center;
-  font-size: 30rpx;
+}
+.media-tools .remove {
+  min-width: 34rpx;
+  padding: 0;
+  background: rgba(160, 62, 52, 0.82);
+  font-size: 28rpx;
 }
 .media-actions {
   display: grid;

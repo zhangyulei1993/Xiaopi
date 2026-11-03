@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -666,7 +667,11 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(contentType, "video/") {
 			mediaType = "video"
 		}
-		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: 0}); err != nil {
+		sortOrder, _ := strconv.Atoi(r.FormValue("sort"))
+		if sortOrder < 0 {
+			sortOrder = 0
+		}
+		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: sortOrder}); err != nil {
 			_ = os.Remove(path)
 			writeError(w, http.StatusInternalServerError, "failed to save media")
 			return
