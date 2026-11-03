@@ -2,12 +2,13 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { request } from "../../api/client";
-import { type Property, type PropertyLead } from "../../api/properties";
+import { type Property, type PropertyLead, type RentalRequest } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
-const tab = ref<"leads" | "properties">("properties"),
+const tab = ref<"leads" | "properties" | "requests">("properties"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
+  requests = ref<RentalRequest[]>([]),
   loading = ref(false),
   workingID = ref("");
 const statusLabel = (status: string) =>
@@ -20,17 +21,16 @@ const statusLabel = (status: string) =>
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("adminWorkbench", "小皮工作台", "房源运营与数据处理");
 const summary = computed(() => ({
   draft: properties.value.filter((item) => item.status === "draft").length,
-  pending: properties.value.filter((item) => item.status === "pending_review")
-    .length,
-  published: properties.value.filter((item) => item.status === "published")
-    .length,
+  pending: leads.value.filter((item) => item.status !== "converted" && item.status !== "closed").length,
+  incomplete: properties.value.filter((item) => !item.community || !item.location || !item.latitude || !item.longitude || !item.media?.length).length,
 }));
 const load = async () => {
   loading.value = true;
   try {
-    [leads.value, properties.value] = await Promise.all([
+    [leads.value, properties.value, requests.value] = await Promise.all([
       request<PropertyLead[]>("/v1/property-leads"),
       request<Property[]>("/v1/properties"),
+      request<RentalRequest[]>("/v1/admin/rental-requests"),
     ]);
   } catch (error) {
     uni.showToast({
@@ -111,6 +111,22 @@ const publish = (property: Property) => {
   });
 };
 const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
+const copyProperty = async (property: Property) => {
+  if (workingID.value) return;
+  workingID.value = property.id;
+  try {
+    const copy = await request<Property>("/v1/properties", { method: "POST", data: {
+      title: `${property.title || property.community} 副本`, community: property.community,
+      location: property.location, latitude: property.latitude, longitude: property.longitude,
+      layout: property.layout, rentMonthly: property.rentMonthly, feeText: property.feeText,
+      description: property.description, ownerId: property.ownerId || "xiaopi-admin",
+    }});
+    uni.showToast({ title: "已创建房源副本" });
+    edit(copy.id);
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "复制失败", icon: "none" });
+  } finally { workingID.value = ""; }
+};
 </script>
 <template>
   <view class="page" :style="pageStyle"
@@ -126,10 +142,10 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
         ><text>草稿</text></view
       ><view
         ><strong>{{ summary.pending }}</strong
-        ><text>历史待审</text></view
+        ><text>待联系</text></view
       ><view
-        ><strong>{{ summary.published }}</strong
-        ><text>已发布</text></view
+        ><strong>{{ summary.incomplete }}</strong
+        ><text>待补资料</text></view
       ></view
     ><view class="tabs"
       ><text
@@ -138,6 +154,8 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
         >正式房源 {{ properties.length }}</text
       ><text :class="{ active: tab === 'leads' }" @click="tab = 'leads'"
         >房源线索 {{ leads.length }}</text
+      ><text :class="{ active: tab === 'requests' }" @click="tab = 'requests'"
+        >客户需求 {{ requests.length }}</text
       ></view
     ><view v-if="tab === 'properties'" class="new-property" @click="edit()"
       ><text>＋</text
@@ -166,6 +184,16 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
       ><view v-if="!leads.length" class="empty muted"
         >暂无房源线索</view
       ></template
+    ><template v-else-if="tab === 'requests'"
+      ><view v-for="item in requests" :key="item.id" class="card item"
+        ><view class="row"><view class="title small">{{ item.requestType === 'appointment' ? '预约看房' : '找房需求' }}</view><text class="status">{{ item.status || 'new' }}</text></view
+        ><view class="muted info">{{ item.location || '地区待确认' }} · {{ item.layout || '户型不限' }}</view
+        ><view class="property-meta"><text>¥ {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} / 月</text><text>{{ item.moveInDate || '入住时间待定' }}</text></view
+        ><view v-if="item.note" class="note">{{ item.note }}</view
+        ><view class="actions"><button @click="contactLead(item.phone)">联系客户</button><button class="primary" @click="tab = 'properties'">匹配房源</button></view
+        ></view
+      ><view v-if="!requests.length" class="empty muted">暂无客户需求</view
+      ></template
     ><template v-else
       ><view v-for="property in properties" :key="property.id" class="card item"
         ><view class="row"
@@ -183,7 +211,8 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
           ><text>{{ property.location || "位置待补充" }}</text
           ><strong>{{ property.rentMonthly }} 元/月</strong></view
         ><view class="actions"
-          ><button :disabled="property.status === 'published'" @click="edit(property.id)">{{ property.status === 'published' ? '下架后编辑' : '编辑' }}</button
+          ><button @click="edit(property.id)">编辑</button
+          ><button :loading="workingID === property.id" @click="copyProperty(property)">复制</button
           ><button
             v-if="property.status === 'draft' || property.status === 'offline'"
             class="primary"
