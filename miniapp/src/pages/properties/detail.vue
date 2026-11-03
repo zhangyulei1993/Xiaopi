@@ -10,6 +10,7 @@ import {
   type Property,
 } from "../../api/properties";
 import { getSession } from "../../auth/session";
+import { amenityIcon } from "../../utils/amenities";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   loading = ref(true),
@@ -40,26 +41,6 @@ const load = async (id = "") => {
 onLoad((query) => load(String(query?.id || "")));
 const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
-const amenityIcons: Record<string, string> = {
-  冰箱: "/static/amenities/fridge.svg",
-  洗衣机: "/static/amenities/washer.svg",
-  空调: "/static/amenities/air-conditioner.svg",
-  热水器: "/static/amenities/water-heater.svg",
-  电视: "/static/amenities/tv.svg",
-  宽带: "/static/amenities/wifi.svg",
-  燃气: "/static/amenities/gas.svg",
-  油烟机: "/static/amenities/hood.svg",
-  沙发: "/static/amenities/sofa.svg",
-  衣柜: "/static/amenities/wardrobe.svg",
-  书桌: "/static/amenities/desk.svg",
-  床: "/static/amenities/bed.svg",
-  地铁: "/static/amenities/subway.svg",
-  电梯: "/static/amenities/elevator.svg",
-  车位: "/static/amenities/parking.svg",
-  智能门锁: "/static/amenities/smart-lock.svg",
-  阳台: "/static/amenities/balcony.svg",
-  独立卫浴: "/static/amenities/bathroom.svg",
-};
 const amenities = computed(() => {
   const match = item.value?.description?.match(/^配套设施：([^\n]*)\n?/);
   if (!match?.[1]) return [];
@@ -69,7 +50,7 @@ const amenities = computed(() => {
     .filter(Boolean)
     .map((name) => ({
       name,
-      icon: amenityIcons[name] || "/static/amenities/generic.svg",
+      icon: amenityIcon(name),
     }));
 });
 const propertyDescription = computed(() =>

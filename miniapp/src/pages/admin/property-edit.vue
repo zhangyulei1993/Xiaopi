@@ -9,6 +9,7 @@ import {
   type Property,
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
+import { amenityIcon } from "../../utils/amenities";
 
 const id = ref(""),
   currentStatus = ref("draft"),
@@ -364,7 +365,11 @@ const mediaUrl = (url: string) =>
               :value="option"
               :checked="amenities.includes(option)"
               color="#0e8177"
-            />{{ option }}</label
+            /><image
+              class="amenity-option-icon"
+              :src="amenityIcon(option)"
+              mode="aspectFit"
+            /><text>{{ option }}</text></label
           ></checkbox-group
         ><view class="description">
           <textarea
@@ -428,10 +433,22 @@ const mediaUrl = (url: string) =>
           ><button :disabled="saving" @click="save(false)">保存草稿</button
           ><button
             class="primary"
-            :disabled="saving || !requiredReady || !['draft', 'offline'].includes(currentStatus)"
+            :disabled="
+              saving ||
+              !requiredReady ||
+              !['draft', 'offline'].includes(currentStatus)
+            "
             @click="save(true)"
           >
-            {{ saving ? "处理中..." : currentStatus === "pending_review" ? "已在审核中" : currentStatus === "published" ? "已发布" : "保存并提交审核" }}
+            {{
+              saving
+                ? "处理中..."
+                : currentStatus === "pending_review"
+                  ? "已在审核中"
+                  : currentStatus === "published"
+                    ? "已发布"
+                    : "保存并提交审核"
+            }}
           </button></view
         ></view
       ></template
@@ -598,11 +615,19 @@ const mediaUrl = (url: string) =>
   gap: 12rpx;
 }
 .amenity-grid label {
-  padding: 14rpx 8rpx;
+  display: flex;
+  min-height: 132rpx;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 14rpx 8rpx 12rpx;
   border: 1rpx solid #e2eeea;
   border-radius: 14rpx;
   color: #5f8580;
   font-size: 23rpx;
+  text-align: center;
 }
 .amenity-grid label.active {
   border-color: #9dd8cc;
@@ -610,7 +635,20 @@ const mediaUrl = (url: string) =>
   color: #0e8177;
 }
 .amenity-grid checkbox {
-  transform: scale(0.72);
+  position: absolute;
+  width: 1rpx;
+  height: 1rpx;
+  opacity: 0;
+}
+.amenity-option-icon {
+  width: 48rpx;
+  height: 48rpx;
+  padding: 10rpx;
+  border-radius: 18rpx;
+  background: #f0f8f5;
+}
+.amenity-grid label.active .amenity-option-icon {
+  background: #d9f2ea;
 }
 .description {
   position: relative;
