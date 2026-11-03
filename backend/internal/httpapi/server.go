@@ -79,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/admin/temporary-access/status", s.requireRoles(s.updateTemporaryAccessStatus, roleAdmin))
 	mux.HandleFunc("GET /api/v1/config/public", s.publicConfig)
 	mux.HandleFunc("PUT /api/v1/admin/config/public", s.requireRoles(s.updatePublicConfig, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/location/search", s.requireRoles(s.searchLocations, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleUser, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))

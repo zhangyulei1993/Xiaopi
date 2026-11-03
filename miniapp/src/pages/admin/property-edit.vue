@@ -6,7 +6,9 @@ import {
   createProperty,
   getPublicConfig,
   listProperties,
+  searchLocations,
   updateProperty,
+  type LocationSearchItem,
   type Property,
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
@@ -21,6 +23,10 @@ const id = ref(""),
   images = ref<string[]>([]),
   videos = ref<string[]>([]),
   existingMedia = ref<{ type: string; url: string }[]>([]);
+const locationQuery = ref("");
+const locationSearching = ref(false);
+const locationResults = ref<LocationSearchItem[]>([]);
+let locationSearchTimer: ReturnType<typeof setTimeout> | undefined;
 const form = reactive<Partial<Property>>({
   title: "",
   community: "",
@@ -110,8 +116,12 @@ const goToSection = (index: number) => {
 const geoReady = computed(() =>
   Boolean(Number(form.latitude) && Number(form.longitude)),
 );
-const mapLatitude = computed(() => channelLatitude.value);
-const mapLongitude = computed(() => channelLongitude.value);
+const mapLatitude = computed(() =>
+  geoReady.value ? Number(form.latitude) : channelLatitude.value,
+);
+const mapLongitude = computed(() =>
+  geoReady.value ? Number(form.longitude) : channelLongitude.value,
+);
 const channelCircles = computed(() => [
   {
     latitude: channelLatitude.value,
@@ -195,6 +205,41 @@ const selectPointOnMap = (event: {
   form.latitude = Number(latitude.toFixed(7));
   form.longitude = Number(longitude.toFixed(7));
 };
+const runLocationSearch = async () => {
+  const keyword = locationQuery.value.trim();
+  if (keyword.length < 2) {
+    locationResults.value = [];
+    return;
+  }
+  locationSearching.value = true;
+  try {
+    locationResults.value = await searchLocations(
+      keyword,
+      channelLatitude.value,
+      channelLongitude.value,
+    );
+  } catch (error) {
+    locationResults.value = [];
+    uni.showToast({
+      title: error instanceof Error ? error.message : "地址搜索失败",
+      icon: "none",
+    });
+  } finally {
+    locationSearching.value = false;
+  }
+};
+const scheduleLocationSearch = () => {
+  if (locationSearchTimer) clearTimeout(locationSearchTimer);
+  locationSearchTimer = setTimeout(runLocationSearch, 450);
+};
+const applyLocationResult = (item: LocationSearchItem) => {
+  form.community = item.title;
+  form.location = [item.district, item.address].filter(Boolean).join(" · ");
+  form.latitude = Number(item.latitude.toFixed(7));
+  form.longitude = Number(item.longitude.toFixed(7));
+  locationQuery.value = item.title;
+  locationResults.value = [];
+};
 const choosePropertyLocation = () => {
   uni.chooseLocation({
     latitude: geoReady.value ? Number(form.latitude) : channelLatitude.value,
@@ -268,6 +313,7 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
+    locationQuery.value = property.community || property.location || "";
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
     parseLayout(property.layout);
@@ -460,6 +506,33 @@ const mediaUrl = (url: string) =>
             ><strong>位置与周边</strong
             ><small>点击地图落点，或按名称搜索准确位置</small></view
           ><text @click="choosePropertyLocation">搜索地址</text></view
+        ><view class="location-search"
+          ><view class="location-search-box"
+            ><text>⌕</text
+            ><input
+              v-model.trim="locationQuery"
+              placeholder="输入小区、街道或写字楼名称"
+              confirm-type="search"
+              @input="scheduleLocationSearch"
+              @confirm="runLocationSearch"
+            /><small v-if="locationSearching">搜索中</small></view
+          ><view v-if="locationResults.length" class="location-results"
+            ><view
+              v-for="item in locationResults"
+              :key="item.id"
+              @click="applyLocationResult(item)"
+              ><view
+                ><strong>{{ item.title }}</strong
+                ><small>{{ item.district }} · {{ item.address }}</small></view
+              ><text v-if="item.distance"
+                >{{ (item.distance / 1000).toFixed(1) }}km</text
+              ></view
+            ></view
+          ><view
+            v-else-if="locationQuery.length >= 2 && !locationSearching"
+            class="location-search-tip"
+            >继续输入名称，系统会显示武汉范围内的匹配地点</view
+          ></view
         ><view class="channel-scope"
           ><text>关联范围</text
           ><picker
@@ -892,6 +965,79 @@ const mediaUrl = (url: string) =>
   color: #0e8177;
   font-size: 23rpx;
   font-weight: 700;
+}
+.location-search {
+  position: relative;
+  z-index: 3;
+  margin-top: 18rpx;
+}
+.location-search-box {
+  display: flex;
+  height: 82rpx;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 12rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #dbe9e5;
+  border-radius: 16rpx;
+  background: #fbfdfc;
+}
+.location-search-box > text {
+  color: #0e8177;
+  font-size: 32rpx;
+}
+.location-search-box input {
+  min-width: 0;
+  flex: 1;
+  color: #173f3c;
+  font-size: 25rpx;
+}
+.location-search-box small {
+  flex: none;
+  color: #78a39d;
+  font-size: 19rpx;
+}
+.location-results {
+  margin-top: 8rpx;
+  overflow: hidden;
+  border: 1rpx solid #dbe9e5;
+  border-radius: 16rpx;
+  background: #fff;
+  box-shadow: 0 16rpx 36rpx rgba(23, 63, 60, 0.12);
+}
+.location-results > view {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 20rpx;
+  border-bottom: 1rpx solid #edf3f1;
+}
+.location-results > view:last-child {
+  border-bottom: 0;
+}
+.location-results strong,
+.location-results small {
+  display: block;
+}
+.location-results strong {
+  color: #173f3c;
+  font-size: 24rpx;
+}
+.location-results small {
+  margin-top: 6rpx;
+  color: #7f9b96;
+  font-size: 20rpx;
+}
+.location-results > view > text {
+  flex: none;
+  color: #0e8177;
+  font-size: 19rpx;
+}
+.location-search-tip {
+  padding: 12rpx 4rpx 0;
+  color: #8ba39f;
+  font-size: 19rpx;
 }
 .channel-scope > text {
   display: block;
