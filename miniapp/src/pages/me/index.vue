@@ -8,14 +8,17 @@ import {
   type SessionRole,
 } from "../../auth/session";
 import { bindWechatPhone, refreshAuth } from "../../api/properties";
+import { usePagePresentation } from "../../utils/presentation";
 
 const role = ref<SessionRole | null>(null);
 const phone = ref("");
 const isBindingPhone = ref(false);
 const isLoggedIn = computed(() => role.value !== null);
 const isAdmin = computed(() => role.value === "admin");
+const { presentation, loadPresentation, pageStyle } = usePagePresentation("me", "我的", "管理关注与找房需求");
 
 onShow(async () => {
+  await loadPresentation();
   const session = getSession();
   role.value = session?.role || null;
   phone.value = String(uni.getStorageSync("xiaopi_bound_phone") || "");
@@ -83,7 +86,8 @@ const logout = () => {
 </script>
 
 <template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
+    <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
     <view class="profile card" @click="!isLoggedIn && login()">
       <view class="avatar">{{ isAdmin ? "管" : "小" }}</view>
       <view class="profile-copy">

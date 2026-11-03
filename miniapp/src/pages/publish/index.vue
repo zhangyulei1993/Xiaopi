@@ -3,6 +3,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { reactive, ref } from 'vue'
 import { createPropertyLead, refreshAuth } from '../../api/properties'
 import { getSession, saveSession } from '../../auth/session'
+import { usePagePresentation } from '../../utils/presentation'
 
 const form = reactive({
   sourceName: '',
@@ -15,8 +16,10 @@ const form = reactive({
 })
 const submitting = ref(false)
 const checkingRole = ref(true)
+const { presentation, loadPresentation, pageStyle } = usePagePresentation('publish', '发布房源', '提交真实房源线索')
 
 onLoad(async () => {
+  await loadPresentation()
   const session = getSession()
   if (!session) {
     checkingRole.value = false
@@ -65,7 +68,8 @@ const submit = async () => {
 </script>
 
 <template>
-  <view v-if="!checkingRole" class="page">
+  <view v-if="!checkingRole" class="page" :style="pageStyle">
+    <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
     <view class="tip card">
       <view class="title small">提供房源线索</view>
       <view class="muted">提交基础信息后，小皮会电话联系并实地核验。正式房源由运营人员审核发布。</view>

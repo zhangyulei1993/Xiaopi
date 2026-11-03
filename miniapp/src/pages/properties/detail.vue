@@ -11,6 +11,7 @@ import {
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
+import { usePagePresentation } from "../../utils/presentation";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   loading = ref(true),
@@ -18,10 +19,16 @@ const item = ref<Property | null>(null),
   favorite = ref(false);
 const relatedRadiusKm = ref(3);
 const allProperties = ref<Property[]>([]);
+const { presentation, loadPresentation, pageStyle } = usePagePresentation(
+  "propertyDetail",
+  "房源详情",
+  "真实房源，放心查看",
+);
 const load = async (id = "") => {
   loading.value = true;
   loadFailed.value = false;
   try {
+    await loadPresentation();
     const [items, config] = await Promise.all([
       listProperties(),
       getPublicConfig().catch(() => null),
@@ -209,7 +216,8 @@ const contact = () => {
   <view v-if="loading" class="page state">正在加载房源...</view
   ><view v-else-if="loadFailed" class="page state"
     >房源加载失败，请返回重试</view
-  ><view v-else-if="item" class="page detail-page"
+  ><view v-else-if="item" class="page detail-page" :style="pageStyle"
+    ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view v-if="!item.media?.length" class="detail-cover">🏠</view
     ><view v-else class="media-list"
       ><block

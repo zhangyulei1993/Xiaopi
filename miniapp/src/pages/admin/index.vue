@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { request } from "../../api/client";
 import { type Property, type PropertyLead } from "../../api/properties";
 import { hasRole } from "../../auth/session";
+import { usePagePresentation } from "../../utils/presentation";
 const tab = ref<"leads" | "properties">("properties"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
@@ -16,6 +17,7 @@ const statusLabel = (status: string) =>
     published: "已发布",
     offline: "已下架",
   })[status] || status;
+const { presentation, loadPresentation, pageStyle } = usePagePresentation("adminWorkbench", "小皮工作台", "房源运营与数据处理");
 const summary = computed(() => ({
   draft: properties.value.filter((item) => item.status === "draft").length,
   pending: properties.value.filter((item) => item.status === "pending_review")
@@ -39,7 +41,8 @@ const load = async () => {
     loading.value = false;
   }
 };
-onShow(() => {
+onShow(async () => {
+  await loadPresentation();
   if (!hasRole("admin")) {
     uni.showToast({ title: "暂无运营权限", icon: "none" });
     uni.switchTab({ url: "/pages/me/index" });
@@ -110,7 +113,8 @@ const publish = (property: Property) => {
 const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
 </script>
 <template>
-  <view class="page"
+  <view class="page" :style="pageStyle"
+    ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view class="work-head"
       ><view
         ><view class="title">房源运营工作台</view

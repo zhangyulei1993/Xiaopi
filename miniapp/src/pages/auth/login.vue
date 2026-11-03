@@ -1,11 +1,16 @@
 <script setup lang="ts">
+import { onLoad } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { saveSession } from '../../auth/session'
 import { temporaryLogin, wechatLogin } from '../../api/properties'
+import { usePagePresentation } from '../../utils/presentation'
 
 const isLoggingIn = ref(false)
 const phone = ref('')
 const accessCode = ref('')
+const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
+
+onLoad(() => loadPresentation())
 
 const showLoginError = (message = '登录失败，请稍后重试') => {
   uni.showToast({ title: message, icon: 'none' })
@@ -62,7 +67,8 @@ const loginTemporarily = async () => {
 </script>
 
 <template>
-  <view class="page">
+  <view class="page" :style="pageStyle">
+    <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
     <view class="card login-card">
       <view class="logo">小皮</view>
       <view class="title">登录小皮租房</view>

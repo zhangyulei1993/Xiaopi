@@ -13,6 +13,7 @@ import {
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
+import { usePagePresentation } from "../../utils/presentation";
 
 const id = ref(""),
   currentStatus = ref("draft"),
@@ -23,6 +24,11 @@ const id = ref(""),
   images = ref<string[]>([]),
   videos = ref<string[]>([]),
   existingMedia = ref<{ type: string; url: string }[]>([]);
+const { presentation, loadPresentation, pageStyle } = usePagePresentation(
+  "adminPropertyEdit",
+  "房源编辑",
+  "完善资料后即可保存发布",
+);
 const currentLocation = ref<{ latitude: number; longitude: number } | null>(null);
 const locationQuery = ref("");
 const locationSearching = ref(false);
@@ -335,13 +341,14 @@ const loadProperty = async () => {
     loading.value = false;
   }
 };
-onLoad((query) => {
+onLoad(async (query) => {
   if (!hasRole("admin")) {
     uni.showToast({ title: "暂无运营权限", icon: "none" });
     uni.switchTab({ url: "/pages/me/index" });
     return;
   }
   id.value = String(query?.id || "");
+  await loadPresentation();
   syncLayout();
   loadChannels();
   loadProperty();
@@ -454,7 +461,8 @@ const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
 </script>
 <template>
-  <view class="page"
+  <view class="page" :style="pageStyle"
+    ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view class="editor-hero"
       ><view
         ><text>{{ id ? "编辑房源" : "录入新房源" }}</text></view
