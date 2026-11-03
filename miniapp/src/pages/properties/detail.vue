@@ -41,24 +41,24 @@ onLoad((query) => load(String(query?.id || "")));
 const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
 const amenityIcons: Record<string, string> = {
-  冰箱: "❄",
-  洗衣机: "◉",
-  空调: "⌁",
-  热水器: "♨",
-  电视: "▣",
-  宽带: "⌁",
-  燃气: "♨",
-  油烟机: "↟",
-  沙发: "▰",
-  衣柜: "▥",
-  书桌: "▱",
-  床: "▭",
-  地铁: "M",
-  电梯: "↕",
-  车位: "P",
-  智能门锁: "◇",
-  阳台: "☀",
-  独立卫浴: "♨",
+  冰箱: "/static/amenities/fridge.svg",
+  洗衣机: "/static/amenities/washer.svg",
+  空调: "/static/amenities/air-conditioner.svg",
+  热水器: "/static/amenities/water-heater.svg",
+  电视: "/static/amenities/tv.svg",
+  宽带: "/static/amenities/wifi.svg",
+  燃气: "/static/amenities/gas.svg",
+  油烟机: "/static/amenities/hood.svg",
+  沙发: "/static/amenities/sofa.svg",
+  衣柜: "/static/amenities/wardrobe.svg",
+  书桌: "/static/amenities/desk.svg",
+  床: "/static/amenities/bed.svg",
+  地铁: "/static/amenities/subway.svg",
+  电梯: "/static/amenities/elevator.svg",
+  车位: "/static/amenities/parking.svg",
+  智能门锁: "/static/amenities/smart-lock.svg",
+  阳台: "/static/amenities/balcony.svg",
+  独立卫浴: "/static/amenities/bathroom.svg",
 };
 const amenities = computed(() => {
   const match = item.value?.description?.match(/^配套设施：([^\n]*)\n?/);
@@ -67,7 +67,10 @@ const amenities = computed(() => {
     .split(/[、,，]/)
     .map((name) => name.trim())
     .filter(Boolean)
-    .map((name) => ({ name, icon: amenityIcons[name] || "＋" }));
+    .map((name) => ({
+      name,
+      icon: amenityIcons[name] || "/static/amenities/generic.svg",
+    }));
 });
 const propertyDescription = computed(() =>
   String(item.value?.description || "")
@@ -164,7 +167,8 @@ const contact = () => {
           v-for="amenity in amenities"
           :key="amenity.name"
           class="amenity-item"
-          ><text class="amenity-icon">{{ amenity.icon }}</text
+          ><view class="amenity-icon"
+            ><image :src="amenity.icon" mode="aspectFit" /></view
           ><text class="amenity-name">{{ amenity.name }}</text></view
         ></view
       ></view
@@ -278,11 +282,11 @@ const contact = () => {
   border: 1rpx solid #d5eee7;
   border-radius: 22rpx;
   background: #eaf8f4;
-  color: #08766d;
   box-shadow: 0 8rpx 20rpx rgba(26, 111, 100, 0.08);
-  font-size: 32rpx;
-  font-weight: 700;
-  line-height: 1;
+}
+.amenity-icon image {
+  width: 42rpx;
+  height: 42rpx;
 }
 .amenity-name {
   max-width: 100%;
