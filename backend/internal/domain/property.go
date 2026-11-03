@@ -75,7 +75,7 @@ func IsPropertyStatus(value string) bool {
 func CanTransitionPropertyStatus(from, to string) bool {
 	switch PropertyStatus(from) {
 	case PropertyDraft, PropertyOffline:
-		return PropertyStatus(to) == PropertyPending
+		return PropertyStatus(to) == PropertyPending || PropertyStatus(to) == PropertyPublished
 	case PropertyPending:
 		return PropertyStatus(to) == PropertyPublished || PropertyStatus(to) == PropertyDraft
 	case PropertyPublished:

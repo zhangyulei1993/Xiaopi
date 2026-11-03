@@ -26,21 +26,23 @@ type FeaturedChannel struct {
 }
 
 type PublicConfig struct {
-	HeroTitle        string            `json:"heroTitle"`
-	HeroSubtitle     string            `json:"heroSubtitle"`
-	HeroDescription  string            `json:"heroDescription"`
-	Notice           string            `json:"notice"`
-	ContactPhone     string            `json:"contactPhone"`
-	Locations        []MiniappLocation `json:"locations"`
-	FeaturedChannels []FeaturedChannel `json:"featuredChannels"`
+	HeroTitle               string            `json:"heroTitle"`
+	HeroSubtitle            string            `json:"heroSubtitle"`
+	HeroDescription         string            `json:"heroDescription"`
+	Notice                  string            `json:"notice"`
+	ContactPhone            string            `json:"contactPhone"`
+	RelatedPropertyRadiusKm float64           `json:"relatedPropertyRadiusKm"`
+	Locations               []MiniappLocation `json:"locations"`
+	FeaturedChannels        []FeaturedChannel `json:"featuredChannels"`
 }
 
 func DefaultPublicConfig() PublicConfig {
 	return PublicConfig{
-		HeroTitle:       "小皮租房",
-		HeroSubtitle:    "在武汉，住得更省心",
-		HeroDescription: "真实房源 · 可靠服务",
-		Notice:          "签约前请核对合同条款与费用明细，保障自身权益。",
+		HeroTitle:               "小皮租房",
+		HeroSubtitle:            "在武汉，住得更省心",
+		HeroDescription:         "真实房源 · 可靠服务",
+		Notice:                  "签约前请核对合同条款与费用明细，保障自身权益。",
+		RelatedPropertyRadiusKm: 3,
 		Locations: []MiniappLocation{
 			{Label: "光谷", Keyword: "光谷"},
 			{Label: "金融港", Keyword: "金融港"},
@@ -60,6 +62,9 @@ func (config *PublicConfig) Normalize() {
 	config.HeroDescription = strings.TrimSpace(config.HeroDescription)
 	config.Notice = strings.TrimSpace(config.Notice)
 	config.ContactPhone = strings.TrimSpace(config.ContactPhone)
+	if config.RelatedPropertyRadiusKm <= 0 {
+		config.RelatedPropertyRadiusKm = 3
+	}
 	for index := range config.Locations {
 		config.Locations[index].Label = strings.TrimSpace(config.Locations[index].Label)
 		config.Locations[index].Keyword = strings.TrimSpace(config.Locations[index].Keyword)
@@ -99,6 +104,9 @@ func (config PublicConfig) Validate() error {
 	}
 	if config.ContactPhone != "" && !publicConfigPhonePattern.MatchString(config.ContactPhone) {
 		return errors.New("联系电话格式不正确")
+	}
+	if config.RelatedPropertyRadiusKm < 0.5 || config.RelatedPropertyRadiusKm > 20 {
+		return errors.New("附近房源关联距离必须在 0.5 到 20 公里之间")
 	}
 	if len(config.Locations) == 0 || len(config.Locations) > 20 {
 		return errors.New("地理位置数量必须在 1 到 20 个之间")

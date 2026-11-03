@@ -177,6 +177,9 @@ func (s *Server) loadPublicConfig(ctx context.Context) (domain.PublicConfig, err
 	if err := json.Unmarshal(value, &config); err != nil {
 		return domain.PublicConfig{}, err
 	}
+	// Keep newly added optional configuration fields usable for configurations
+	// that were saved before those fields existed.
+	config.Normalize()
 	return config, nil
 }
 

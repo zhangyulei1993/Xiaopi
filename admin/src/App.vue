@@ -13,6 +13,7 @@ type PublicConfig = {
   heroDescription: string
   notice: string
   contactPhone: string
+  relatedPropertyRadiusKm: number
   locations: LocationConfig[]
   featuredChannels: ChannelConfig[]
 }
@@ -55,7 +56,7 @@ const generatingTemporaryCode = ref(false)
 const generatedTemporaryCode = ref('')
 const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
-const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', locations: [], featuredChannels: [] })
+const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [] })
 
 async function api<T>(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem('xiaopi_admin_token')
@@ -71,6 +72,7 @@ async function api<T>(path: string, options: RequestInit = {}) {
 const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.stringify(value))
 const applyConfig = (value: PublicConfig, markSaved = false) => {
   const next = cloneConfig(value)
+  next.relatedPropertyRadiusKm = next.relatedPropertyRadiusKm || 3
   next.featuredChannels = (next.featuredChannels || []).map((item) => ({ latitude: 0, longitude: 0, radiusKm: 5, ...item }))
   Object.assign(publicConfig, next)
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
@@ -146,6 +148,7 @@ const configErrors = computed(() => {
   if (!publicConfig.heroSubtitle.trim()) errors.push('首页主标题不能为空')
   if (!publicConfig.heroDescription.trim()) errors.push('首页副标题不能为空')
   if (publicConfig.contactPhone && !/^\+?\d{6,20}$/.test(publicConfig.contactPhone.trim())) errors.push('联系电话格式不正确')
+  if (!publicConfig.relatedPropertyRadiusKm || publicConfig.relatedPropertyRadiusKm < 0.5 || publicConfig.relatedPropertyRadiusKm > 20) errors.push('附近房源关联距离需在 0.5 到 20 公里之间')
   if (!publicConfig.locations.length) errors.push('至少配置一个地理位置')
   if (publicConfig.locations.length > 20) errors.push('地理位置不能超过 20 个')
   publicConfig.locations.forEach((item, index) => {
@@ -477,6 +480,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <el-form-item label="首页主标题" required><el-input v-model="publicConfig.heroSubtitle" maxlength="30" show-word-limit placeholder="一句话说明服务区域或核心价值" /></el-form-item>
                   <el-form-item label="首页副标题" required><el-input v-model="publicConfig.heroDescription" maxlength="40" show-word-limit placeholder="补充可信度或服务特色" /></el-form-item>
                   <el-form-item label="首页公告"><el-input v-model="publicConfig.notice" type="textarea" :rows="3" maxlength="120" show-word-limit placeholder="发布签约提醒、服务通知或风险提示" /></el-form-item>
+                  <el-form-item label="附近房源关联距离">
+                    <el-select v-model="publicConfig.relatedPropertyRadiusKm" placeholder="选择距离" style="width: 100%">
+                      <el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" />
+                    </el-select>
+                    <div class="form-tip">系统按房源保存的地图坐标自动计算；同一半径内的已发布房源会在详情页展示为“附近房源”。</div>
+                  </el-form-item>
                 </el-form>
               </section>
 

@@ -87,7 +87,7 @@ const changeStatus = async (property: Property, status: string) => {
           ? "已发布"
           : status === "offline"
             ? "已下架"
-            : "已提交审核",
+            : "已提交",
     });
     await load();
   } catch (error) {
@@ -99,6 +99,14 @@ const changeStatus = async (property: Property, status: string) => {
     workingID.value = "";
   }
 };
+const publish = (property: Property) => {
+  uni.showModal({
+    title: "确认发布房源",
+    content: "请先确认标题、位置、租金和图片无误。发布后将立即对用户可见。",
+    confirmText: "确认发布",
+    success: (result) => result.confirm && changeStatus(property, "published"),
+  });
+};
 const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
 </script>
 <template>
@@ -106,7 +114,7 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
     ><view class="work-head"
       ><view
         ><view class="title">房源运营工作台</view
-        ><view class="muted">录入、审核、发布与下架统一处理</view></view
+        ><view class="muted">录入、查看、发布与下架统一处理</view></view
       ><view class="refresh" @click="load">刷新</view></view
     ><view class="summary"
       ><view
@@ -114,7 +122,7 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
         ><text>草稿</text></view
       ><view
         ><strong>{{ summary.pending }}</strong
-        ><text>待审核</text></view
+        ><text>历史待审</text></view
       ><view
         ><strong>{{ summary.published }}</strong
         ><text>已发布</text></view
@@ -131,7 +139,7 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
       ><text>＋</text
       ><view
         ><strong>录入新房源</strong
-        ><small>创建草稿、上传素材并提交审核</small></view
+        ><small>创建草稿、上传素材并确认发布</small></view
       ><text>›</text></view
     ><view v-if="loading" class="muted empty">加载中...</view
     ><template v-else-if="tab === 'leads'"
@@ -176,16 +184,16 @@ const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
             v-if="property.status === 'draft' || property.status === 'offline'"
             class="primary"
             :loading="workingID === property.id"
-            @click="changeStatus(property, 'pending_review')"
+            @click="publish(property)"
           >
-            提交审核</button
+            确认发布</button
           ><button
             v-else-if="property.status === 'pending_review'"
             class="primary"
             :loading="workingID === property.id"
-            @click="changeStatus(property, 'published')"
+            @click="publish(property)"
           >
-            审核并发布</button
+            确认发布</button
           ><button
             v-else-if="property.status === 'published'"
             class="danger"
