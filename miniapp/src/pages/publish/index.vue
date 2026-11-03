@@ -29,7 +29,6 @@ onLoad(async () => {
     const refreshed = await refreshAuth()
     saveSession(refreshed.accessToken, refreshed.role)
     if (refreshed.role === 'admin') {
-      uni.showToast({ title: '管理员无需提交房源线索', icon: 'none' })
       setTimeout(() => uni.switchTab({ url: '/pages/me/index' }), 300)
       return
     }

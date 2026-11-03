@@ -17,7 +17,8 @@ import heartIcon from "../../static/icons/heart.svg";
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
   keyword = ref(""),
-  selectedArea = ref("全部");
+  selectedArea = ref("全部"),
+  currentRole = ref("");
 const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
   configuredLocations = ref<{ label: string; keyword: string }[]>([]),
@@ -43,6 +44,7 @@ const areas = computed(() =>
     ? [{ label: "全部", keyword: "" }, ...configuredLocations.value]
     : [{ label: "全部", keyword: "" }],
 );
+const isAdmin = computed(() => currentRole.value === "admin");
 const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase(),
     price = priceRanges[selectedPrice.value];
@@ -94,6 +96,7 @@ const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
 const load = async () => {
   loading.value = true;
   loadFailed.value = false;
+  currentRole.value = getSession()?.role || "";
   try {
     const [items, config] = await Promise.all([
       listProperties(),
@@ -165,7 +168,6 @@ const toggleFavorite = async (id: string) => {
     return;
   }
   if (getSession()?.role === "admin") {
-    uni.showToast({ title: "管理员无需关注房源", icon: "none" });
     return;
   }
   const next = !favoriteIDs.value.includes(id);
@@ -196,6 +198,7 @@ const toggleFavorite = async (id: string) => {
         confirm-type="search"
       /><text v-if="keyword" class="clear" @click="keyword = ''">×</text></view
     ><view
+      v-if="!isAdmin"
       class="favorite-filter"
       :class="{ active: showFavoritesOnly }"
       @click="showFavoritesOnly = !showFavoritesOnly"
@@ -239,6 +242,7 @@ const toggleFavorite = async (id: string) => {
             mode="aspectFill"
           /><text v-else>小皮</text><view class="badge">可租</view
           ><view
+            v-if="!isAdmin"
             class="favorite"
             :class="{ active: favoriteIDs.includes(item.id) }"
             @click.stop="toggleFavorite(item.id)"
@@ -257,10 +261,10 @@ const toggleFavorite = async (id: string) => {
       ><view class="empty-icon">⌕</view
       ><view class="empty-title">暂时没有完全匹配的房源</view
       ><view class="muted">留下地区、预算和入住需求，小皮会为你继续匹配。</view
-      ><view class="request-button" @click="requestHome"
+      ><view v-if="!isAdmin" class="request-button" @click="requestHome"
         >提交找房需求</view
       ></view
-    ><view class="request-banner" @click="requestHome"
+    ><view v-if="!isAdmin" class="request-banner" @click="requestHome"
       ><view
         ><strong>没找到合适的？</strong
         ><text>告诉小皮你的预算和入住要求</text></view

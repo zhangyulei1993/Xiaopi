@@ -162,10 +162,7 @@ const openPropertyLocation = () => {
 };
 const requireUser = () => {
   if (getSession()?.role === "user") return true;
-  if (getSession()?.role === "admin") {
-    uni.showToast({ title: "管理员无需使用找房互动", icon: "none" });
-    return false;
-  }
+  if (getSession()?.role === "admin") return false;
   uni.navigateTo({ url: "/pages/auth/login" });
   return false;
 };
@@ -270,7 +267,7 @@ const contact = () => {
     ><view class="card overview"
       ><view class="overview-top"
         ><view class="price">{{ item.rentMonthly }} <small>元/月</small></view
-        ><view class="heart" :class="{ active: favorite }" @click="toggle"
+        ><view v-if="!isAdmin" class="heart" :class="{ active: favorite }" @click="toggle"
           >{{ favorite ? "♥" : "♡"
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
         ></view
