@@ -10,6 +10,9 @@ import {
   type Property,
 } from "../../api/properties";
 import { getSession } from "../../auth/session";
+import searchIcon from "../../static/icons/search.svg";
+import filterIcon from "../../static/icons/filter.svg";
+import heartIcon from "../../static/icons/heart.svg";
 
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
@@ -165,7 +168,7 @@ const toggleFavorite = async (id: string) => {
     ><view class="location"
       >找一处合适的家 <text>{{ filteredProperties.length }} 套可租</text></view
     ><view class="search card"
-      ><text>⌕</text
+      ><image :src="searchIcon" mode="aspectFit" />
       ><input
         v-model="keyword"
         placeholder="搜索小区、位置或户型"
@@ -175,7 +178,7 @@ const toggleFavorite = async (id: string) => {
       class="favorite-filter"
       :class="{ active: showFavoritesOnly }"
       @click="showFavoritesOnly = !showFavoritesOnly"
-      >{{ showFavoritesOnly ? "♥ 只看已关注" : "♡ 只看关注" }}</view
+      ><image :src="heartIcon" mode="aspectFit" />{{ showFavoritesOnly ? "只看已关注" : "只看关注" }}</view
     ><view class="filter-block"
       ><view class="filter-label">地区</view
       ><scroll-view scroll-x class="chips"
@@ -213,12 +216,12 @@ const toggleFavorite = async (id: string) => {
             v-if="coverUrl(item)"
             :src="coverUrl(item)"
             mode="aspectFill"
-          /><text v-else>🏠</text><view class="badge">可租</view
+          /><text v-else>小皮</text><view class="badge">可租</view
           ><view
             class="favorite"
             :class="{ active: favoriteIDs.includes(item.id) }"
             @click.stop="toggleFavorite(item.id)"
-            >{{ favoriteIDs.includes(item.id) ? "♥" : "♡" }}</view
+            ><image :src="heartIcon" mode="aspectFit" /></view
           ></view
         ><view class="title small">{{ item.title || item.community }}</view
         ><view class="muted summary"
@@ -238,7 +241,7 @@ const toggleFavorite = async (id: string) => {
       ><view
         ><strong>没找到合适的？</strong
         ><text>告诉小皮你的预算和入住要求</text></view
-      ><text>帮我找房 ›</text></view
+      ><text><image :src="filterIcon" mode="aspectFit" />发布需求 ›</text></view
     ></view
   >
 </template>
@@ -449,4 +452,7 @@ const toggleFavorite = async (id: string) => {
 .favorite-filter.active { border-color:#e9c9bc; background:#fcf1ed; color:#cc654b; }
 .filter-block { margin:16rpx 0; gap:8rpx; }.filter-label { flex-basis:88rpx; color:#5a6757; font-size:22rpx; }.chips text { padding:12rpx 19rpx; margin-right:10rpx; border:1rpx solid #e8e5df; border-radius:12rpx; background:#fff; color:#6f796e; }.chips .active { border-color:#cbd7ad; background:#e6ecd7; color:#42523b; }
 .grid { grid-template-columns:1fr 1fr; gap:14rpx; margin-top:24rpx; }.property { border:0; border-radius:18rpx; background:transparent; overflow:visible; }.cover { height:250rpx; border-radius:18rpx; background:#dde5d4; }.badge { top:12rpx; left:12rpx; padding:6rpx 10rpx; border-radius:8rpx; background:#536a45; }.favorite { top:10rpx; right:10rpx; width:54rpx; height:54rpx; border-radius:50%; color:#536a45; }.small { margin:15rpx 2rpx 5rpx; color:#29382d; font-size:28rpx; }.summary,.property>.price { margin-left:2rpx; margin-right:2rpx; }.summary { min-height:56rpx; color:#899188; font-size:21rpx; }.property>.price { margin-top:7rpx; margin-bottom:10rpx; color:#d76440; font-size:32rpx; }.property>.price small { font-size:20rpx; }.request-banner { margin-top:34rpx; padding:26rpx; border-radius:20rpx; background:#40543f; }.request-banner>text { color:#dce7ac; }
+
+/* Search results use the same calm, photo-first rhythm as the home page. */
+.location{margin:18rpx 0 22rpx;font-size:42rpx;line-height:1.15}.location text{padding-top:10rpx;font-size:22rpx}.search{gap:13rpx;padding:18rpx 20rpx;border-color:#ece5da;border-radius:18rpx}.search image{width:32rpx;height:32rpx;flex:none}.search input{font-size:26rpx}.favorite-filter{display:flex;align-items:center;gap:7rpx;margin:2rpx 0 16rpx;padding:10rpx 15rpx;border-radius:12rpx;font-size:22rpx}.favorite-filter image{width:24rpx;height:24rpx}.favorite-filter:not(.active) image{filter:invert(39%) sepia(10%) saturate(709%) hue-rotate(50deg)}.filter-block{margin:14rpx 0}.filter-label{font-size:22rpx}.chips text{padding:11rpx 17rpx;font-size:22rpx}.grid{display:block;margin-top:26rpx}.property{position:relative;display:flex;gap:18rpx;align-items:stretch;margin-bottom:18rpx;padding:12rpx;border:1rpx solid #eee6dc;border-radius:20rpx;background:#fffdf9;overflow:hidden}.cover{flex:none;width:244rpx;height:192rpx;border-radius:14rpx}.cover>text{color:#fff;font-size:27rpx}.badge{top:9rpx;left:9rpx;padding:5rpx 8rpx;font-size:18rpx}.favorite{top:9rpx;right:9rpx;width:44rpx;height:44rpx;background:rgba(47,44,34,.33)}.favorite image{width:28rpx;height:28rpx}.favorite.active{background:#d66d50}.property .small{min-width:0;flex:1;margin:9rpx 0 0;font-size:28rpx;line-height:1.3}.property .summary{position:absolute;display:-webkit-box;overflow:hidden;margin:50rpx 8rpx 0 274rpx;min-height:0;color:#7e867d;font-size:20rpx;line-height:1.45;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.price{position:absolute;margin:139rpx 0 0 274rpx;color:#d76440;font-size:32rpx}.property>.price small{margin-left:3rpx;color:#8a8f85;font-size:19rpx}.request-banner{margin:32rpx 0 12rpx;padding:25rpx 24rpx;border-radius:18rpx}.request-banner>text{display:flex;align-items:center;gap:5rpx;font-size:22rpx}.request-banner>text image{width:22rpx;height:22rpx;filter:brightness(0) invert(1)}
 </style>
