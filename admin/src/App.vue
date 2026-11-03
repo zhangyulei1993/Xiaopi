@@ -74,7 +74,13 @@ async function api<T>(path: string, options: RequestInit = {}) {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
   })
-  const body = await response.json()
+  const body = await response.json().catch(() => ({ message: '服务返回异常' }))
+  if (response.status === 401 || response.status === 403) {
+    localStorage.removeItem('xiaopi_admin_token')
+    loggedIn.value = false
+    password.value = ''
+    throw new Error('登录已过期，请重新登录')
+  }
   if (!response.ok || body.code !== 0) throw new Error(body.message || '请求失败')
   return body.data as T
 }
