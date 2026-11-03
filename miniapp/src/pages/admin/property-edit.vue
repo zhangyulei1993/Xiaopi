@@ -67,6 +67,49 @@ const requiredReady = computed(() =>
       Number(form.rentMonthly) > 0,
   ),
 );
+const geoReady = computed(() =>
+  Boolean(Number(form.latitude) && Number(form.longitude)),
+);
+const mapLatitude = computed(() => Number(form.latitude) || 30.5928);
+const mapLongitude = computed(() => Number(form.longitude) || 114.3055);
+const mapMarkers = computed(() =>
+  geoReady.value
+    ? [
+        {
+          id: 1,
+          latitude: mapLatitude.value,
+          longitude: mapLongitude.value,
+          width: 30,
+          height: 30,
+          callout: {
+            content: form.community || form.location || "房源位置",
+            display: "ALWAYS",
+            padding: 6,
+            borderRadius: 6,
+            color: "#173f3c",
+            bgColor: "#ffffff",
+          },
+        },
+      ]
+    : [],
+);
+const choosePropertyLocation = () => {
+  uni.chooseLocation({
+    latitude: geoReady.value ? mapLatitude.value : undefined,
+    longitude: geoReady.value ? mapLongitude.value : undefined,
+    success: (result) => {
+      form.latitude = Number(result.latitude.toFixed(7));
+      form.longitude = Number(result.longitude.toFixed(7));
+      form.location = result.address || result.name || form.location;
+      if (!form.community?.trim() && result.name) form.community = result.name;
+    },
+    fail: (error) => {
+      if (!String(error.errMsg || "").includes("cancel")) {
+        uni.showToast({ title: "无法打开地图，请检查定位权限", icon: "none" });
+      }
+    },
+  });
+};
 const mediaCount = computed(
   () =>
     existingMedia.value.filter((item) => item.type === "image").length +
@@ -279,19 +322,29 @@ const mediaUrl = (url: string) =>
             v-model.trim="form.location"
             maxlength="60"
             placeholder="区域 / 地铁站 / 商圈" /></view
-        ><view class="geo-fields"
-          ><view class="field"
-            ><text>纬度（可选）</text
-            ><input
-              v-model.number="form.latitude"
-              type="digit"
-              placeholder="例如 30.512" /></view
-          ><view class="field"
-            ><text>经度（可选）</text
-            ><input
-              v-model.number="form.longitude"
-              type="digit"
-              placeholder="例如 114.421" /></view></view
+        ><view class="map-picker"
+          ><map
+            class="property-map"
+            :latitude="mapLatitude"
+            :longitude="mapLongitude"
+            :markers="mapMarkers"
+            :scale="geoReady ? 15 : 10"
+            show-location
+          /><view class="map-picker-footer"
+            ><view
+              ><strong>{{
+                geoReady ? "已定位房源" : "尚未选择地图位置"
+              }}</strong
+              ><small v-if="geoReady"
+                >{{ Number(form.latitude).toFixed(6) }},
+                {{ Number(form.longitude).toFixed(6) }}</small
+              ><small v-else
+                >选点后自动回填位置和坐标，用于 5 公里频道关联</small
+              ></view
+            ><button size="mini" @click="choosePropertyLocation">
+              {{ geoReady ? "重新选点" : "地图选点" }}
+            </button></view
+          ></view
         ><view class="rent-row"
           ><view class="field"
             ><text>月租 *</text
@@ -567,10 +620,50 @@ const mediaUrl = (url: string) =>
   grid-template-columns: 1fr 1fr;
   gap: 24rpx;
 }
-.geo-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.map-picker {
+  margin: 20rpx 0 8rpx;
+  overflow: hidden;
+  border: 1rpx solid #d6eee8;
+  border-radius: 22rpx;
+  background: #f4fbf8;
+}
+.property-map {
+  width: 100%;
+  height: 300rpx;
+}
+.map-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 18rpx;
+  padding: 20rpx;
+}
+.map-picker-footer > view {
+  min-width: 0;
+  flex: 1;
+}
+.map-picker-footer strong,
+.map-picker-footer small {
+  display: block;
+}
+.map-picker-footer strong {
+  color: #173f3c;
+  font-size: 24rpx;
+}
+.map-picker-footer small {
+  margin-top: 6rpx;
+  color: #78a39d;
+  font-size: 20rpx;
+  line-height: 1.45;
+}
+.map-picker-footer button {
+  flex: none;
+  margin: 0;
+  border: 0;
+  border-radius: 14rpx;
+  background: #0e8177;
+  color: #fff;
+  font-size: 22rpx;
 }
 .rent-input {
   display: flex;
