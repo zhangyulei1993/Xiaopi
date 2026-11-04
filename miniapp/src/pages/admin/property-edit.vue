@@ -35,6 +35,7 @@ const id = ref(""),
   uploadProgress = ref(""),
   images = ref<PendingImage[]>([]),
   videos = ref<string[]>([]),
+  playingVideoId = ref(""),
   existingMedia = ref<{ type: string; url: string }[]>([]);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "adminPropertyEdit",
@@ -498,6 +499,25 @@ const previewExistingImage = (url: string) => {
   const urls = existingImages.value.map((item) => mediaUrl(item.url));
   uni.previewImage({ current: mediaUrl(url), urls });
 };
+const toggleVideo = (videoId: string) => {
+  const context = uni.createVideoContext(videoId);
+  if (playingVideoId.value === videoId) {
+    context.pause();
+    playingVideoId.value = "";
+    return;
+  }
+  if (playingVideoId.value) uni.createVideoContext(playingVideoId.value).pause();
+  context.play();
+  playingVideoId.value = videoId;
+};
+const markVideoPlaying = (videoId: string) => {
+  if (playingVideoId.value && playingVideoId.value !== videoId)
+    uni.createVideoContext(playingVideoId.value).pause();
+  playingVideoId.value = videoId;
+};
+const markVideoPaused = (videoId: string) => {
+  if (playingVideoId.value === videoId) playingVideoId.value = "";
+};
 const setCover = (index: number) => {
   if (index !== 0) {
     const [cover] = images.value.splice(index, 1);
@@ -872,17 +892,41 @@ const mediaUrl = (url: string) =>
           ></view
         ><view v-if="videos.length || existingVideos.length" class="video-preview-list"
           ><text class="media-group-title">房源视频</text
-          ><view v-for="media in existingVideos" :key="media.url" class="video-card"
-            ><video :src="mediaUrl(media.url)" controls show-center-play-btn object-fit="contain" /><text>已上传视频</text></view
+          ><view v-for="(media, index) in existingVideos" :key="media.url" class="video-card"
+            ><video
+              :id="`existing-video-${index}`"
+              :src="mediaUrl(media.url)"
+              controls
+              show-center-play-btn
+              object-fit="contain"
+              @play="markVideoPlaying(`existing-video-${index}`)"
+              @pause="markVideoPaused(`existing-video-${index}`)"
+              @ended="markVideoPaused(`existing-video-${index}`)"
+            /><text>已上传视频</text><view
+              class="video-toggle"
+              @click.stop="toggleVideo(`existing-video-${index}`)"
+              >{{ playingVideoId === `existing-video-${index}` ? "暂停" : "播放" }}</view></view
           ><view
             v-for="(path, index) in videos"
             :key="path"
             class="video-card"
-            ><video :src="path" controls show-center-play-btn object-fit="contain" /><text
+            ><video
+              :id="`pending-video-${index}`"
+              :src="path"
+              controls
+              show-center-play-btn
+              object-fit="contain"
+              @play="markVideoPlaying(`pending-video-${index}`)"
+              @pause="markVideoPaused(`pending-video-${index}`)"
+              @ended="markVideoPaused(`pending-video-${index}`)"
+            /><text
               class="remove"
               @click="videos.splice(index, 1)"
               >×</text
-            ></view
+            ><view
+              class="video-toggle"
+              @click.stop="toggleVideo(`pending-video-${index}`)"
+              >{{ playingVideoId === `pending-video-${index}` ? "暂停" : "播放" }}</view></view
           ></view
         ><view class="media-actions"
           ><view @click="pick('image')"
@@ -1513,6 +1557,19 @@ const mediaUrl = (url: string) =>
   display: block;
   width: 100%;
   height: 100%;
+}
+.video-toggle {
+  position: absolute;
+  top: 14rpx;
+  right: 14rpx;
+  min-width: 88rpx;
+  padding: 10rpx 16rpx;
+  border-radius: 22rpx;
+  background: rgba(20, 29, 23, 0.78);
+  color: #fff;
+  font-size: 21rpx;
+  line-height: 1;
+  text-align: center;
 }
 .media-actions {
   display: grid;
