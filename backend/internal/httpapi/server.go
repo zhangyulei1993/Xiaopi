@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,11 +25,27 @@ type Store interface {
 	UpdateProperty(context.Context, domain.Property) error
 	ListPropertyLeads(context.Context) ([]domain.PropertyLead, error)
 	CreatePropertyLead(context.Context, domain.PropertyLead) error
+	UpdatePropertyLeadFollowUp(context.Context, string, string, string) error
 	UpdatePropertyStatus(context.Context, string, string, string, string) error
 	ConvertLeadToProperty(context.Context, string, domain.Property) error
 	AddPropertyMedia(context.Context, domain.PropertyMedia) error
 	UpsertUser(context.Context, domain.User) error
+	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
+	CreateRentalRequest(context.Context, domain.RentalRequest) error
+	UpdateRentalRequestFollowUp(context.Context, string, string, string) error
+	CreateOperationLog(context.Context, domain.OperationLog) error
+	ListOperationLogs(context.Context, int) ([]domain.OperationLog, error)
+	ListFavoritePropertyIDs(context.Context, string) ([]string, error)
+	SetPropertyFavorite(context.Context, string, string, bool) error
+	ListFavoriteContacts(context.Context) ([]domain.FavoriteContact, error)
 }
+
+type appConfigStore interface {
+	GetAppConfig(context.Context, string) ([]byte, error)
+	UpsertAppConfig(context.Context, string, []byte) error
+}
+
+const publicConfigKey = "miniapp_public"
 
 type Server struct {
 	properties []domain.Property
@@ -53,15 +72,252 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
+	mux.HandleFunc("POST /api/v1/auth/wechat/phone", s.requireRoles(s.bindWechatPhone, roleUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/auth/profile", s.requireRoles(s.getUserProfile, roleUser, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/auth/profile", s.requireRoles(s.updateUserProfile, roleUser, roleAdmin))
+	mux.HandleFunc("POST /api/v1/auth/avatar", s.requireRoles(s.uploadUserAvatar, roleUser, roleAdmin))
+	mux.HandleFunc("POST /api/v1/auth/temporary/login", s.temporaryLogin)
+	mux.HandleFunc("POST /api/v1/auth/refresh", s.requireRoles(s.refreshAuth, roleUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/subscription-templates", s.subscriptionTemplates)
+	mux.HandleFunc("POST /api/v1/message-subscriptions", s.requireRoles(s.registerMessageSubscription, roleUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/users", s.requireRoles(s.listUsers, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/admin-users", s.requireRoles(s.listAdminUsers, roleAdmin))
+	mux.HandleFunc("POST /api/v1/admin/admin-users", s.requireRoles(s.assignAdminUser, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/admin-users/status", s.requireRoles(s.updateAdminUserStatus, roleAdmin))
+	mux.HandleFunc("DELETE /api/v1/admin/admin-users/{userID}", s.requireRoles(s.deleteAdminUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/temporary-access", s.requireRoles(s.listTemporaryAccess, roleAdmin))
+	mux.HandleFunc("POST /api/v1/admin/temporary-access", s.requireRoles(s.createTemporaryAccess, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/temporary-access/status", s.requireRoles(s.updateTemporaryAccessStatus, roleAdmin))
+	mux.HandleFunc("GET /api/v1/config/public", s.publicConfig)
+	mux.HandleFunc("PUT /api/v1/admin/config/public", s.requireRoles(s.updatePublicConfig, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/location/search", s.requireRoles(s.searchLocations, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
-	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleUser, roleAdmin))
+	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/status", s.requireRoles(s.updatePropertyStatus, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads/convert", s.requireRoles(s.convertPropertyLead, roleAdmin))
-	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleUser, roleAdmin))
+	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleAdmin))
 	mux.HandleFunc("GET /api/v1/property-leads", s.requireRoles(s.listPropertyLeads, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads", s.createPropertyLead)
+	mux.HandleFunc("PATCH /api/v1/property-leads/follow-up", s.requireRoles(s.updatePropertyLeadFollowUp, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/rental-requests", s.requireRoles(s.listRentalRequests, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/rental-requests/follow-up", s.requireRoles(s.updateRentalRequestFollowUp, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/operation-logs", s.requireRoles(s.listOperationLogs, roleAdmin))
+	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))
+	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
+	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
+	mux.HandleFunc("DELETE /api/v1/favorites/{propertyID}", s.requireRoles(s.unfavoriteProperty, roleUser))
+	mux.HandleFunc("GET /api/v1/admin/favorite-contacts", s.requireRoles(s.listFavoriteContacts, roleAdmin))
+	mux.HandleFunc("POST /api/v1/footprints/{propertyID}", s.requireRoles(s.recordFootprint, roleUser))
+	mux.HandleFunc("GET /api/v1/footprints", s.requireRoles(s.listFootprints, roleUser))
+	mux.HandleFunc("DELETE /api/v1/footprints", s.requireRoles(s.clearFootprints, roleUser))
 	return logging(cors(mux))
+}
+
+func (s *Server) logOperation(ctx context.Context, operator, targetType, targetID, action, detail string) {
+	if s.store == nil {
+		return
+	}
+	id, err := newID()
+	if err != nil {
+		return
+	}
+	_ = s.store.CreateOperationLog(ctx, domain.OperationLog{ID: id, OperatorID: operator, TargetType: targetType, TargetID: targetID, Action: action, Detail: detail, CreatedAt: time.Now()})
+}
+
+func validFollowUpStatus(status string) bool {
+	switch status {
+	case "new", "contacted", "matched", "completed", "closed", "invalid", "inspection_pending":
+		return true
+	}
+	return false
+}
+
+func (s *Server) updatePropertyLeadFollowUp(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ID           string `json:"id"`
+		Status       string `json:"status"`
+		FollowUpNote string `json:"followUpNote"`
+	}
+	if decodeJSON(w, r, &input) != nil || input.ID == "" || !validFollowUpStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "invalid follow-up")
+		return
+	}
+	if err := s.store.UpdatePropertyLeadFollowUp(r.Context(), input.ID, input.Status, strings.TrimSpace(input.FollowUpNote)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update lead")
+		return
+	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "lead", input.ID, "更新客户线索", input.Status)
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+}
+
+func (s *Server) updateRentalRequestFollowUp(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ID           string `json:"id"`
+		Status       string `json:"status"`
+		FollowUpNote string `json:"followUpNote"`
+	}
+	if decodeJSON(w, r, &input) != nil || input.ID == "" || !validFollowUpStatus(input.Status) {
+		writeError(w, http.StatusBadRequest, "invalid follow-up")
+		return
+	}
+	if err := s.store.UpdateRentalRequestFollowUp(r.Context(), input.ID, input.Status, strings.TrimSpace(input.FollowUpNote)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update request")
+		return
+	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "request", input.ID, "更新客户需求", input.Status)
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+}
+
+func (s *Server) listOperationLogs(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListOperationLogs(r.Context(), 30)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list operation logs")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) listRentalRequests(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListRentalRequests(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list rental requests")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
+	var item domain.RentalRequest
+	if decodeJSON(w, r, &item) != nil {
+		writeError(w, http.StatusBadRequest, "invalid rental request")
+		return
+	}
+	item.Phone = normalizePhone(item.Phone)
+	item.Location = strings.TrimSpace(item.Location)
+	item.Layout = strings.TrimSpace(item.Layout)
+	item.Note = strings.TrimSpace(item.Note)
+	userID := claimsFromContext(r.Context()).Subject
+	if item.Phone == "" {
+		if store, ok := s.userAdminStore(); ok {
+			if user, err := store.GetUser(r.Context(), userID); err == nil {
+				item.Phone = normalizePhone(user.Phone)
+			}
+		}
+	}
+	if item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment" && item.RequestType != "area_subscription") {
+		writeError(w, http.StatusBadRequest, "请填写有效的找房需求")
+		return
+	}
+	if item.RequestType == "appointment" && item.PropertyID == "" {
+		writeError(w, http.StatusBadRequest, "预约房源不能为空")
+		return
+	}
+	if item.RequestType == "area_subscription" && item.Location == "" {
+		writeError(w, http.StatusBadRequest, "订阅片区不能为空")
+		return
+	}
+	item.ID, _ = newID()
+	item.UserID = userID
+	item.Status = "new"
+	item.CreatedAt = time.Now()
+	if err := s.store.CreateRentalRequest(r.Context(), item); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create rental request")
+		return
+	}
+	go s.notifyAdminsOfRequest(context.Background(), item)
+	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": item})
+}
+
+func (s *Server) listFavoriteContacts(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListFavoriteContacts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list favorite contacts")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) listFavorites(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListFavoritePropertyIDs(r.Context(), claimsFromContext(r.Context()).Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list favorites")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) favoriteProperty(w http.ResponseWriter, r *http.Request) { s.setFavorite(w, r, true) }
+func (s *Server) unfavoriteProperty(w http.ResponseWriter, r *http.Request) {
+	s.setFavorite(w, r, false)
+}
+func (s *Server) setFavorite(w http.ResponseWriter, r *http.Request, favorite bool) {
+	propertyID := strings.TrimSpace(r.PathValue("propertyID"))
+	if propertyID == "" {
+		writeError(w, http.StatusBadRequest, "propertyId is required")
+		return
+	}
+	if err := s.store.SetPropertyFavorite(r.Context(), claimsFromContext(r.Context()).Subject, propertyID, favorite); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update favorite")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"propertyId": propertyID, "favorite": favorite}})
+}
+
+func (s *Server) loadPublicConfig(ctx context.Context) (domain.PublicConfig, error) {
+	config := domain.DefaultPublicConfig()
+	config.ContactPhone = os.Getenv("CONTACT_PHONE")
+	configStore, ok := s.store.(appConfigStore)
+	if !ok {
+		return config, nil
+	}
+	value, err := configStore.GetAppConfig(ctx, publicConfigKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return config, nil
+	}
+	if err != nil {
+		return config, err
+	}
+	if err := json.Unmarshal(value, &config); err != nil {
+		return domain.PublicConfig{}, err
+	}
+	// Keep newly added optional configuration fields usable for configurations
+	// that were saved before those fields existed.
+	config.Normalize()
+	return config, nil
+}
+
+func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
+	config, err := s.loadPublicConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load public config")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": config})
+}
+
+func (s *Server) updatePublicConfig(w http.ResponseWriter, r *http.Request) {
+	var config domain.PublicConfig
+	if decodeJSON(w, r, &config) != nil {
+		writeError(w, http.StatusBadRequest, "invalid public config")
+		return
+	}
+	config.Normalize()
+	if err := config.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	configStore, ok := s.store.(appConfigStore)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "configuration store unavailable")
+		return
+	}
+	value, err := json.Marshal(config)
+	if err != nil || configStore.UpsertAppConfig(r.Context(), publicConfigKey, value) != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save public config")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": config})
 }
 
 func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +349,7 @@ func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -122,8 +378,9 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		userID := "dev-user"
-		token, _ := s.tokens.issue(userID, roleUser)
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "isDevMock": true}})
+		userRole := s.wechatUserRole(r.Context(), userID)
+		token, _ := s.tokens.issue(userID, userRole)
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "role": userRole, "isDevMock": true}})
 		return
 	}
 	if appID == "" || secret == "" || len(s.tokens.secret) == 0 {
@@ -147,19 +404,65 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"code": 502, "message": result.ErrMsg})
 		return
 	}
-	userID := fmt.Sprintf("wx-%x", result.OpenID)
+	userID := wechatUserID(result.OpenID)
 	if s.store != nil {
 		if err := s.store.UpsertUser(r.Context(), domain.User{ID: userID, OpenID: result.OpenID, Status: domain.UserActive}); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
 	}
-	token, err := s.tokens.issue(userID, roleUser)
+	userRole := s.wechatUserRole(r.Context(), userID)
+	token, err := s.tokens.issue(userID, userRole)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue access token")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "isDevMock": false}})
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{"accessToken": token, "role": userRole, "isDevMock": false}})
+}
+
+func wechatUserID(openID string) string {
+	digest := sha256.Sum256([]byte(openID))
+	return fmt.Sprintf("wx-%x", digest[:16])
+}
+
+func (s *Server) wechatUserRole(ctx context.Context, userID string) string {
+	store, ok := s.userAdminStore()
+	if !ok {
+		return roleUser
+	}
+	isAdmin, err := store.IsAdminUser(ctx, userID)
+	if err == nil && isAdmin {
+		return roleAdmin
+	}
+	return roleUser
+}
+
+func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromContext(r.Context())
+	role := roleUser
+	if claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin {
+		role = roleAdmin
+	} else {
+		store, ok := s.userAdminStore()
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "user store unavailable")
+			return
+		}
+		if _, err := store.GetUser(r.Context(), claims.Subject); errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusUnauthorized, "登录账号已失效，请重新登录")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to verify user")
+			return
+		}
+		role = s.wechatUserRole(r.Context(), claims.Subject)
+	}
+	token, err := s.tokens.issue(claims.Subject, role)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to refresh access token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"accessToken": token, "role": role}})
 }
 
 func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +485,7 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 func visibleProperties(items []domain.Property, showAll bool) []domain.Property {
 	result := make([]domain.Property, 0, len(items))
 	for _, item := range items {
-		if showAll || item.Status == domain.PropertyPublished {
+		if showAll || item.Status == domain.PropertyPublished || item.Status == domain.PropertyAvailable {
 			result = append(result, item)
 		}
 	}
@@ -255,6 +558,10 @@ func (s *Server) listPropertyLeads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createPropertyLead(w http.ResponseWriter, r *http.Request) {
+	if claims, ok := s.optionalClaims(r); ok && (claims.Role == roleAdmin || s.wechatUserRole(r.Context(), claims.Subject) == roleAdmin) {
+		writeError(w, http.StatusForbidden, "管理员无需提交房源线索")
+		return
+	}
 	var lead domain.PropertyLead
 	if err := decodeJSON(w, r, &lead); err != nil || strings.TrimSpace(lead.Community) == "" || lead.ExpectedRentMonthly < 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "community is required"})
@@ -301,6 +608,16 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
+		}
+	}
+	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
+		if items, err := s.store.ListProperties(r.Context()); err == nil {
+			for _, item := range items {
+				if item.ID == input.PropertyID {
+					go s.notifyAreaSubscribers(context.Background(), item)
+					break
+				}
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
@@ -404,7 +721,11 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(contentType, "video/") {
 			mediaType = "video"
 		}
-		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: 0}); err != nil {
+		sortOrder, _ := strconv.Atoi(r.FormValue("sort"))
+		if sortOrder < 0 {
+			sortOrder = 0
+		}
+		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: sortOrder}); err != nil {
 			_ = os.Remove(path)
 			writeError(w, http.StatusInternalServerError, "failed to save media")
 			return

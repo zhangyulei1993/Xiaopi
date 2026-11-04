@@ -1,24 +1,174 @@
-import { request } from './client'
+import { request } from "./client";
 
-export interface Property { id: string; title: string; community: string; location: string; layout: string; rentMonthly: number; feeText: string; description: string; status: string; media?: { type: string; url: string }[] }
-export const listProperties = () => request<Property[]>('/v1/properties')
-export const createProperty = (property: Partial<Property>) => request<Property>('/v1/properties', { method: 'POST', data: property })
-export const updateProperty = (property: Partial<Property>) => request<Property>('/v1/properties/update', { method: 'PATCH', data: property })
-export interface PropertyLead { id: string; sourceName: string; sourcePhone: string; community: string; location: string; layout: string; expectedRentMonthly: number; note: string; status: string }
-export const createPropertyLead = (lead: Partial<PropertyLead>) => request<PropertyLead>('/v1/property-leads', { method: 'POST', data: lead })
+export interface Property {
+  id: string;
+  title: string;
+  community: string;
+  location: string;
+  latitude?: number;
+  longitude?: number;
+  layout: string;
+  rentMonthly: number;
+  feeText: string;
+  rentType?: string;
+  availableDate?: string;
+  depositPayment?: string;
+  utilitiesText?: string;
+  areaSqm?: number;
+  floorInfo?: string;
+  orientation?: string;
+  elevator?: string;
+  metroMinutes?: number;
+  verificationDate?: string;
+  rulesText?: string;
+  description: string;
+  status: string;
+  ownerId?: string;
+  media?: { type: string; url: string }[];
+}
+export const listProperties = () => request<Property[]>("/v1/properties");
+export const createProperty = (property: Partial<Property>) =>
+  request<Property>("/v1/properties", { method: "POST", data: property });
+export const updateProperty = (property: Partial<Property>) =>
+  request<Property>("/v1/properties/update", {
+    method: "PATCH",
+    data: property,
+  });
+export interface LocationSearchItem {
+  id: string;
+  title: string;
+  address: string;
+  district: string;
+  latitude: number;
+  longitude: number;
+  distance?: number;
+}
+export const searchLocations = (
+  keyword: string,
+  latitude: number,
+  longitude: number,
+) =>
+  request<LocationSearchItem[]>(
+    `/v1/admin/location/search?keyword=${encodeURIComponent(keyword)}&latitude=${latitude}&longitude=${longitude}`,
+  );
+export interface PropertyLead {
+  id: string;
+  sourceName: string;
+  sourcePhone: string;
+  community: string;
+  location: string;
+  layout: string;
+  expectedRentMonthly: number;
+  note: string;
+  status: string;
+	followUpNote?: string;
+}
+export const createPropertyLead = (lead: Partial<PropertyLead>) =>
+  request<PropertyLead>("/v1/property-leads", { method: "POST", data: lead });
+export interface RentalRequest {
+  id?: string;
+  requestType: "general" | "appointment" | "area_subscription";
+  propertyId?: string;
+  phone: string;
+  location: string;
+  layout: string;
+  budgetMin: number;
+  budgetMax: number;
+  moveInDate: string;
+  note: string;
+  status?: string;
+	followUpNote?: string;
+  createdAt?: string;
+}
+export interface OperationLog { id: string; targetType: string; targetId: string; action: string; detail: string; createdAt: string }
+export interface FavoriteContact { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
+export const createRentalRequest = (item: RentalRequest) =>
+  request<RentalRequest>("/v1/rental-requests", { method: "POST", data: item });
+export const listFavorites = () => request<string[]>("/v1/favorites");
+export const setFavorite = (propertyId: string, favorite: boolean) =>
+  request<{ propertyId: string; favorite: boolean }>(
+    `/v1/favorites/${encodeURIComponent(propertyId)}`,
+    { method: favorite ? "PUT" : "DELETE" },
+  );
+export interface Footprint { propertyId: string; viewedAt: string; viewCount: number }
+export const recordFootprint = (propertyId: string) => request(`/v1/footprints/${encodeURIComponent(propertyId)}`, { method: "POST" });
+export const listFootprints = () => request<Footprint[]>("/v1/footprints");
+export const clearFootprints = () => request("/v1/footprints", { method: "DELETE" });
+export interface SubscriptionTemplates { areaListing: string; appointment: string }
+export const getSubscriptionTemplates = () => request<SubscriptionTemplates>("/v1/subscription-templates");
+export const registerMessageSubscription = (templateId: string, area = "") => request("/v1/message-subscriptions", { method: "POST", data: { templateId, area } });
 
 export interface WechatLoginResult {
-  accessToken: string
-  isDevMock?: boolean
+  accessToken: string;
+  role?: "user" | "admin";
+  isDevMock?: boolean;
 }
 
 export interface PublicConfig {
-  contactPhone: string
+  heroTitle: string;
+  heroSubtitle: string;
+  heroDescription: string;
+  notice: string;
+  contactPhone: string;
+  relatedPropertyRadiusKm?: number;
+  locations: { label: string; keyword: string }[];
+  featuredChannels: {
+    icon: string;
+    title: string;
+    subtitle: string;
+    keyword: string;
+    latitude?: number;
+    longitude?: number;
+    radiusKm?: number;
+  }[];
+  pagePresentations?: Record<string, {
+    title?: string;
+    subtitle?: string;
+    backgroundImage?: string;
+  }>;
 }
 
-export const wechatLogin = (code: string) => request<WechatLoginResult>('/v1/auth/wechat/login', {
-  method: 'POST',
-  data: { code },
-})
+export const wechatLogin = (code: string) =>
+  request<WechatLoginResult>("/v1/auth/wechat/login", {
+    method: "POST",
+    data: { code },
+  });
 
-export const getPublicConfig = () => request<PublicConfig>('/v1/config/public')
+export const bindWechatPhone = (code: string) =>
+  request<{ phone: string }>("/v1/auth/wechat/phone", {
+    method: "POST",
+    data: { code },
+  });
+
+export const temporaryLogin = (phone: string, accessCode: string) =>
+  request<WechatLoginResult & { phone: string; temporary: boolean }>(
+    "/v1/auth/temporary/login",
+    {
+      method: "POST",
+      data: { phone, accessCode },
+    },
+  );
+
+export const refreshAuth = () =>
+  request<{ accessToken: string; role: "user" | "admin" }>("/v1/auth/refresh", {
+    method: "POST",
+  });
+
+export interface WechatUserProfile {
+  id: string;
+  nickname: string;
+  avatarUrl: string;
+  phone: string;
+  status: string;
+}
+
+export const getWechatUserProfile = () =>
+  request<WechatUserProfile>("/v1/auth/profile");
+
+export const updateWechatUserProfile = (nickname: string, avatarUrl: string) =>
+  request<WechatUserProfile>("/v1/auth/profile", {
+    method: "PATCH",
+    data: { nickname, avatarUrl },
+  });
+
+export const getPublicConfig = () => request<PublicConfig>("/v1/config/public");
