@@ -417,6 +417,18 @@ func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
 	if claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin {
 		role = roleAdmin
 	} else {
+		store, ok := s.userAdminStore()
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "user store unavailable")
+			return
+		}
+		if _, err := store.GetUser(r.Context(), claims.Subject); errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusUnauthorized, "登录账号已失效，请重新登录")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to verify user")
+			return
+		}
 		role = s.wechatUserRole(r.Context(), claims.Subject)
 	}
 	token, err := s.tokens.issue(claims.Subject, role)

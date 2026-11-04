@@ -45,7 +45,13 @@ onShow(async () => {
     avatarUrl.value = profile.avatarUrl || "";
     phone.value = profile.phone || phone.value;
   } catch {
-    role.value = getSession()?.role || null;
+	role.value = getSession()?.role || null;
+	if (!role.value) {
+		phone.value = "";
+		nickname.value = "";
+		avatarUrl.value = "";
+		uni.removeStorageSync("xiaopi_bound_phone");
+	}
   }
 });
 

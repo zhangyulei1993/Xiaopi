@@ -500,7 +500,7 @@ func TestWechatUserIDFitsDatabaseColumnAndIsStable(t *testing.T) {
 }
 
 func TestRefreshAuthReflectsCurrentAdminAssignment(t *testing.T) {
-	dataStore := &fakeStore{admins: []domain.AdminUser{{UserID: "wx-user-1", Status: "active"}}}
+	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", OpenID: "openid-1", Status: domain.UserActive}}, admins: []domain.AdminUser{{UserID: "wx-user-1", Status: "active"}}}
 	server := testServer(dataStore)
 	userToken, err := server.tokens.issue("wx-user-1", roleUser)
 	if err != nil {
@@ -527,6 +527,18 @@ func TestRefreshAuthReflectsCurrentAdminAssignment(t *testing.T) {
 	}](t, downgraded)
 	if downgradedAuth.Role != roleUser {
 		t.Fatalf("expected user role after disable, got %q", downgradedAuth.Role)
+	}
+}
+
+func TestRefreshAuthRejectsDeletedWechatUser(t *testing.T) {
+	server := testServer(&fakeStore{})
+	token, err := server.tokens.issue("deleted-user", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, token)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", response.Code, response.Body.String())
 	}
 }
 
