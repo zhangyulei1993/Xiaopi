@@ -71,6 +71,7 @@ const channelMapLoading = ref<Record<number, boolean>>({})
 const channelMapCache = ref<Record<string, string>>({})
 const channelMapRequest = ref<Record<number, number>>({})
 const channelMapActiveMarker = ref<Record<number, string>>({})
+const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>({})
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const pagePresentationOptions = [
@@ -269,6 +270,7 @@ function clearChannelLocation(item: ChannelConfig, index: number) {
   item.latitude = 0
   item.longitude = 0
   channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
+  channelSelectedLocation.value = { ...channelSelectedLocation.value, [index]: undefined }
   void loadChannelMapPreview(index, 30.45604, 114.425337)
 }
 
@@ -299,6 +301,10 @@ function selectChannelLocation(item: ChannelConfig, index: number, location: Loc
   item.longitude = Number(location.longitude.toFixed(7))
   channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
   channelMapActiveMarker.value = { ...channelMapActiveMarker.value, [index]: '' }
+  channelSelectedLocation.value = { ...channelSelectedLocation.value, [index]: location }
+  // Do not leave the multi-marker search image visible while the selected
+  // location's single-pin map is being generated.
+  channelMapPreview.value = { ...channelMapPreview.value, [index]: '' }
   void loadChannelMapPreview(index, item.latitude, item.longitude)
 }
 
@@ -356,6 +362,8 @@ function selectChannelMapPoint(item: ChannelConfig, index: number, event: MouseE
   item.longitude = Number(longitude.toFixed(7))
   channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
   channelMapActiveMarker.value = { ...channelMapActiveMarker.value, [index]: '' }
+  channelSelectedLocation.value = { ...channelSelectedLocation.value, [index]: { id: 'map-point', title: '地图选点', address: '', district: '', latitude: item.latitude, longitude: item.longitude } }
+  channelMapPreview.value = { ...channelMapPreview.value, [index]: '' }
   void loadChannelMapPreview(index, item.latitude, item.longitude)
 }
 
@@ -765,7 +773,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     </div>
                   </article>
                 </div>
-                <section v-if="activeChannel" class="channel-map-workbench"><header><div><strong>{{ activeChannel.title || `频道 ${activeChannelIndex + 1}` }} · 地图定位</strong><span>搜索结果、地图选点与中心坐标集中在这里处理。</span></div><div class="channel-location-action"><el-button :loading="channelLocationLoading[activeChannelIndex]" @click="searchChannelLocation(activeChannel, activeChannelIndex)">{{ activeChannel.latitude && activeChannel.longitude ? '重新搜索地点' : '搜索地点' }}</el-button><el-button v-if="activeChannel.latitude && activeChannel.longitude" text type="danger" @click="clearChannelLocation(activeChannel, activeChannelIndex)">清除位置</el-button></div></header><div v-if="channelMapLoading[activeChannelIndex]" class="channel-map-loading">正在加载地图预览…</div><div v-else-if="channelMapPreview[activeChannelIndex]" class="channel-map-picker" title="点击地图设置频道中心" @click="selectChannelMapPoint(activeChannel, activeChannelIndex, $event)"><img class="channel-map-preview" :src="channelMapPreview[activeChannelIndex]" alt="频道范围地图预览，点击可选点" /><template v-for="marker in mapMarkerPositions(activeChannel, activeChannelIndex)" :key="marker.location.id"><button class="channel-map-marker" :class="{ active: channelMapActiveMarker[activeChannelIndex] === marker.location.id }" type="button" :style="{ left: `${marker.left}%`, top: `${marker.top}%` }" :aria-label="marker.location.title" @click.stop="toggleChannelMapMarker(activeChannelIndex, marker.location.id)"><span>{{ marker.label }}</span></button><div v-if="channelMapActiveMarker[activeChannelIndex] === marker.location.id" class="channel-map-callout" :style="{ left: `${marker.left}%`, top: `${marker.top}%` }" @click.stop><strong>{{ marker.location.title }}</strong><span>{{ marker.location.district }} · {{ marker.location.address }}</span><button type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, marker.location)">设为频道中心</button></div></template></div><small v-if="activeChannel.latitude && activeChannel.longitude">已选中心：{{ activeChannel.latitude.toFixed(6) }}, {{ activeChannel.longitude.toFixed(6) }} · 半径 {{ activeChannel.radiusKm }} 公里</small><small v-else>点击地图可直接选点；搜索结果会以大头钉显示在图上。</small><div v-if="channelLocationResults[activeChannelIndex]?.length" class="admin-search-results channel-location-results"><button v-for="(location, locationIndex) in channelLocationResults[activeChannelIndex]" :key="location.id" type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, location)"><span><strong>{{ String.fromCharCode(65 + locationIndex) }} · {{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div><label class="channel-radius-field"><span>地图关联半径</span><el-input-number v-model="activeChannel.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /><small>保存后，中心点半径内的房源会自动关联到此频道。</small></label></section>
+                <section v-if="activeChannel" class="channel-map-workbench"><header><div><strong>{{ activeChannel.title || `频道 ${activeChannelIndex + 1}` }} · 地图定位</strong><span>搜索结果、地图选点与中心坐标集中在这里处理。</span></div><div class="channel-location-action"><el-button :loading="channelLocationLoading[activeChannelIndex]" @click="searchChannelLocation(activeChannel, activeChannelIndex)">{{ activeChannel.latitude && activeChannel.longitude ? '重新搜索地点' : '搜索地点' }}</el-button><el-button v-if="activeChannel.latitude && activeChannel.longitude" text type="danger" @click="clearChannelLocation(activeChannel, activeChannelIndex)">清除位置</el-button></div></header><div v-if="channelMapLoading[activeChannelIndex]" class="channel-map-loading">正在加载已选地点…</div><div v-else-if="channelMapPreview[activeChannelIndex]" class="channel-map-picker" title="点击地图设置频道中心" @click="selectChannelMapPoint(activeChannel, activeChannelIndex, $event)"><img class="channel-map-preview" :src="channelMapPreview[activeChannelIndex]" alt="频道范围地图预览，点击可选点" /><template v-for="marker in mapMarkerPositions(activeChannel, activeChannelIndex)" :key="marker.location.id"><button class="channel-map-marker" :class="{ active: channelMapActiveMarker[activeChannelIndex] === marker.location.id }" type="button" :style="{ left: `${marker.left}%`, top: `${marker.top}%` }" :aria-label="marker.location.title" @click.stop="toggleChannelMapMarker(activeChannelIndex, marker.location.id)"><span>{{ marker.label }}</span></button><div v-if="channelMapActiveMarker[activeChannelIndex] === marker.location.id" class="channel-map-callout" :style="{ left: `${marker.left}%`, top: `${marker.top}%` }" @click.stop><strong>{{ marker.location.title }}</strong><span>{{ marker.location.district }} · {{ marker.location.address }}</span><button type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, marker.location)">设为频道中心</button></div></template></div><small v-if="activeChannel.latitude && activeChannel.longitude">已选中心：{{ channelSelectedLocation[activeChannelIndex]?.title || '地图选点' }} · {{ activeChannel.latitude.toFixed(6) }}, {{ activeChannel.longitude.toFixed(6) }} · 半径 {{ activeChannel.radiusKm }} 公里</small><small v-else>点击地图可直接选点；搜索结果会以大头钉显示在图上。</small><div v-if="channelLocationResults[activeChannelIndex]?.length" class="admin-search-results channel-location-results"><button v-for="(location, locationIndex) in channelLocationResults[activeChannelIndex]" :key="location.id" type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, location)"><span><strong>{{ String.fromCharCode(65 + locationIndex) }} · {{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div><label class="channel-radius-field"><span>地图关联半径</span><el-input-number v-model="activeChannel.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /><small>保存后，中心点半径内的房源会自动关联到此频道。</small></label></section>
                 <div v-else class="config-empty"><strong>还没有精选频道</strong><span>添加频道后，用户可以从首页直接进入对应房源列表。</span><el-button type="primary" plain :icon="Plus" @click="addChannel">添加第一个频道</el-button></div>
               </section>
 
