@@ -3,8 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown, ArrowUp, Collection, Delete, House, Location, Plus, RefreshLeft, User } from '@element-plus/icons-vue'
 
-import AdminSidebar from './components/AdminSidebar.vue'
-import AdminTopbar from './components/AdminTopbar.vue'
+import AdminLayout from './layouts/AdminLayout.vue'
 import { pathForTab, tabFromRoute } from './router'
 import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from './types/domain'
 import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from './config/navigation'
@@ -541,11 +540,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
     </section>
   </main>
 
-  <main v-else class="admin-shell">
-    <AdminSidebar :active="tab" @select="selectTab" />
-    <section class="admin-main">
-      <AdminTopbar :title="tab" @logout="logout" />
-      <div class="admin-content">
+  <AdminLayout v-else :active="tab" :title="tab" @select="selectTab" @logout="logout">
         <el-alert v-if="pageError" class="page-error" :title="pageError" type="error" show-icon :closable="false" />
 
         <template v-if="tab === '运营总览'">
@@ -794,7 +789,5 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </el-table>
           </section>
         </template>
-      </div>
-    </section>
-  </main>
+  </AdminLayout>
 </template>
