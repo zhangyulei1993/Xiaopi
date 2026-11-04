@@ -7,6 +7,7 @@ import AdminTopbar from './components/AdminTopbar.vue'
 
 type LocationConfig = { label: string; keyword: string }
 type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string; latitude: number; longitude: number; radiusKm: number }
+type LocationSearchItem = { id: string; title: string; address: string; district: string; latitude: number; longitude: number; distance?: number }
 type PagePresentation = { title: string; subtitle: string; backgroundImage: string }
 type PublicConfig = {
   heroTitle: string
@@ -63,6 +64,8 @@ const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
 const requestUpdatingID = ref('')
 const propertyFilter = ref('all')
+const channelLocationResults = ref<Record<number, LocationSearchItem[]>>({})
+const channelLocationLoading = ref<Record<number, boolean>>({})
 const pagePresentationOptions = [
   { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'propertyDetail', label: '房源详情' }, { key: 'requests', label: '找房需求' }, { key: 'publish', label: '发布房源' }, { key: 'me', label: '我的' }, { key: 'footprints', label: '浏览足迹' }, { key: 'adminWorkbench', label: '运营工作台' }, { key: 'adminPropertyEdit', label: '编辑房源' }, { key: 'authLogin', label: '微信登录' },
 ]
@@ -248,6 +251,39 @@ function removeLocation(index: number) {
 function addChannel() {
   if (publicConfig.featuredChannels.length >= 12) return
   publicConfig.featuredChannels.push({ icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 5 })
+}
+
+function clearChannelLocation(item: ChannelConfig, index: number) {
+  item.latitude = 0
+  item.longitude = 0
+  channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
+}
+
+function invalidateChannelLocation(item: ChannelConfig, index: number) {
+  if (item.latitude || item.longitude) clearChannelLocation(item, index)
+}
+
+async function searchChannelLocation(item: ChannelConfig, index: number) {
+  const keyword = (item.keyword || item.title).trim()
+  if (keyword.length < 2) {
+    pageError.value = '请先填写至少两个字的频道标题或搜索关键词'
+    return
+  }
+  channelLocationLoading.value = { ...channelLocationLoading.value, [index]: true }
+  try {
+    const items = await api<LocationSearchItem[]>(`/v1/admin/location/search?keyword=${encodeURIComponent(keyword)}&latitude=30.45604&longitude=114.425337`)
+    channelLocationResults.value = { ...channelLocationResults.value, [index]: items }
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : '地点搜索失败'
+  } finally {
+    channelLocationLoading.value = { ...channelLocationLoading.value, [index]: false }
+  }
+}
+
+function selectChannelLocation(item: ChannelConfig, index: number, location: LocationSearchItem) {
+  item.latitude = Number(location.latitude.toFixed(7))
+  item.longitude = Number(location.longitude.toFixed(7))
+  channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
 }
 
 function removeChannel(index: number) {
@@ -617,12 +653,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <header><div class="channel-order"><span>{{ channelStyleOptions.find((style) => style.value === item.icon)?.label || '频道' }}</span><strong>频道 {{ index + 1 }}</strong></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.featuredChannels, index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="下移" @click="moveItem(publicConfig.featuredChannels, index, 1)" /><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
                     <div class="channel-fields">
                       <label class="icon-field"><span>频道样式</span><el-select v-model="item.icon"><el-option v-for="style in channelStyleOptions" :key="style.value" :label="style.label" :value="style.value" /></el-select></label>
-                      <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" /></label>
+                      <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="invalidateChannelLocation(item, index)" /></label>
                       <label><span>副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label>
-                      <label><span>搜索关键词（无坐标兜底）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" /></label>
-                      <label><span>频道中心纬度</span><el-input-number v-model="item.latitude" :min="-90" :max="90" :precision="7" :step="0.0001" controls-position="right" /></label>
-                      <label><span>频道中心经度</span><el-input-number v-model="item.longitude" :min="-180" :max="180" :precision="7" :step="0.0001" controls-position="right" /></label>
-                      <label><span>关联半径（公里）</span><el-input-number v-model="item.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /></label>
+                      <label><span>搜索关键词（未选地点时使用）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" @input="invalidateChannelLocation(item, index)" /></label>
+                      <label class="channel-location-field"><span>地图范围（可选）</span><div class="channel-location-action"><el-button :loading="channelLocationLoading[index]" @click="searchChannelLocation(item, index)">{{ item.latitude && item.longitude ? '重新选点' : '搜索并选点' }}</el-button><el-button v-if="item.latitude && item.longitude" text type="danger" @click="clearChannelLocation(item, index)">清除位置</el-button></div><small v-if="item.latitude && item.longitude">已选中心：{{ item.latitude.toFixed(6) }}, {{ item.longitude.toFixed(6) }} · 半径 {{ item.radiusKm }} 公里</small><small v-else>未选地点时按关键词筛选；不锁定任何地图坐标。</small><div v-if="channelLocationResults[index]?.length" class="admin-search-results channel-location-results"><button v-for="location in channelLocationResults[index]" :key="location.id" type="button" @click="selectChannelLocation(item, index, location)"><span><strong>{{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div></label>
+                      <label><span>地图关联半径（选点后启用）</span><el-input-number v-model="item.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /></label>
                     </div>
                   </article>
                 </div>
