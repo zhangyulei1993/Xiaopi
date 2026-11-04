@@ -55,6 +55,7 @@ func (f *fakeStore) UpdatePropertyStatus(context.Context, string, string, string
 }
 func (*fakeStore) ConvertLeadToProperty(context.Context, string, domain.Property) error { return nil }
 func (*fakeStore) AddPropertyMedia(context.Context, domain.PropertyMedia) error         { return nil }
+func (*fakeStore) ReplacePropertyMedia(context.Context, string, []string) error         { return nil }
 func (*fakeStore) UpsertUser(context.Context, domain.User) error                        { return nil }
 func (f *fakeStore) ListRentalRequests(context.Context) ([]domain.RentalRequest, error) {
 	return f.rentalRequests, nil

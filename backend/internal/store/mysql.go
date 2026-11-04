@@ -316,6 +316,55 @@ func (s *MySQL) AddPropertyMedia(ctx context.Context, media domain.PropertyMedia
 	return err
 }
 
+// ReplacePropertyMedia persists one complete editor ordering. IDs omitted from
+// the order are removed; IDs owned by another property are rejected.
+func (s *MySQL) ReplacePropertyMedia(ctx context.Context, propertyID string, mediaIDs []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM property_media WHERE property_id=? FOR UPDATE`, propertyID)
+	if err != nil {
+		return err
+	}
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		existing[id] = struct{}{}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(mediaIDs))
+	for _, id := range mediaIDs {
+		if _, ok := existing[id]; !ok {
+			return fmt.Errorf("media does not belong to property")
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return fmt.Errorf("duplicate media id")
+		}
+		seen[id] = struct{}{}
+	}
+	for id := range existing {
+		if _, keep := seen[id]; !keep {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM property_media WHERE id=? AND property_id=?`, id, propertyID); err != nil {
+				return err
+			}
+		}
+	}
+	for sort, id := range mediaIDs {
+		if _, err := tx.ExecContext(ctx, `UPDATE property_media SET sort_order=? WHERE id=? AND property_id=?`, sort, id, propertyID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *MySQL) UpdatePropertyStatus(ctx context.Context, propertyID, nextStatus, operatorID, note string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

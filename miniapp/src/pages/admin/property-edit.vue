@@ -6,10 +6,12 @@ import {
   createProperty,
   getPublicConfig,
   listProperties,
+  replacePropertyMedia,
   searchLocations,
   updateProperty,
   type LocationSearchItem,
   type Property,
+  type PropertyMedia,
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
@@ -40,7 +42,8 @@ const id = ref(""),
   images = ref<PendingImage[]>([]),
   videos = ref<string[]>([]),
   playingVideoId = ref(""),
-  existingMedia = ref<{ type: string; url: string }[]>([]);
+  existingMedia = ref<PropertyMedia[]>([]),
+  pendingCoverSelected = ref(false);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "adminPropertyEdit",
   "房源编辑",
@@ -557,6 +560,7 @@ const setCover = (index: number) => {
     images.value.unshift(cover);
   }
   coverImageIndex.value = 0;
+  pendingCoverSelected.value = true;
   uni.showToast({ title: "已设为封面" });
 };
 const moveImage = (index: number, direction: -1 | 1) => {
@@ -573,8 +577,34 @@ const removeImage = (index: number) => {
   if (coverImageIndex.value >= images.value.length)
     coverImageIndex.value = Math.max(0, images.value.length - 1);
 };
+const removeExistingMedia = (id: string) => {
+  existingMedia.value = existingMedia.value.filter((item) => item.id !== id);
+};
+const moveExistingImage = (id: string, direction: -1 | 1) => {
+  const imagesOnly = existingMedia.value.filter((item) => item.type === "image");
+  const index = imagesOnly.findIndex((item) => item.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= imagesOnly.length) return;
+  [imagesOnly[index], imagesOnly[target]] = [imagesOnly[target], imagesOnly[index]];
+  existingMedia.value = [
+    ...imagesOnly,
+    ...existingMedia.value.filter((item) => item.type !== "image"),
+  ];
+};
+const setExistingCover = (id: string) => {
+  const imagesOnly = existingMedia.value.filter((item) => item.type === "image");
+  const target = imagesOnly.find((item) => item.id === id);
+  if (!target) return;
+  existingMedia.value = [
+    target,
+    ...imagesOnly.filter((item) => item.id !== id),
+    ...existingMedia.value.filter((item) => item.type !== "image"),
+  ];
+  pendingCoverSelected.value = false;
+  uni.showToast({ title: "已设为封面" });
+};
 const upload = (path: string, type: string, propertyId: string, sort: number) =>
-  new Promise<void>((resolve, reject) =>
+  new Promise<PropertyMedia>((resolve, reject) =>
     uni.uploadFile({
       url: `${API_ORIGIN}/api/v1/media/upload`,
       filePath: path,
@@ -586,16 +616,11 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
         try {
           const body = JSON.parse(String(res.data || "{}"));
           if (body?.message) message = body.message;
-          if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) {
-            resolve();
+          if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0 && body?.data?.id) {
+            resolve(body.data as PropertyMedia);
             return;
           }
-        } catch {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve();
-            return;
-          }
-        }
+        } catch {}
         reject(new Error(message));
       },
       fail: (error) => reject(new Error(error.errMsg || "素材上传失败")),
@@ -645,12 +670,21 @@ const save = async (openPreview = false) => {
         sort: existingMedia.value.length + images.value.length,
       })),
     ];
+    const uploaded: PropertyMedia[] = [];
     for (let index = 0; index < queue.length; index++) {
       uploadProgress.value = `上传素材 ${index + 1}/${queue.length}`;
-      await upload(queue[index].path, queue[index].type, property.id, queue[index].sort);
+      uploaded.push(await upload(queue[index].path, queue[index].type, property.id, queue[index].sort));
     }
+    const uploadedImages = uploaded.filter((item) => item.type === "image");
+    const uploadedVideos = uploaded.filter((item) => item.type === "video");
+    const finalMedia = pendingCoverSelected.value
+      ? [...uploadedImages, ...existingMedia.value, ...uploadedVideos]
+      : [...existingMedia.value, ...uploadedImages, ...uploadedVideos];
+    await replacePropertyMedia(property.id, finalMedia.map((item) => item.id));
+    existingMedia.value = finalMedia;
     images.value = [];
     coverImageIndex.value = 0;
+    pendingCoverSelected.value = false;
     videos.value = [];
     currentStatus.value = property.status;
     uni.showModal({
@@ -935,11 +969,16 @@ const mediaUrl = resolveAssetUrl;
           ><view class="photo-grid"
             ><view
               v-for="(media, index) in existingImages"
-              :key="media.url"
+              :key="media.id"
               class="photo-card uploaded-photo"
               @click="previewExistingImage(media.url)"
               ><image :src="mediaUrl(media.url)" mode="aspectFill" /><text
-                >已上传 {{ index + 1 }}</text
+                >{{ index === 0 ? "封面" : `已上传 ${index + 1}` }}</text
+              ><view class="media-tools" @click.stop
+                ><text v-if="index > 0" @click="setExistingCover(media.id)">封面</text
+                ><text v-if="index > 0" @click="moveExistingImage(media.id, -1)">←</text
+                ><text v-if="index < existingImages.length - 1" @click="moveExistingImage(media.id, 1)">→</text
+                ><text class="remove" @click="removeExistingMedia(media.id)">×</text></view
               ></view
             ></view
           ></view
@@ -966,7 +1005,7 @@ const mediaUrl = resolveAssetUrl;
           ></view
         ><view v-if="videos.length || existingVideos.length" class="video-preview-list"
           ><text class="media-group-title">房源视频</text
-          ><view v-for="(media, index) in existingVideos" :key="media.url" class="video-entry"
+          ><view v-for="(media, index) in existingVideos" :key="media.id" class="video-entry"
             ><view class="video-card"><video
               :id="`existing-video-${index}`"
               :src="mediaUrl(media.url)"
@@ -976,7 +1015,7 @@ const mediaUrl = resolveAssetUrl;
               @play="markVideoPlaying(`existing-video-${index}`)"
               @pause="markVideoPaused(`existing-video-${index}`)"
               @ended="markVideoPaused(`existing-video-${index}`)"
-            /><text>已上传视频</text></view><button
+            /><text>已上传视频</text><text class="remove" @click="removeExistingMedia(media.id)">×</text></view><button
               class="video-toggle"
               @click.stop="toggleVideo(`existing-video-${index}`)"
               >{{ playingVideoId === `existing-video-${index}` ? "暂停播放" : "播放视频" }}</button></view

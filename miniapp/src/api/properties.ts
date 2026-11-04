@@ -24,7 +24,14 @@ export interface Property {
   description: string;
   status: string;
   ownerId?: string;
-  media?: { type: string; url: string }[];
+  media?: PropertyMedia[];
+}
+export interface PropertyMedia {
+  id: string;
+  propertyId?: string;
+  type: string;
+  url: string;
+  sort?: number;
 }
 export const listProperties = () => request<Property[]>("/v1/properties");
 export const createProperty = (property: Partial<Property>) =>
@@ -33,6 +40,11 @@ export const updateProperty = (property: Partial<Property>) =>
   request<Property>("/v1/properties/update", {
     method: "PATCH",
     data: property,
+  });
+export const replacePropertyMedia = (propertyId: string, mediaIds: string[]) =>
+  request("/v1/properties/media", {
+    method: "PATCH",
+    data: { propertyId, mediaIds },
   });
 export interface LocationSearchItem {
   id: string;

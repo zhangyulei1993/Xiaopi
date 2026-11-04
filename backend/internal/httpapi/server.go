@@ -29,6 +29,7 @@ type Store interface {
 	UpdatePropertyStatus(context.Context, string, string, string, string) error
 	ConvertLeadToProperty(context.Context, string, domain.Property) error
 	AddPropertyMedia(context.Context, domain.PropertyMedia) error
+	ReplacePropertyMedia(context.Context, string, []string) error
 	UpsertUser(context.Context, domain.User) error
 	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
 	CreateRentalRequest(context.Context, domain.RentalRequest) error
@@ -97,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/properties/status", s.requireRoles(s.updatePropertyStatus, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads/convert", s.requireRoles(s.convertPropertyLead, roleAdmin))
 	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/properties/media", s.requireRoles(s.replacePropertyMedia, roleAdmin))
 	mux.HandleFunc("GET /api/v1/property-leads", s.requireRoles(s.listPropertyLeads, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads", s.createPropertyLead)
 	mux.HandleFunc("PATCH /api/v1/property-leads/follow-up", s.requireRoles(s.updatePropertyLeadFollowUp, roleAdmin))
@@ -623,6 +625,26 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
 }
 
+func (s *Server) replacePropertyMedia(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		PropertyID string   `json:"propertyId"`
+		MediaIDs   []string `json:"mediaIds"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil || strings.TrimSpace(input.PropertyID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "propertyId is required"})
+		return
+	}
+	if s.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
+		return
+	}
+	if err := s.store.ReplacePropertyMedia(r.Context(), input.PropertyID, input.MediaIDs); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+}
+
 func (s *Server) convertPropertyLead(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		LeadID      string `json:"leadId"`
@@ -710,18 +732,23 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mediaPath := "/uploads/" + name
-	if propertyID := r.FormValue("propertyId"); propertyID != "" && s.store != nil {
-		mediaID, idErr := newID()
+	mediaID := ""
+	mediaType := ""
+	sortOrder := 0
+	propertyID := r.FormValue("propertyId")
+	if propertyID != "" && s.store != nil {
+		var idErr error
+		mediaID, idErr = newID()
 		if idErr != nil {
 			_ = os.Remove(path)
 			writeError(w, http.StatusInternalServerError, "failed to create media id")
 			return
 		}
-		mediaType := "image"
+		mediaType = "image"
 		if strings.HasPrefix(contentType, "video/") {
 			mediaType = "video"
 		}
-		sortOrder, _ := strconv.Atoi(r.FormValue("sort"))
+		sortOrder, _ = strconv.Atoi(r.FormValue("sort"))
 		if sortOrder < 0 {
 			sortOrder = 0
 		}
@@ -731,7 +758,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": map[string]string{"name": name, "path": mediaPath}})
+	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": map[string]any{"id": mediaID, "propertyId": propertyID, "type": mediaType, "url": mediaPath, "sort": sortOrder, "name": name, "path": mediaPath}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
