@@ -144,15 +144,13 @@ func (s *Server) staticLocationMap(w http.ResponseWriter, r *http.Request) {
 	}
 	query.Set("size", "620*260")
 	query.Set("scale", "2")
-	markers := make([]string, 0, max(1, len(points)))
 	if len(points) == 0 {
-		markers = append(markers, "size:large|color:0x40543f|label:P|"+strconv.FormatFloat(latitude, 'f', 6, 64)+","+strconv.FormatFloat(longitude, 'f', 6, 64))
+		query.Add("markers", "size:large|color:0x40543f|label:P|"+strconv.FormatFloat(latitude, 'f', 6, 64)+","+strconv.FormatFloat(longitude, 'f', 6, 64))
 	} else {
 		for index, point := range points {
-			markers = append(markers, "size:medium|color:0xd76440|label:"+string(rune('A'+index))+"|"+strconv.FormatFloat(point.Latitude, 'f', 6, 64)+","+strconv.FormatFloat(point.Longitude, 'f', 6, 64))
+			query.Add("markers", "size:mid|color:0xd76440|label:"+string(rune('A'+index))+"|"+strconv.FormatFloat(point.Latitude, 'f', 6, 64)+","+strconv.FormatFloat(point.Longitude, 'f', 6, 64))
 		}
 	}
-	query.Set("markers", strings.Join(markers, ";"))
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.config.TencentMapURL+"/ws/staticmap/v2/?"+query.Encode(), nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "地图预览请求创建失败")
