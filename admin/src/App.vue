@@ -9,6 +9,7 @@ import WechatUsersPage from './pages/WechatUsersPage.vue'
 import IntentionsPage from './pages/IntentionsPage.vue'
 import PropertiesPage from './pages/PropertiesPage.vue'
 import RentalRequestsPage from './pages/RentalRequestsPage.vue'
+import LeadsPage from './pages/LeadsPage.vue'
 import { pathForTab, tabFromRoute } from './router'
 import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from './types/domain'
 import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from './config/navigation'
@@ -157,12 +158,6 @@ router.afterEach((to) => {
   tab.value = tabFromRoute(to.params.tab) as TabKey
 })
 
-const rows = computed(() => {
-  if (tab.value === '线索管理') return leads.value.map((item) => ({ name: item.sourceName, info: `${item.community} · ${item.sourcePhone}`, status: item.status }))
-  return properties.value.map((item) => ({ name: item.title, info: item.community, status: item.status }))
-})
-const currentMetric = computed(() => tab.value === '线索管理' ? '线索总数' : '房源总数')
-const statusType = (status: string) => status === '正常' || status === 'PUBLISHED' ? 'success' : status === 'PENDING' ? 'warning' : 'info'
 const formatTime = (value: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
 const propertyStatuses = [
   { key: 'published', label: '已发布', icon: '✓' }, { key: 'available', label: '可租', icon: '钥' },
@@ -736,25 +731,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </div>
         </template>
 
-        <template v-else>
-          <section class="page-header">
-            <div><span>业务管理</span><h1>{{ tab }}</h1><p>查看线上业务数据，状态信息与小程序使用同一套 API。</p></div>
-            <el-button :loading="loading" @click="load">刷新数据</el-button>
-          </section>
-          <div class="stats-grid list-stats">
-            <section class="surface compact-stat"><span>{{ currentMetric }}</span><strong>{{ rows.length }}</strong></section>
-            <section class="surface compact-stat"><span>今日新增</span><strong>0</strong></section>
-            <section class="surface compact-stat"><span>待处理事项</span><strong>{{ tab === '线索管理' ? leads.length : 0 }}</strong></section>
-          </div>
-          <section class="surface table-panel">
-            <div class="table-heading"><div><h2>{{ tab }}列表</h2><p>共 {{ rows.length }} 条记录</p></div></div>
-            <el-table v-loading="loading" :data="rows" empty-text="暂无数据">
-              <el-table-column prop="name" label="名称" min-width="180" />
-              <el-table-column prop="info" label="信息" min-width="240" />
-              <el-table-column label="状态" width="140"><template #default="scope"><el-tag :type="statusType(scope.row.status)" effect="light">{{ scope.row.status || '未知' }}</el-tag></template></el-table-column>
-              <el-table-column label="操作" width="120" align="center"><template #default><el-button link type="primary">查看</el-button></template></el-table-column>
-            </el-table>
-          </section>
-        </template>
+        <LeadsPage v-else-if="tab === '线索管理'" :leads="leads" :loading="loading" @refresh="load" />
   </AdminLayout>
 </template>
