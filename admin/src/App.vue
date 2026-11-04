@@ -27,7 +27,7 @@ type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: stri
 type TemporaryAccess = { id: number; phone: string; accessCode: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
 type TabKey = '运营总览' | '房源审核' | '线索管理' | '租客需求' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
 
-const apiBase = import.meta.env.VITE_API_BASE || 'http://150.158.157.213/api'
+const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
 const tab = ref<TabKey>('运营总览')
 const username = ref('admin')
