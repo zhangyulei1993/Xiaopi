@@ -949,9 +949,9 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="media-actions"
           ><view @click="pick('image')"
-            ><strong>＋ 图片</strong><small>{{ mediaCount }}/9</small></view
+            ><strong>＋ 图片</strong><small>{{ mediaCount }}/9 · ≥640px · ≤10MB</small></view
           ><view @click="pick('video')"
-            ><strong>＋ 视频</strong><small>{{ videos.length }}/1</small></view
+            ><strong>＋ 视频</strong><small>{{ videos.length }}/1 · ≤20MB · 60秒</small></view
           ></view
         ></view
       ><view class="save-space" /><view class="save-bar"
