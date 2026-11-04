@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -92,6 +93,46 @@ func (s *Server) searchLocations(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+// staticLocationMap returns a small server-proxied Tencent static map. The
+// browser never receives the location-service key.
+func (s *Server) staticLocationMap(w http.ResponseWriter, r *http.Request) {
+	if s.config.TencentMapKey == "" {
+		writeError(w, http.StatusServiceUnavailable, "地图服务尚未配置")
+		return
+	}
+	latitude, longitude := queryFloat(r, "latitude", 0), queryFloat(r, "longitude", 0)
+	if latitude == 0 || longitude == 0 || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 {
+		writeError(w, http.StatusBadRequest, "地图坐标不正确")
+		return
+	}
+	query := url.Values{}
+	query.Set("key", s.config.TencentMapKey)
+	query.Set("center", strconv.FormatFloat(latitude, 'f', 6, 64)+","+strconv.FormatFloat(longitude, 'f', 6, 64))
+	query.Set("zoom", "14")
+	query.Set("size", "620*260")
+	query.Set("scale", "2")
+	query.Set("markers", "size:large|color:0x40543f|label:P|"+strconv.FormatFloat(latitude, 'f', 6, 64)+","+strconv.FormatFloat(longitude, 'f', 6, 64))
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.config.TencentMapURL+"/ws/staticmap/v2/?"+query.Encode(), nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "地图预览请求创建失败")
+		return
+	}
+	response, err := s.httpClient.Do(request)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "地图预览暂时不可用")
+		return
+	}
+	defer response.Body.Close()
+	contentType := response.Header.Get("Content-Type")
+	if response.StatusCode != http.StatusOK || !strings.HasPrefix(contentType, "image/") {
+		writeError(w, http.StatusBadGateway, "地图预览生成失败")
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	_, _ = io.Copy(w, io.LimitReader(response.Body, 5<<20))
 }
 
 func queryFloat(r *http.Request, name string, fallback float64) float64 {
