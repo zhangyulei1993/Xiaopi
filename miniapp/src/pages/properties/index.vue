@@ -162,6 +162,12 @@ const coverUrl = (item: Property) => {
       : `${API_ORIGIN}${cover}`
     : "";
 };
+const serviceLabels = (item: Property) => {
+  const source = String(item.feeText || "");
+  return ["直租", "无中介费", "可短租", "押一付一", "拎包入住", "民水民电"]
+    .filter((label) => source.includes(label))
+    .slice(0, 2);
+};
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
     uni.navigateTo({ url: "/pages/auth/login" });
@@ -241,6 +247,7 @@ const toggleFavorite = async (id: string) => {
             :src="coverUrl(item)"
             mode="aspectFill"
           /><text v-else>小皮</text><view class="badge">可租</view
+          ><view v-if="serviceLabels(item)[0]" class="cover-benefit">{{ serviceLabels(item)[0] }}</view
           ><view
             v-if="!isAdmin"
             class="favorite"
@@ -251,7 +258,8 @@ const toggleFavorite = async (id: string) => {
         ><view class="property-copy"
           ><view class="title small">{{ item.title || item.community }}</view
           ><view class="muted summary"
-            >{{ item.layout }} · {{ item.location }}</view
+            >{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</view
+          ><view v-if="serviceLabels(item).length" class="service-tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view
           ><view class="price"
             >{{ item.rentMonthly }} <small>元/月</small></view
           ></view
@@ -487,4 +495,5 @@ const toggleFavorite = async (id: string) => {
 .location{display:flex;align-items:flex-end;justify-content:space-between;gap:18rpx;font-size:44rpx;line-height:1.18}.location text{float:none;flex:none;padding:0 0 4rpx;font-size:22rpx;line-height:1.2}.filter-label{margin-bottom:10rpx;font-weight:600;line-height:1.25}.chips text{line-height:1.2}.property .small{font-weight:700}.property .summary{line-height:1.5}.request-banner strong{font-size:29rpx;line-height:1.3}.request-banner>view>text{display:block;margin-top:7rpx;line-height:1.45}
 .location{min-width:0}.location>text:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property-copy{display:flex;min-width:0;flex:1;flex-direction:column;padding:9rpx 4rpx 3rpx 0}.property .small{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property .summary{position:static;display:-webkit-box;margin:9rpx 0 0;min-height:0;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.property-copy>.price{position:static;margin:12rpx 0 0;font-size:34rpx;line-height:1.1}.property>.property-copy>.price small{font-size:19rpx}.property{min-height:216rpx;box-sizing:border-box}
 .property>.property-copy>.price{margin-top:auto;padding-top:12rpx}
+.cover-benefit{position:absolute;bottom:0;left:0;padding:8rpx 11rpx;border-radius:0 10rpx 0 0;background:#d66d50;color:#fff;font-size:18rpx;font-weight:700;line-height:1.1}.service-tags{display:flex;gap:7rpx;overflow:hidden;margin-top:9rpx;white-space:nowrap}.service-tags text{flex:none;padding:5rpx 8rpx;border-radius:7rpx;background:#edf0dc;color:#536a45;font-size:18rpx;line-height:1.2}.service-tags text:nth-child(2){background:#f8eadf;color:#b7644b}.property>.property-copy>.service-tags+.price{margin-top:auto;padding-top:8rpx}
 </style>
