@@ -1,0 +1,12 @@
+export type LocationConfig = { label: string; keyword: string }
+export type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string; latitude: number; longitude: number; radiusKm: number }
+export type LocationSearchItem = { id: string; title: string; address: string; district: string; latitude: number; longitude: number; distance?: number }
+export type PagePresentation = { title: string; subtitle: string; backgroundImage: string }
+export type PublicConfig = { heroTitle: string; heroSubtitle: string; heroDescription: string; notice: string; contactPhone: string; relatedPropertyRadiusKm: number; locations: LocationConfig[]; featuredChannels: ChannelConfig[]; pagePresentations: Record<string, PagePresentation> }
+export type Property = { id: string; title: string; community: string; location: string; layout: string; rentMonthly: number; status: string; media?: { type: string; url: string }[] }
+export type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
+export type RentalRequest = { id: string; requestType: string; propertyId: string; phone: string; location: string; layout: string; budgetMin: number; budgetMax: number; moveInDate: string; note: string; status: string; followUpNote?: string; createdAt: string }
+export type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
+export type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
+export type TemporaryAccess = { id: number; phone: string; accessCode: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
+export type FavoriteContact = { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }

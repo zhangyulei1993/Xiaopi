@@ -6,29 +6,9 @@ import { ArrowDown, ArrowUp, Collection, Delete, House, Location, Plus, RefreshL
 import AdminSidebar from './components/AdminSidebar.vue'
 import AdminTopbar from './components/AdminTopbar.vue'
 import { pathForTab, tabFromRoute } from './router'
-
-type LocationConfig = { label: string; keyword: string }
-type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string; latitude: number; longitude: number; radiusKm: number }
-type LocationSearchItem = { id: string; title: string; address: string; district: string; latitude: number; longitude: number; distance?: number }
-type PagePresentation = { title: string; subtitle: string; backgroundImage: string }
-type PublicConfig = {
-  heroTitle: string
-  heroSubtitle: string
-  heroDescription: string
-  notice: string
-  contactPhone: string
-  relatedPropertyRadiusKm: number
-  locations: LocationConfig[]
-  featuredChannels: ChannelConfig[]
-  pagePresentations: Record<string, PagePresentation>
-}
-type Property = { id: string; title: string; community: string; location: string; layout: string; rentMonthly: number; status: string; media?: { type: string; url: string }[] }
-type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
-type RentalRequest = { id: string; requestType: string; propertyId: string; phone: string; location: string; layout: string; budgetMin: number; budgetMax: number; moveInDate: string; note: string; status: string; followUpNote?: string; createdAt: string }
-type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
-type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
-type TemporaryAccess = { id: number; phone: string; accessCode: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
-type FavoriteContact = { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
+import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from './types/domain'
+import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from './config/navigation'
+import { createAdminApi } from './services/api'
 type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
@@ -78,49 +58,9 @@ const channelMapActiveMarker = ref<Record<number, string>>({})
 const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>({})
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
-const pagePresentationOptions = [
-  { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'propertyDetail', label: '房源详情' }, { key: 'requests', label: '找房需求' }, { key: 'publish', label: '发布房源' }, { key: 'me', label: '我的' }, { key: 'footprints', label: '浏览足迹' }, { key: 'adminWorkbench', label: '运营工作台' }, { key: 'adminPropertyEdit', label: '编辑房源' }, { key: 'authLogin', label: '微信登录' },
-]
-const defaultPagePresentations = (): Record<string, PagePresentation> => ({
-  home: { title: '今天想住哪里？', subtitle: '搜索小区、地铁或商圈', backgroundImage: '' },
-  properties: { title: '找一处合适的家', subtitle: '按地区和预算筛选', backgroundImage: '' },
-  propertyDetail: { title: '房源详情', subtitle: '真实房源，放心查看', backgroundImage: '' },
-  me: { title: '我的', subtitle: '管理关注与找房需求', backgroundImage: '' },
-  footprints: { title: '浏览足迹', subtitle: '最近看过的房源', backgroundImage: '' },
-  requests: { title: '小皮帮你找房', subtitle: '告诉我们你的找房需求', backgroundImage: '' },
-  publish: { title: '发布房源', subtitle: '提交真实房源线索', backgroundImage: '' },
-  adminWorkbench: { title: '小皮工作台', subtitle: '房源运营与数据处理', backgroundImage: '' },
-  adminPropertyEdit: { title: '编辑房源', subtitle: '完善房源信息后发布', backgroundImage: '' },
-  authLogin: { title: '微信登录', subtitle: '登录后管理你的找房服务', backgroundImage: '' },
-})
 const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations() })
-const channelStyleOptions = [
-  { value: 'commute', label: '通勤' },
-  { value: 'campus', label: '校园' },
-  { value: 'work', label: '职场' },
-  { value: 'life', label: '生活' },
-]
-const normalizeChannelStyle = (value: string, index: number) => {
-  const legacy: Record<string, string> = { '🏢': 'work', '🌳': 'campus', '🌆': 'life', '🏠': 'life' }
-  return legacy[value] || (channelStyleOptions.some((item) => item.value === value) ? value : channelStyleOptions[index % channelStyleOptions.length].value)
-}
 
-async function api<T>(path: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('xiaopi_admin_token')
-  const response = await fetch(`${apiBase}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
-  })
-  const body = await response.json().catch(() => ({ message: '服务返回异常' }))
-  if (response.status === 401 || response.status === 403) {
-    localStorage.removeItem('xiaopi_admin_token')
-    loggedIn.value = false
-    password.value = ''
-    throw new Error('登录已过期，请重新登录')
-  }
-  if (!response.ok || body.code !== 0) throw new Error(body.message || '请求失败')
-  return body.data as T
-}
+const api = createAdminApi({ baseUrl: apiBase, onUnauthorized: () => { loggedIn.value = false; password.value = '' } })
 
 const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.stringify(value))
 const applyConfig = (value: PublicConfig, markSaved = false) => {
