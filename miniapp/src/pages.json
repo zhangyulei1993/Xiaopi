@@ -12,10 +12,10 @@
     { "path": "pages/admin/image-crop", "style": { "navigationBarTitleText": "调整图片展示" } },
     { "path": "pages/auth/login", "style": { "navigationBarTitleText": "微信登录" } }
   ],
-  "tabBar": { "color": "#8aa7a0", "selectedColor": "#0f8177", "backgroundColor": "#f8fffd", "list": [
-    { "pagePath": "pages/home/index", "text": "首页" },
-    { "pagePath": "pages/properties/index", "text": "房源" },
-    { "pagePath": "pages/me/index", "text": "我的" }
+  "tabBar": { "color": "#8a958a", "selectedColor": "#40543f", "backgroundColor": "#fbfcf8", "borderStyle": "black", "list": [
+    { "pagePath": "pages/home/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },
+    { "pagePath": "pages/properties/index", "text": "房源", "iconPath": "static/tabbar/house.png", "selectedIconPath": "static/tabbar/house-active.png" },
+    { "pagePath": "pages/me/index", "text": "我的", "iconPath": "static/tabbar/me.png", "selectedIconPath": "static/tabbar/me-active.png" }
   ] },
   "globalStyle": { "navigationBarTextStyle": "black", "navigationBarBackgroundColor": "#f8fffd", "backgroundColor": "#f8fffd" }
 }

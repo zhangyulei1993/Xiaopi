@@ -158,36 +158,14 @@ const logout = () => {
 
 <template>
   <view class="page" :style="pageStyle">
-    <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ isAdmin ? "房源运营与客户跟进" : presentation.subtitle }}</text></view>
-    <view class="profile card" @click="!isLoggedIn && login()">
-      <view class="avatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></view>
-      <view class="profile-copy">
-        <view class="profile-title"
-          ><view class="title">{{
-            isAdmin ? nickname || "小皮管理员" : isLoggedIn ? nickname || "微信用户" : "登录小皮租房"
-          }}</view
-          ><text
-            v-if="isLoggedIn"
-            class="role-badge"
-            :class="{ admin: isAdmin }"
-            >{{ isAdmin ? "运营管理员" : "普通用户" }}</text
-          ></view
-        >
-        <view class="muted">
-          {{
-            isAdmin
-              ? "房源运营工作台已授权"
-              : isLoggedIn
-                ? "已登录，可联系房源"
-                : "登录后联系房源并管理身份服务"
-          }}
-        </view>
-      </view>
-      <text v-if="!isLoggedIn" class="arrow">›</text>
+    <view class="me-head"><view><text>PERSONAL SPACE</text><view>{{ presentation.title }}</view></view><text class="me-head-note">{{ isAdmin ? "运营工作台" : "收藏、足迹与找房进度" }}</text></view>
+    <view class="profile" :class="{ guest: !isLoggedIn }" @click="!isLoggedIn && login()">
+      <view class="profile-glow"></view><view class="profile-top"><view class="avatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><view class="title">{{ isAdmin ? nickname || "小皮管理员" : isLoggedIn ? nickname || "微信用户" : "登录后开始找房" }}</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
+      <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "账号资料已完善" : "绑定手机号，方便联系与身份识别") : "微信一键登录" }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
     <view v-if="isLoggedIn" class="card profile-editor">
-      <view class="profile-editor-title">头像与昵称</view>
+      <view class="profile-editor-title"><text>个人资料</text><small>头像和昵称</small></view>
       <view class="profile-fields">
         <button class="avatar-picker" open-type="chooseAvatar" :loading="isUploadingAvatar" @chooseavatar="chooseAvatar">
           <image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>选择头像</text>
@@ -197,34 +175,9 @@ const logout = () => {
       </view>
     </view>
 
-    <view class="card menu">
-      <view @click="browse">浏览全部房源 <text>›</text></view>
-      <view v-if="!isAdmin" @click="favorites">我的关注 <text>›</text></view>
-      <view v-if="!isAdmin && isLoggedIn" @click="footprints">浏览足迹 <text>›</text></view>
-      <view v-if="!isAdmin" @click="requestHome"
-        >提交找房需求 <text>›</text></view
-      >
-      <view v-if="!isAdmin" @click="publish">提交房源线索 <text>›</text></view>
+    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i>房</i><strong>全部房源</strong><text>继续看看好房</text></view><view @click="favorites"><i>心</i><strong>我的关注</strong><text>收藏的房源</text></view><view v-if="isLoggedIn" @click="footprints"><i>迹</i><strong>浏览足迹</strong><text>最近看过</text></view><view @click="requestHome"><i>需</i><strong>找房需求</strong><text>告诉我们想法</text></view></view>
     </view>
-
-    <view v-if="isLoggedIn" class="card phone-card">
-      <view>
-        <view class="phone-title">微信手机号</view>
-        <view class="muted">{{
-          phone || "尚未绑定，管理员权限需要通过手机号指定"
-        }}</view>
-      </view>
-      <button
-        v-if="!phone"
-        open-type="getPhoneNumber"
-        :loading="isBindingPhone"
-        :disabled="isBindingPhone"
-        @getphonenumber="bindPhone"
-      >
-        绑定手机号
-      </button>
-      <text v-else class="bound">已绑定</text>
-    </view>
+    <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>有房源想推荐？</strong><text>提交房源线索</text></view><text>›</text></view>
 
     <view v-if="isAdmin" class="card menu">
       <view class="group-title">运营管理</view>
@@ -237,14 +190,10 @@ const logout = () => {
 </template>
 
 <style scoped>
-.profile {
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-  padding: 40rpx;
-}
+.page{padding-top:24rpx;padding-bottom:80rpx}.me-head{display:flex;align-items:flex-end;justify-content:space-between;margin:8rpx 4rpx 26rpx}.me-head>view>text{display:block;color:#8e988b;font-size:18rpx;font-weight:700;letter-spacing:3rpx}.me-head>view>view{margin-top:6rpx;font-size:48rpx;font-weight:850;letter-spacing:-3rpx}.me-head-note{padding-bottom:6rpx;color:#7b877a;font-size:22rpx}.profile{position:relative;overflow:hidden;margin-bottom:24rpx;padding:34rpx 32rpx 24rpx;border-radius:32rpx 32rpx 16rpx;background:#354b35;color:#fff;box-shadow:0 18rpx 42rpx rgba(52,75,53,.18)}.profile-glow{position:absolute;right:-80rpx;top:-110rpx;width:300rpx;height:300rpx;border-radius:50%;background:rgba(222,232,193,.14)}.profile-top{position:relative;display:flex;align-items:center;gap:24rpx}.profile-bottom{position:relative;display:flex;align-items:center;justify-content:space-between;margin-top:26rpx;padding-top:22rpx;border-top:1rpx solid rgba(255,255,255,.14);color:rgba(255,255,255,.72);font-size:22rpx}.profile-bottom button{margin:0;padding:0 22rpx;border:0;border-radius:12rpx;background:#e7edcf;color:#354b35;font-size:22rpx;line-height:58rpx}.profile-bottom button::after{border:0}.profile-action{color:#e7edcf;font-weight:700}.profile.guest{background:#4d5e3e}.profile.guest:active{transform:scale(.985)}
 .profile-copy {
   flex: 1;
+  min-width:0;
 }
 .profile-title {
   display: flex;
@@ -253,22 +202,12 @@ const logout = () => {
   gap: 12rpx;
 }
 .role-badge {
-  padding: 6rpx 12rpx;
-  border-radius: 999rpx;
-  background: #edf4f2;
-  color: #6b8c86;
+  padding: 6rpx 12rpx;border-radius:8rpx;background:rgba(231,237,207,.14);color:#e7edcf;
   font-size: 20rpx;
   font-weight: 600;
 }
-.role-badge.admin {
-  background: #e1f5ee;
-  color: #0f8177;
-}
 .avatar {
-  width: 110rpx;
-  height: 110rpx;
-  border-radius: 50%;
-  background: #0f8177;
+  width: 104rpx;height:104rpx;border-radius:28rpx 28rpx 12rpx;background:#e7edcf;color:#354b35;
   color: #fff;
   display: flex;
   align-items: center;
@@ -276,8 +215,7 @@ const logout = () => {
   font-size: 48rpx;
   font-weight: 700;
 }
-.avatar image { width: 100%; height: 100%; border-radius: 50%; }
-.profile-editor-title { color: #304530; font-size: 28rpx; font-weight: 700; }
+.avatar image { width:100%;height:100%;border-radius:inherit }.profile .title{color:#fff;font-size:34rpx;line-height:1.25}.profile-sub{margin-top:8rpx;color:rgba(255,255,255,.62);font-size:23rpx}.profile-arrow{font-size:48rpx}.profile-editor{padding:26rpx;border:0}.profile-editor-title{display:flex;align-items:baseline;justify-content:space-between;color:#304530;font-size:28rpx;font-weight:700}.profile-editor-title small{color:#929b91;font-size:21rpx;font-weight:400}
 .profile-fields { display: grid; grid-template-columns: 112rpx 1fr 112rpx; align-items: center; gap: 18rpx; margin-top: 24rpx; }
 .avatar-picker { width: 112rpx; height: 112rpx; margin: 0; padding: 0; border: 0; border-radius: 50%; background: #edf3e9; color: #52634f; font-size: 21rpx; line-height: 112rpx; overflow: hidden; }
 .avatar-picker::after,.profile-save::after { border: 0; }
@@ -288,11 +226,7 @@ const logout = () => {
   color: #9bbab4;
   font-size: 54rpx;
 }
-.menu view {
-  padding: 30rpx 0;
-  border-bottom: 1rpx solid #edf4f1;
-  font-size: 30rpx;
-}
+.shortcut-section{margin:34rpx 0 24rpx}.section-heading{display:flex;align-items:baseline;justify-content:space-between;margin:0 4rpx 18rpx}.section-heading strong{font-size:32rpx}.section-heading text{color:#929b91;font-size:21rpx}.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.shortcut-grid>view{display:grid;grid-template-columns:64rpx 1fr;grid-template-rows:auto auto;column-gap:18rpx;padding:24rpx;border-radius:22rpx;background:#fff}.shortcut-grid>view:active{transform:scale(.98);background:#f0f2e9}.shortcut-grid i{grid-row:1/3;display:grid;place-items:center;width:64rpx;height:64rpx;border-radius:18rpx 18rpx 8rpx;background:#e9eedc;color:#4d623e;font-style:normal;font-size:24rpx;font-weight:800}.shortcut-grid strong{font-size:27rpx;line-height:1.25}.shortcut-grid text{margin-top:6rpx;color:#929b91;font-size:20rpx}.secondary-entry{display:flex;align-items:center;justify-content:space-between;border:0;background:#efeee7}.secondary-entry view{display:flex;flex-direction:column;gap:7rpx}.secondary-entry strong{font-size:27rpx}.secondary-entry view text{color:#899287;font-size:21rpx}.secondary-entry>text{color:#74806f;font-size:40rpx}
 .menu view:last-child {
   border-bottom: 0;
 }
@@ -346,7 +280,6 @@ const logout = () => {
   font-size: 24rpx;
 }
 
-.profile { margin-top:18rpx; padding:32rpx; border:0; border-radius:24rpx; background:#e8eedc; box-shadow:none; }.avatar { width:96rpx; height:96rpx; border-radius:26rpx 26rpx 10rpx; background:#40543f; font-size:40rpx; }.profile .title { font-size:34rpx; }.role-badge { border-radius:8rpx; background:#f8f7f1; color:#63705e; }.role-badge.admin { background:#d9e5bc; color:#44563d; }.menu { border:0; border-radius:24rpx; box-shadow:none; }.menu view { padding:27rpx 0; border-color:#eeece7; color:#354235; }.menu text { color:#a0a79e; }.phone-card { border:0; border-radius:24rpx; box-shadow:none; }.phone-card button { border-radius:12rpx; background:#40543f; }.bound { color:#607856; }.logout { color:#bd725f; }
-.page-presentation-head{margin-bottom:26rpx}.profile{margin-top:0}.profile .muted{margin-top:8rpx;line-height:1.55}.menu{margin-top:24rpx}.phone-card{margin-top:24rpx}.logout{margin-top:24rpx;padding-bottom:14rpx}
+.logout{margin-top:24rpx;padding-bottom:14rpx;color:#a2695b}
 .profile-copy{min-width:0}.profile .title{line-height:1.3}.role-badge{line-height:1.35}.menu .group-title{padding-bottom:10rpx;font-size:22rpx;letter-spacing:.5rpx}.menu view:not(.group-title){font-size:29rpx;line-height:1.35}.phone-title{font-size:29rpx;line-height:1.3}.phone-card .muted{margin-top:7rpx;line-height:1.5}.logout{font-size:27rpx}
 </style>
