@@ -2,15 +2,16 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { request } from "../../api/client";
-import { type Property, type PropertyLead, type RentalRequest, type OperationLog } from "../../api/properties";
+import { type Property, type PropertyLead, type RentalRequest, type OperationLog, type FavoriteContact } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
 import { callPhone } from "../../utils/phone";
-const tab = ref<"leads" | "properties" | "requests">("properties"),
+const tab = ref<"leads" | "properties" | "requests" | "interests">("properties"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
   requests = ref<RentalRequest[]>([]),
   activities = ref<OperationLog[]>([]),
+  interests = ref<FavoriteContact[]>([]),
   loading = ref(false),
   workingID = ref("");
 const statusLabel = (status: string) =>
@@ -29,11 +30,12 @@ const summary = computed(() => ({
 const load = async () => {
   loading.value = true;
   try {
-    [leads.value, properties.value, requests.value, activities.value] = await Promise.all([
+    [leads.value, properties.value, requests.value, activities.value, interests.value] = await Promise.all([
       request<PropertyLead[]>("/v1/property-leads"),
       request<Property[]>("/v1/properties"),
       request<RentalRequest[]>("/v1/admin/rental-requests"),
       request<OperationLog[]>("/v1/admin/operation-logs").catch(() => []),
+	  request<FavoriteContact[]>("/v1/admin/favorite-contacts").catch(() => []),
     ]);
   } catch (error) {
     uni.showToast({
@@ -165,6 +167,8 @@ const copyProperty = async (property: Property) => {
         >房源线索 {{ leads.length }}</text
       ><text :class="{ active: tab === 'requests' }" @click="tab = 'requests'"
         >客户需求 {{ requests.length }}</text
+      ><text :class="{ active: tab === 'interests' }" @click="tab = 'interests'"
+        >用户意向 {{ interests.length }}</text
       ></view
     ><view v-if="tab === 'properties'" class="new-property" @click="edit()"
       ><text>＋</text
@@ -204,6 +208,8 @@ const copyProperty = async (property: Property) => {
         ></view
       ><view v-if="!requests.length" class="empty muted">暂无客户需求</view
       ></template
+    ><template v-else-if="tab === 'interests'"
+      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length" class="empty muted">暂无用户关注记录</view></template
     ><template v-else
       ><view v-for="property in properties" :key="property.id" class="card item"
         ><view class="row"

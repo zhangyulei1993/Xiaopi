@@ -81,6 +81,7 @@ export interface RentalRequest {
   createdAt?: string;
 }
 export interface OperationLog { id: string; targetType: string; targetId: string; action: string; detail: string; createdAt: string }
+export interface FavoriteContact { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
 export const createRentalRequest = (item: RentalRequest) =>
   request<RentalRequest>("/v1/rental-requests", { method: "POST", data: item });
 export const listFavorites = () => request<string[]>("/v1/favorites");

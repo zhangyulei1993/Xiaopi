@@ -198,6 +198,23 @@ func (s *MySQL) SetPropertyFavorite(ctx context.Context, userID, propertyID stri
 	return err
 }
 
+func (s *MySQL) ListFavoriteContacts(ctx context.Context) ([]domain.FavoriteContact, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT f.user_id,u.nickname,u.avatar_url,u.phone,f.property_id,COALESCE(NULLIF(p.community,''),p.title),f.created_at FROM property_favorites f JOIN users u ON u.id=f.user_id JOIN properties p ON p.id=f.property_id ORDER BY f.created_at DESC LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.FavoriteContact, 0)
+	for rows.Next() {
+		var item domain.FavoriteContact
+		if err := rows.Scan(&item.UserID, &item.Nickname, &item.AvatarURL, &item.Phone, &item.PropertyID, &item.PropertyName, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *MySQL) RecordPropertyFootprint(ctx context.Context, userID, propertyID string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO user_footprints (user_id,property_id) VALUES (?,?) ON DUPLICATE KEY UPDATE viewed_at=CURRENT_TIMESTAMP,view_count=view_count+1`, userID, propertyID)
 	return err
@@ -336,6 +353,9 @@ func (s *MySQL) BindUserPhone(ctx context.Context, userID, phone string) error {
 	}
 	if affected, _ := result.RowsAffected(); affected == 0 {
 		return sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE rental_requests SET phone=? WHERE user_id=? AND phone=''`, phone, userID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

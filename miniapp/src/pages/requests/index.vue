@@ -2,15 +2,15 @@
 import { onLoad } from "@dcloudio/uni-app";
 import { reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
-import { createRentalRequest, getPublicConfig } from "../../api/properties";
-import { getSession } from "../../auth/session";
+import { bindWechatPhone, createRentalRequest, getPublicConfig, refreshAuth } from "../../api/properties";
+import { getSession, saveSession } from "../../auth/session";
 import { callPhone } from "../../utils/phone";
 
 const propertyID = ref(""),
   propertyTitle = ref(""),
   contactPhone = ref(""),
   pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
-  submitting = ref(false);
+  submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
 const form = reactive({
   phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
   location: "",
@@ -45,7 +45,7 @@ const ensureLogin = () => {
 const submit = async () => {
   if (!ensureLogin() || submitting.value) return;
   if (
-    !/^\+?\d{6,20}$/.test(form.phone) ||
+	(!propertyID.value && !/^\+?\d{6,20}$/.test(form.phone)) ||
     (!propertyID.value && !form.location.trim()) ||
     form.budgetMax < form.budgetMin
   ) {
@@ -65,6 +65,7 @@ const submit = async () => {
       moveInDate: form.moveInDate,
       note: form.note,
     });
+	if (propertyID.value && !form.phone) { appointmentCreated.value = true; return; }
     uni.showModal({
       title: propertyID.value ? "预约已提交" : "需求已提交",
       content: "小皮会根据你的条件匹配房源并联系你。",
@@ -79,6 +80,20 @@ const submit = async () => {
   } finally {
     submitting.value = false;
   }
+};
+const finishAppointment = () => uni.showModal({ title: "预约已提交", content: "小皮会联系你确认看房时间。", showCancel: false, success: () => uni.navigateBack() });
+const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) => {
+	const code = event.detail.code;
+	if (!code || bindingPhone.value) return;
+	bindingPhone.value = true;
+	try {
+		const result = await bindWechatPhone(code);
+		form.phone = result.phone;
+		uni.setStorageSync("xiaopi_bound_phone", result.phone);
+		const refreshed = await refreshAuth(); saveSession(refreshed.accessToken, refreshed.role);
+		appointmentCreated.value = false; finishAppointment();
+	} catch (error) { uni.showToast({ title: error instanceof Error ? error.message : "绑定失败", icon: "none" }); }
+	finally { bindingPhone.value = false; }
 };
 const call = () => callPhone(contactPhone.value);
 </script>
@@ -145,6 +160,7 @@ const call = () => callPhone(contactPhone.value);
       submitting ? "提交中..." : propertyID ? "登记看房时间" : "提交找房需求"
     }}</view
     ><view class="contact" @click="call">想马上确认房源？联系小皮 ›</view></view
+    ><view v-if="appointmentCreated" class="phone-bind-mask"><view class="phone-bind-sheet"><view class="phone-bind-mark">✓</view><strong>预约已登记</strong><text>再绑定微信手机号，小皮才能联系你确认看房时间。</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAppointment">绑定手机号</button><view @click="appointmentCreated = false; finishAppointment()">暂不绑定</view></view></view
   >
 </template>
 <style scoped>
@@ -234,6 +250,7 @@ const call = () => callPhone(contactPhone.value);
   color: #0e8177;
   font-size: 26rpx;
 }
+.phone-bind-mask{position:fixed;z-index:20;inset:0;display:flex;align-items:flex-end;background:rgba(27,34,27,.42)}.phone-bind-sheet{width:100%;padding:42rpx 36rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:34rpx 34rpx 0 0;background:#fff;text-align:center}.phone-bind-mark{display:grid;place-items:center;width:66rpx;height:66rpx;margin:0 auto 18rpx;border-radius:22rpx;background:#e6edd7;color:#40543f;font-size:32rpx;font-weight:800}.phone-bind-sheet strong,.phone-bind-sheet text{display:block}.phone-bind-sheet strong{font-size:34rpx}.phone-bind-sheet text{margin:14rpx auto 24rpx;color:#7b8579;font-size:24rpx;line-height:1.6}.phone-bind-sheet button{border:0;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx}.phone-bind-sheet button::after{border:0}.phone-bind-sheet>view:last-child{margin-top:20rpx;color:#929a91;font-size:23rpx}
 .request-hero{margin-bottom:28rpx;padding:42rpx 34rpx}.request-hero>view{line-height:1.28}.form{padding:12rpx 28rpx}.field{padding:28rpx 0}.privacy{margin-top:8rpx;line-height:1.7}.contact{margin-top:32rpx;padding-bottom:12rpx}
 .request-hero>text{font-size:24rpx;letter-spacing:.5rpx}.request-hero>view{font-size:42rpx;letter-spacing:-1rpx}.request-hero small{line-height:1.65}.field>text{margin-bottom:16rpx;font-size:26rpx;line-height:1.25}.field input,.field textarea,.picker{font-size:29rpx;line-height:1.45}.budget input{min-height:72rpx;padding:0 16rpx}.picker{min-height:50rpx;align-items:center}.privacy{font-size:22rpx}.button{margin-top:24rpx;min-height:96rpx;line-height:96rpx}
 </style>

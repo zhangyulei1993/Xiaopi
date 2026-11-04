@@ -95,6 +95,9 @@ func (f *fakeStore) SetPropertyFavorite(_ context.Context, userID, propertyID st
 	f.favorites[userID] = items
 	return nil
 }
+func (f *fakeStore) ListFavoriteContacts(context.Context) ([]domain.FavoriteContact, error) {
+	return nil, nil
+}
 func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error) { return f.users, nil }
 func (f *fakeStore) GetUser(_ context.Context, userID string) (domain.User, error) {
 	for _, user := range f.users {
@@ -380,11 +383,11 @@ func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 		t.Fatalf("unexpected favorites: %#v", ids)
 	}
 
-	created := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "property-1", "phone": "13800138000", "budgetMin": 1500, "budgetMax": 2500}, userToken)
+	created := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "property-1", "budgetMin": 1500, "budgetMax": 2500}, userToken)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("rental request failed: %d %s", created.Code, created.Body.String())
 	}
-	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" {
+	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" || dataStore.rentalRequests[0].Phone != "" {
 		t.Fatalf("unexpected request: %#v", dataStore.rentalRequests)
 	}
 }

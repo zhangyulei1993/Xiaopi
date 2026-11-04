@@ -37,6 +37,7 @@ type Store interface {
 	ListOperationLogs(context.Context, int) ([]domain.OperationLog, error)
 	ListFavoritePropertyIDs(context.Context, string) ([]string, error)
 	SetPropertyFavorite(context.Context, string, string, bool) error
+	ListFavoriteContacts(context.Context) ([]domain.FavoriteContact, error)
 }
 
 type appConfigStore interface {
@@ -104,6 +105,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
 	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
 	mux.HandleFunc("DELETE /api/v1/favorites/{propertyID}", s.requireRoles(s.unfavoriteProperty, roleUser))
+	mux.HandleFunc("GET /api/v1/admin/favorite-contacts", s.requireRoles(s.listFavoriteContacts, roleAdmin))
 	mux.HandleFunc("POST /api/v1/footprints/{propertyID}", s.requireRoles(s.recordFootprint, roleUser))
 	mux.HandleFunc("GET /api/v1/footprints", s.requireRoles(s.listFootprints, roleUser))
 	mux.HandleFunc("DELETE /api/v1/footprints", s.requireRoles(s.clearFootprints, roleUser))
@@ -193,7 +195,15 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 	item.Location = strings.TrimSpace(item.Location)
 	item.Layout = strings.TrimSpace(item.Layout)
 	item.Note = strings.TrimSpace(item.Note)
-	if len(item.Phone) < 6 || item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment") {
+	userID := claimsFromContext(r.Context()).Subject
+	if item.Phone == "" {
+		if store, ok := s.userAdminStore(); ok {
+			if user, err := store.GetUser(r.Context(), userID); err == nil {
+				item.Phone = normalizePhone(user.Phone)
+			}
+		}
+	}
+	if (item.RequestType == "general" && len(item.Phone) < 6) || item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment") {
 		writeError(w, http.StatusBadRequest, "请填写有效的找房需求")
 		return
 	}
@@ -202,7 +212,7 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item.ID, _ = newID()
-	item.UserID = claimsFromContext(r.Context()).Subject
+	item.UserID = userID
 	item.Status = "new"
 	item.CreatedAt = time.Now()
 	if err := s.store.CreateRentalRequest(r.Context(), item); err != nil {
@@ -210,6 +220,15 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": item})
+}
+
+func (s *Server) listFavoriteContacts(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListFavoriteContacts(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list favorite contacts")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
 }
 
 func (s *Server) listFavorites(w http.ResponseWriter, r *http.Request) {
