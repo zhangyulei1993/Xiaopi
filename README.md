@@ -4,6 +4,9 @@
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
+
+# 线上仅重建 API：在服务器使用 /opt/xiaopi/scripts/deploy-server-api.sh。
+# 它会显式读取 /opt/xiaopi/.env，避免误用 docker/.env（该文件不保存密钥）。
 ```
 
 - API：`http://127.0.0.1:18080`
