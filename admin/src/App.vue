@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown, ArrowUp, Collection, Delete, House, Location, Plus, RefreshLeft, User } from '@element-plus/icons-vue'
 
 import AdminSidebar from './components/AdminSidebar.vue'
 import AdminTopbar from './components/AdminTopbar.vue'
+import { pathForTab, tabFromRoute } from './router'
 
 type LocationConfig = { label: string; keyword: string }
 type ChannelConfig = { icon: string; title: string; subtitle: string; keyword: string; latitude: number; longitude: number; radiusKm: number }
@@ -31,7 +33,9 @@ type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' 
 
 const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
-const tab = ref<TabKey>('运营总览')
+const route = useRoute()
+const router = useRouter()
+const tab = ref<TabKey>(tabFromRoute(route.params.tab) as TabKey)
 const username = ref('admin')
 const password = ref('')
 const loginError = ref('')
@@ -170,7 +174,7 @@ async function login() {
     const auth = await api<{ accessToken: string }>('/v1/admin/login', { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) })
     localStorage.setItem('xiaopi_admin_token', auth.accessToken)
     loggedIn.value = true
-    tab.value = '运营总览'
+    selectTab('运营总览')
     await load()
   } catch (error) {
     localStorage.removeItem('xiaopi_admin_token')
@@ -199,7 +203,15 @@ async function updateRentalRequest(item: RentalRequest, status: string) {
   }
 }
 
-function selectTab(value: string) { tab.value = value as TabKey }
+function selectTab(value: string) {
+  const next = value as TabKey
+  tab.value = next
+  void router.push({ name: 'admin', params: { tab: pathForTab(next) } })
+}
+
+router.afterEach((to) => {
+  tab.value = tabFromRoute(to.params.tab) as TabKey
+})
 
 const rows = computed(() => {
   if (tab.value === '线索管理') return leads.value.map((item) => ({ name: item.sourceName, info: `${item.community} · ${item.sourcePhone}`, status: item.status }))
@@ -602,10 +614,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="hero-meter"><span>当前待跟进线索</span><strong>{{ leads.length }}</strong></div>
           </section>
           <div v-loading="loading" class="stats-grid dashboard-grid">
-            <button class="surface stat-card" @click="tab = '房源列表'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong></button>
-            <button class="surface stat-card" @click="tab = '线索管理'"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong></button>
-            <button class="surface stat-card" @click="tab = '微信用户'"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong></button>
-            <button class="surface stat-card" @click="tab = '小程序配置'"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong></button>
+            <button class="surface stat-card" @click="selectTab('房源列表')"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong></button>
+            <button class="surface stat-card" @click="selectTab('线索管理')"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong></button>
+            <button class="surface stat-card" @click="selectTab('微信用户')"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong></button>
+            <button class="surface stat-card" @click="selectTab('小程序配置')"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong></button>
           </div>
         </template>
 

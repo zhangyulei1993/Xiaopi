@@ -2,7 +2,8 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import { createApp } from 'vue'
 import App from './App.vue'
+import { router } from './router'
 import './styles/tokens.css'
 import './style.css'
 
-createApp(App).use(ElementPlus).mount('#app')
+router.isReady().then(() => createApp(App).use(ElementPlus).use(router).mount('#app'))
