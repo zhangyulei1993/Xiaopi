@@ -873,9 +873,8 @@ const mediaUrl = (url: string) =>
             ><strong>图片与视频</strong></view
           ></view
         ><view class="media-guidance"
-          ><strong>封面与展示</strong
-          ><text>列表会按 4:3 展示图片；未保存前可反复裁切，始终以原图为准。</text
-          ><small>单张不超过10MB，短边至少640px；支持相册或拍照。</small></view
+          ><strong>封面图片</strong
+          ><text>首张为封面 · 可重裁</text></view
         ><view v-if="existingImages.length" class="uploaded-gallery"
           ><text class="media-group-title">已上传图片</text
           ><view class="photo-grid"
@@ -890,7 +889,7 @@ const mediaUrl = (url: string) =>
             ></view
           ></view
         ><view v-if="images.length" class="pending-gallery"
-          ><text class="media-group-title">待上传图片 · 点图片可放大查看</text
+          ><text class="media-group-title">待上传</text
           ><view class="photo-grid"
             ><view
             v-for="(image, index) in images"
@@ -950,10 +949,9 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="media-actions"
           ><view @click="pick('image')"
-            ><strong>＋ 添加图片</strong><small>{{ mediaCount }}/9 · 相册/拍照自动压缩</small></view
+            ><strong>＋ 图片</strong><small>{{ mediaCount }}/9</small></view
           ><view @click="pick('video')"
-            ><strong>＋ 添加视频</strong
-            ><small>{{ videos.length }}/1 · 最长60秒</small></view
+            ><strong>＋ 视频</strong><small>{{ videos.length }}/1</small></view
           ></view
         ></view
       ><view class="save-space" /><view class="save-bar"
@@ -1469,31 +1467,21 @@ const mediaUrl = (url: string) =>
   font-size: 19rpx;
 }
 .media-guidance {
-  margin-bottom: 22rpx;
-  padding: 20rpx 22rpx;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 20rpx;
+  padding: 16rpx 20rpx;
   border-radius: 16rpx;
   background: #f1f5ea;
 }
-.media-guidance strong,
-.media-guidance text,
-.media-guidance small {
-  display: block;
-}
 .media-guidance strong {
   color: #40543f;
-  font-size: 25rpx;
+  font-size: 24rpx;
 }
 .media-guidance text {
-  margin-top: 8rpx;
   color: #61705d;
-  font-size: 22rpx;
-  line-height: 1.5;
-}
-.media-guidance small {
-  margin-top: 7rpx;
-  color: #879082;
-  font-size: 19rpx;
-  line-height: 1.45;
+  font-size: 21rpx;
 }
 .uploaded-gallery,
 .pending-gallery,
@@ -1597,7 +1585,7 @@ const mediaUrl = (url: string) =>
   gap: 14rpx;
 }
 .media-actions > view {
-  padding: 34rpx 12rpx;
+  padding: 26rpx 12rpx;
   border: 2rpx dashed #b7dcd4;
   border-radius: 16rpx;
   text-align: center;
