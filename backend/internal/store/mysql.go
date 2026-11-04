@@ -39,6 +39,9 @@ func OpenMySQL() (*MySQL, error) {
 
 func (s *MySQL) Close() error { return s.db.Close() }
 
+// DB exposes the connection solely for startup migration orchestration.
+func (s *MySQL) DB() *sql.DB { return s.db }
+
 func (s *MySQL) ListProperties(ctx context.Context) ([]domain.Property, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,title,community,location,latitude,longitude,layout,rent_monthly,fee_text,rent_type,available_date,deposit_payment,utilities_text,area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,status,owner_id,created_at,updated_at FROM properties ORDER BY created_at DESC`)
 	if err != nil {

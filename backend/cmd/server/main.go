@@ -19,6 +19,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer mysqlStore.Close()
+	if err := store.ApplyMigrations(mysqlStore.DB(), "migrations"); err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("xiaopi api listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, httpapi.NewServer(mysqlStore).Handler()); err != nil {
 		log.Fatal(err)
