@@ -21,6 +21,7 @@ const relatedRadiusKm = ref(3);
 const allProperties = ref<Property[]>([]);
 const activeMediaIndex = ref(0);
 const playingVideoIndex = ref(-1);
+const videoDimensions = ref<Record<number, { width: number; height: number }>>({});
 const mapExpanded = ref(false);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "propertyDetail",
@@ -40,6 +41,7 @@ const load = async (id = "") => {
     item.value = items.find((property) => property.id === id) || null;
     activeMediaIndex.value = 0;
     playingVideoIndex.value = -1;
+    videoDimensions.value = {};
     mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
@@ -59,6 +61,18 @@ onLoad((query) => load(String(query?.id || "")));
 const mediaUrl = (url: string) =>
   url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
 const mediaItems = computed(() => item.value?.media || []);
+const activeVideoIsPortrait = computed(() => {
+  const active = mediaItems.value[activeMediaIndex.value];
+  const dimensions = videoDimensions.value[activeMediaIndex.value];
+  return Boolean(
+    active?.type === "video" &&
+      dimensions?.height &&
+      dimensions.height > dimensions.width,
+  );
+});
+const mediaViewportHeight = computed(() =>
+  activeVideoIsPortrait.value ? 720 : 440,
+);
 const videoPoster = computed(() => {
   const image = mediaItems.value.find((media) => media.type === "image");
   return image ? mediaUrl(image.url) : "";
@@ -66,6 +80,18 @@ const videoPoster = computed(() => {
 const handleMediaChange = (event: { detail: { current: number } }) => {
   activeMediaIndex.value = event.detail.current;
   playingVideoIndex.value = -1;
+};
+const readVideoMetadata = (
+  index: number,
+  event: { detail?: { width?: number; height?: number } },
+) => {
+  const width = Number(event.detail?.width);
+  const height = Number(event.detail?.height);
+  if (!width || !height) return;
+  videoDimensions.value = {
+    ...videoDimensions.value,
+    [index]: { width, height },
+  };
 };
 const previewImage = (url: string) => {
   const urls = mediaItems.value
@@ -238,8 +264,8 @@ const contact = () => {
     ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
       ><text class="detail-cover-icon">⌂</text><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
-    ><view v-else class="media-gallery"
-      ><swiper class="media-swiper" circular :current="activeMediaIndex" @change="handleMediaChange">
+    ><view v-else class="media-gallery" :class="{ 'portrait-video': activeVideoIsPortrait }"
+      ><swiper class="media-swiper" :style="{ height: `${mediaViewportHeight}rpx` }" circular :current="activeMediaIndex" @change="handleMediaChange">
         <swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`">
           <image
             v-if="media.type === 'image'"
@@ -258,6 +284,7 @@ const contact = () => {
               show-fullscreen-btn
               enable-progress-gesture
               object-fit="contain"
+              @loadedmetadata="readVideoMetadata(index, $event)"
               @play="playingVideoIndex = index"
               @pause="playingVideoIndex = -1"
               @ended="playingVideoIndex = -1"
