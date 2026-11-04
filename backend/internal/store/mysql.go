@@ -21,7 +21,7 @@ func OpenMySQL() (*MySQL, error) {
 	user := env("MYSQL_USER", "xiaopi_user")
 	password := env("MYSQL_PASSWORD", "xiaopi_pass")
 	database := env("MYSQL_DATABASE", "xiaopi_platform")
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4", user, password, host, port, database)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&multiStatements=true", user, password, host, port, database)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
