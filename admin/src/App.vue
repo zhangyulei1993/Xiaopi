@@ -67,6 +67,9 @@ const propertyFilter = ref('all')
 const channelLocationResults = ref<Record<number, LocationSearchItem[]>>({})
 const channelLocationLoading = ref<Record<number, boolean>>({})
 const channelMapPreview = ref<Record<number, string>>({})
+const channelMapLoading = ref<Record<number, boolean>>({})
+const channelMapCache = ref<Record<string, string>>({})
+const channelMapRequest = ref<Record<number, number>>({})
 const pagePresentationOptions = [
   { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'propertyDetail', label: '房源详情' }, { key: 'requests', label: '找房需求' }, { key: 'publish', label: '发布房源' }, { key: 'me', label: '我的' }, { key: 'footprints', label: '浏览足迹' }, { key: 'adminWorkbench', label: '运营工作台' }, { key: 'adminPropertyEdit', label: '编辑房源' }, { key: 'authLogin', label: '微信登录' },
 ]
@@ -118,6 +121,10 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
   next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ latitude: 0, longitude: 0, ...item, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 5 }))
   next.pagePresentations = { ...defaultPagePresentations(), ...(next.pagePresentations || {}) }
   Object.assign(publicConfig, next)
+  // Keep a map visible as soon as the configuration view is opened. Existing
+  // channel coordinates are used when present; otherwise this is the Wuhan
+  // overview until the operator searches for a POI.
+  preloadChannelMaps()
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
 }
 
@@ -258,9 +265,7 @@ function clearChannelLocation(item: ChannelConfig, index: number) {
   item.latitude = 0
   item.longitude = 0
   channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
-  const previous = channelMapPreview.value[index]
-  if (previous) URL.revokeObjectURL(previous)
-  channelMapPreview.value = { ...channelMapPreview.value, [index]: '' }
+  void loadChannelMapPreview(index, 30.45604, 114.425337)
 }
 
 function invalidateChannelLocation(item: ChannelConfig, index: number) {
@@ -277,6 +282,7 @@ async function searchChannelLocation(item: ChannelConfig, index: number) {
   try {
     const items = await api<LocationSearchItem[]>(`/v1/admin/location/search?keyword=${encodeURIComponent(keyword)}&latitude=30.45604&longitude=114.425337`)
     channelLocationResults.value = { ...channelLocationResults.value, [index]: items }
+    void loadChannelMapPreview(index, item.latitude || 30.45604, item.longitude || 114.425337, items)
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '地点搜索失败'
   } finally {
@@ -291,18 +297,35 @@ function selectChannelLocation(item: ChannelConfig, index: number, location: Loc
   void loadChannelMapPreview(index, item.latitude, item.longitude)
 }
 
-async function loadChannelMapPreview(index: number, latitude: number, longitude: number) {
+async function loadChannelMapPreview(index: number, latitude: number, longitude: number, points: LocationSearchItem[] = []) {
+  const pointValue = points.slice(0, 8).map((point) => `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`).join(';')
+  const mapKey = `${latitude.toFixed(6)},${longitude.toFixed(6)}|${pointValue}`
+  const requestID = (channelMapRequest.value[index] || 0) + 1
+  channelMapRequest.value = { ...channelMapRequest.value, [index]: requestID }
+  if (channelMapCache.value[mapKey]) {
+    channelMapPreview.value = { ...channelMapPreview.value, [index]: channelMapCache.value[mapKey] }
+    channelMapLoading.value = { ...channelMapLoading.value, [index]: false }
+    return
+  }
   const token = localStorage.getItem('xiaopi_admin_token')
+  channelMapLoading.value = { ...channelMapLoading.value, [index]: true }
   try {
-    const response = await fetch(`${apiBase}/v1/admin/location/static?latitude=${latitude}&longitude=${longitude}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    const response = await fetch(`${apiBase}/v1/admin/location/static?latitude=${latitude}&longitude=${longitude}&points=${encodeURIComponent(pointValue)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
     if (!response.ok) throw new Error('地图预览生成失败')
     const next = URL.createObjectURL(await response.blob())
-    const previous = channelMapPreview.value[index]
-    if (previous) URL.revokeObjectURL(previous)
-    channelMapPreview.value = { ...channelMapPreview.value, [index]: next }
+    channelMapCache.value = { ...channelMapCache.value, [mapKey]: next }
+    if (channelMapRequest.value[index] === requestID) channelMapPreview.value = { ...channelMapPreview.value, [index]: next }
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '地图预览生成失败'
+    if (channelMapRequest.value[index] === requestID) pageError.value = error instanceof Error ? error.message : '地图预览生成失败'
+  } finally {
+    if (channelMapRequest.value[index] === requestID) channelMapLoading.value = { ...channelMapLoading.value, [index]: false }
   }
+}
+
+function preloadChannelMaps() {
+  publicConfig.featuredChannels.forEach((item, index) => {
+    void loadChannelMapPreview(index, item.latitude || 30.45604, item.longitude || 114.425337)
+  })
 }
 
 function removeChannel(index: number) {
@@ -675,7 +698,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                       <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="invalidateChannelLocation(item, index)" /></label>
                       <label><span>副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label>
                       <label><span>搜索关键词（未选地点时使用）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" @input="invalidateChannelLocation(item, index)" /></label>
-                      <label class="channel-location-field"><span>地图范围（可选）</span><div class="channel-location-action"><el-button :loading="channelLocationLoading[index]" @click="searchChannelLocation(item, index)">{{ item.latitude && item.longitude ? '重新选点' : '搜索并选点' }}</el-button><el-button v-if="item.latitude && item.longitude" text type="danger" @click="clearChannelLocation(item, index)">清除位置</el-button></div><small v-if="item.latitude && item.longitude">已选中心：{{ item.latitude.toFixed(6) }}, {{ item.longitude.toFixed(6) }} · 半径 {{ item.radiusKm }} 公里</small><small v-else>未选地点时按关键词筛选；不锁定任何地图坐标。</small><img v-if="channelMapPreview[index]" class="channel-map-preview" :src="channelMapPreview[index]" alt="频道范围地图预览" /><div v-if="channelLocationResults[index]?.length" class="admin-search-results channel-location-results"><button v-for="location in channelLocationResults[index]" :key="location.id" type="button" @click="selectChannelLocation(item, index, location)"><span><strong>{{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div></label>
+                      <label class="channel-location-field"><span>地图范围（可选）</span><div class="channel-location-action"><el-button :loading="channelLocationLoading[index]" @click="searchChannelLocation(item, index)">{{ item.latitude && item.longitude ? '重新搜索地点' : '搜索地点' }}</el-button><el-button v-if="item.latitude && item.longitude" text type="danger" @click="clearChannelLocation(item, index)">清除位置</el-button></div><small v-if="item.latitude && item.longitude">已选中心：{{ item.latitude.toFixed(6) }}, {{ item.longitude.toFixed(6) }} · 半径 {{ item.radiusKm }} 公里</small><small v-else>地图默认显示武汉；搜索后候选地点会以 A、B、C 标记直接显示在图上。</small><div v-if="channelMapLoading[index]" class="channel-map-loading">正在加载地图预览…</div><img v-else-if="channelMapPreview[index]" class="channel-map-preview" :src="channelMapPreview[index]" alt="频道范围地图预览" /><div v-if="channelLocationResults[index]?.length" class="admin-search-results channel-location-results"><button v-for="(location, locationIndex) in channelLocationResults[index]" :key="location.id" type="button" @click="selectChannelLocation(item, index, location)"><span><strong>{{ String.fromCharCode(65 + locationIndex) }} · {{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div></label>
                       <label><span>地图关联半径（选点后启用）</span><el-input-number v-model="item.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /></label>
                     </div>
                   </article>

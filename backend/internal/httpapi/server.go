@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"xiaopi/backend/internal/domain"
@@ -49,11 +50,19 @@ type appConfigStore interface {
 const publicConfigKey = "miniapp_public"
 
 type Server struct {
-	properties []domain.Property
-	store      Store
-	config     Config
-	tokens     tokenManager
-	httpClient *http.Client
+	properties  []domain.Property
+	store       Store
+	config      Config
+	tokens      tokenManager
+	httpClient  *http.Client
+	staticMapMu sync.Mutex
+	staticMaps  map[string]staticMapCacheEntry
+}
+
+type staticMapCacheEntry struct {
+	Body        []byte
+	ContentType string
+	ExpiresAt   time.Time
 }
 
 func NewServer(dataStore Store) *Server { return NewServerWithConfig(dataStore, ConfigFromEnv()) }
@@ -64,6 +73,7 @@ func NewServerWithConfig(dataStore Store, config Config) *Server {
 		config:     config,
 		tokens:     newTokenManager(config),
 		httpClient: &http.Client{Timeout: 5 * time.Second},
+		staticMaps: map[string]staticMapCacheEntry{},
 	}
 }
 
