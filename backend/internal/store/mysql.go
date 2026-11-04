@@ -267,6 +267,23 @@ func (s *MySQL) ListUsers(ctx context.Context) ([]domain.User, error) {
 	return items, rows.Err()
 }
 
+func (s *MySQL) GetUser(ctx context.Context, userID string) (domain.User, error) {
+	var user domain.User
+	err := s.db.QueryRowContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users WHERE id=?`, userID).Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+	return user, err
+}
+
+func (s *MySQL) UpdateUserProfile(ctx context.Context, userID, nickname, avatarURL string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE users SET nickname=IF(?='',nickname,?),avatar_url=IF(?='',avatar_url,?),updated_at=CURRENT_TIMESTAMP WHERE id=?`, nickname, nickname, avatarURL, avatarURL, userID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *MySQL) BindUserPhone(ctx context.Context, userID, phone string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -334,6 +351,7 @@ func mergeTemporaryUser(ctx context.Context, tx *sql.Tx, temporaryID, userID, ph
 		{`UPDATE properties SET owner_id=? WHERE owner_id=?`, []any{userID, temporaryID}},
 		{`UPDATE property_status_history SET operator_id=? WHERE operator_id=?`, []any{userID, temporaryID}},
 		{`UPDATE operation_logs SET operator_id=? WHERE operator_id=?`, []any{userID, temporaryID}},
+		{`UPDATE users target JOIN users temporary ON temporary.id=? SET target.nickname=IF(target.nickname='',temporary.nickname,target.nickname),target.avatar_url=IF(target.avatar_url='',temporary.avatar_url,target.avatar_url) WHERE target.id=?`, []any{temporaryID, userID}},
 		{`UPDATE temporary_access_codes SET status='disabled',updated_at=CURRENT_TIMESTAMP WHERE phone=?`, []any{phone}},
 		{`DELETE FROM users WHERE id=?`, []any{temporaryID}},
 	}

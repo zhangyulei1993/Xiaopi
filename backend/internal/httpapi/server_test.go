@@ -96,6 +96,28 @@ func (f *fakeStore) SetPropertyFavorite(_ context.Context, userID, propertyID st
 	return nil
 }
 func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error) { return f.users, nil }
+func (f *fakeStore) GetUser(_ context.Context, userID string) (domain.User, error) {
+	for _, user := range f.users {
+		if user.ID == userID {
+			return user, nil
+		}
+	}
+	return domain.User{}, sql.ErrNoRows
+}
+func (f *fakeStore) UpdateUserProfile(_ context.Context, userID, nickname, avatarURL string) error {
+	for index := range f.users {
+		if f.users[index].ID == userID {
+			if nickname != "" {
+				f.users[index].Nickname = nickname
+			}
+			if avatarURL != "" {
+				f.users[index].AvatarURL = avatarURL
+			}
+			return nil
+		}
+	}
+	return sql.ErrNoRows
+}
 func (f *fakeStore) BindUserPhone(_ context.Context, userID, phone string) error {
 	for index := range f.users {
 		if f.users[index].ID == userID {
@@ -542,5 +564,33 @@ func TestBindWechatPhoneMergesTemporaryAdminIdentity(t *testing.T) {
 	}](t, refreshed)
 	if auth.Role != roleAdmin {
 		t.Fatalf("expected merged user to become admin, got %q", auth.Role)
+	}
+}
+
+func TestUserCanUpdateAndReadWechatProfile(t *testing.T) {
+	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", OpenID: "openid-1", Status: domain.UserActive}}}
+	server := testServer(dataStore)
+	token, err := server.tokens.issue("wx-user-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/auth/profile", map[string]string{
+		"nickname":  "小皮用户",
+		"avatarUrl": "/uploads/avatars/wx-user-1.jpg",
+	}, token)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("expected profile update success, got %d: %s", updated.Code, updated.Body.String())
+	}
+	profile := responseData[domain.User](t, updated)
+	if profile.Nickname != "小皮用户" || profile.AvatarURL != "/uploads/avatars/wx-user-1.jpg" {
+		t.Fatalf("unexpected updated profile: %#v", profile)
+	}
+	loaded := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/auth/profile", nil, token)
+	if loaded.Code != http.StatusOK {
+		t.Fatalf("expected profile load success, got %d: %s", loaded.Code, loaded.Body.String())
+	}
+	loadedProfile := responseData[domain.User](t, loaded)
+	if loadedProfile.Nickname != profile.Nickname || loadedProfile.AvatarURL != profile.AvatarURL {
+		t.Fatalf("profile did not persist: %#v", loadedProfile)
 	}
 }

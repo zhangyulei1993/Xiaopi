@@ -1,20 +1,33 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
+import { API_ORIGIN, resolveAssetUrl } from "../../api/client";
 import {
   clearSession,
   getSession,
   saveSession,
   type SessionRole,
 } from "../../auth/session";
-import { bindWechatPhone, refreshAuth } from "../../api/properties";
+import {
+  bindWechatPhone,
+  getWechatUserProfile,
+  refreshAuth,
+  updateWechatUserProfile,
+} from "../../api/properties";
 import { usePagePresentation } from "../../utils/presentation";
 
 const role = ref<SessionRole | null>(null);
 const phone = ref("");
 const isBindingPhone = ref(false);
+const nickname = ref("");
+const avatarUrl = ref("");
+const isUploadingAvatar = ref(false);
+const isSavingProfile = ref(false);
 const isLoggedIn = computed(() => role.value !== null);
 const isAdmin = computed(() => role.value === "admin");
+const avatarDisplay = computed(() =>
+  avatarUrl.value ? resolveAssetUrl(avatarUrl.value) : "",
+);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("me", "我的", "管理关注与找房需求");
 
 onShow(async () => {
@@ -27,6 +40,10 @@ onShow(async () => {
     const refreshed = await refreshAuth();
     saveSession(refreshed.accessToken, refreshed.role);
     role.value = refreshed.role;
+    const profile = await getWechatUserProfile();
+    nickname.value = profile.nickname || "";
+    avatarUrl.value = profile.avatarUrl || "";
+    phone.value = profile.phone || phone.value;
   } catch {
     role.value = getSession()?.role || null;
   }
@@ -43,6 +60,54 @@ const favorites = () => {
 const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
 const editProperty = () =>
   uni.navigateTo({ url: "/pages/admin/property-edit" });
+
+const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
+  const path = event.detail.avatarUrl;
+  if (!path || isUploadingAvatar.value) return;
+  isUploadingAvatar.value = true;
+  uni.uploadFile({
+    url: `${API_ORIGIN}/api/v1/auth/avatar`,
+    filePath: path,
+    name: "file",
+    header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
+    success: (response) => {
+      try {
+        const body = JSON.parse(String(response.data || "{}"));
+        if (response.statusCode >= 200 && response.statusCode < 300 && body?.code === 0) {
+          avatarUrl.value = String(body.data?.url || "");
+          uni.showToast({ title: "头像已选择" });
+          return;
+        }
+        uni.showToast({ title: body?.message || "头像上传失败", icon: "none" });
+      } catch {
+        uni.showToast({ title: "头像上传失败", icon: "none" });
+      }
+    },
+    fail: () => uni.showToast({ title: "头像上传失败", icon: "none" }),
+    complete: () => (isUploadingAvatar.value = false),
+  });
+};
+
+const saveProfile = async () => {
+  if (isSavingProfile.value || (!nickname.value.trim() && !avatarUrl.value)) return;
+  isSavingProfile.value = true;
+  try {
+    const profile = await updateWechatUserProfile(
+      nickname.value.trim(),
+      avatarUrl.value,
+    );
+    nickname.value = profile.nickname || "";
+    avatarUrl.value = profile.avatarUrl || "";
+    uni.showToast({ title: "资料已保存" });
+  } catch (error) {
+    uni.showToast({
+      title: error instanceof Error ? error.message : "保存失败",
+      icon: "none",
+    });
+  } finally {
+    isSavingProfile.value = false;
+  }
+};
 
 const bindPhone = async (event: {
   detail: { code?: string; errMsg?: string };
@@ -94,11 +159,11 @@ const logout = () => {
   <view class="page" :style="pageStyle">
     <view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ isAdmin ? "房源运营与客户跟进" : presentation.subtitle }}</text></view>
     <view class="profile card" @click="!isLoggedIn && login()">
-      <view class="avatar">{{ isAdmin ? "管" : "小" }}</view>
+      <view class="avatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></view>
       <view class="profile-copy">
         <view class="profile-title"
           ><view class="title">{{
-            isAdmin ? "小皮管理员" : isLoggedIn ? "微信用户" : "登录小皮租房"
+            isAdmin ? nickname || "小皮管理员" : isLoggedIn ? nickname || "微信用户" : "登录小皮租房"
           }}</view
           ><text
             v-if="isLoggedIn"
@@ -118,6 +183,17 @@ const logout = () => {
         </view>
       </view>
       <text v-if="!isLoggedIn" class="arrow">›</text>
+    </view>
+
+    <view v-if="isLoggedIn" class="card profile-editor">
+      <view class="profile-editor-title">头像与昵称</view>
+      <view class="profile-fields">
+        <button class="avatar-picker" open-type="chooseAvatar" :loading="isUploadingAvatar" @chooseavatar="chooseAvatar">
+          <image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>选择头像</text>
+        </button>
+        <input v-model="nickname" type="nickname" maxlength="32" placeholder="填写微信昵称" />
+        <button class="profile-save" :loading="isSavingProfile" :disabled="isSavingProfile || (!nickname.trim() && !avatarUrl)" @click="saveProfile">保存</button>
+      </view>
     </view>
 
     <view class="card menu">
@@ -198,6 +274,14 @@ const logout = () => {
   font-size: 48rpx;
   font-weight: 700;
 }
+.avatar image { width: 100%; height: 100%; border-radius: 50%; }
+.profile-editor-title { color: #304530; font-size: 28rpx; font-weight: 700; }
+.profile-fields { display: grid; grid-template-columns: 112rpx 1fr 112rpx; align-items: center; gap: 18rpx; margin-top: 24rpx; }
+.avatar-picker { width: 112rpx; height: 112rpx; margin: 0; padding: 0; border: 0; border-radius: 50%; background: #edf3e9; color: #52634f; font-size: 21rpx; line-height: 112rpx; overflow: hidden; }
+.avatar-picker::after,.profile-save::after { border: 0; }
+.avatar-picker image { width: 100%; height: 100%; display: block; }
+.profile-fields input { height: 80rpx; padding: 0 22rpx; border: 1rpx solid #dfe8dc; border-radius: 16rpx; background: #f8faf6; font-size: 27rpx; }
+.profile-save { width: 112rpx; height: 72rpx; margin: 0; padding: 0; border: 0; border-radius: 16rpx; background: #536a45; color: #fff; font-size: 25rpx; line-height: 72rpx; }
 .arrow {
   color: #9bbab4;
   font-size: 54rpx;

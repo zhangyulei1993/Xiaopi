@@ -13,7 +13,9 @@ import (
 
 type userAdminStore interface {
 	ListUsers(context.Context) ([]domain.User, error)
+	GetUser(context.Context, string) (domain.User, error)
 	BindUserPhone(context.Context, string, string) error
+	UpdateUserProfile(context.Context, string, string, string) error
 	ListAdminUsers(context.Context) ([]domain.AdminUser, error)
 	AssignAdminByPhone(context.Context, string, string) (domain.AdminUser, error)
 	SetAdminStatus(context.Context, string, string) error

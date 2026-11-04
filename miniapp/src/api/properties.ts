@@ -146,4 +146,21 @@ export const refreshAuth = () =>
     method: "POST",
   });
 
+export interface WechatUserProfile {
+  id: string;
+  nickname: string;
+  avatarUrl: string;
+  phone: string;
+  status: string;
+}
+
+export const getWechatUserProfile = () =>
+  request<WechatUserProfile>("/v1/auth/profile");
+
+export const updateWechatUserProfile = (nickname: string, avatarUrl: string) =>
+  request<WechatUserProfile>("/v1/auth/profile", {
+    method: "PATCH",
+    data: { nickname, avatarUrl },
+  });
+
 export const getPublicConfig = () => request<PublicConfig>("/v1/config/public");
