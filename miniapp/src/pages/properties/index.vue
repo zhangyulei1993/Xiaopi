@@ -202,7 +202,7 @@ const subscribeArea = () => {
     ><view v-if="pagePresentation.subtitle" class="page-subtitle">{{ pagePresentation.subtitle }}</view
     ><view class="search card"
       ><image :src="searchIcon" mode="aspectFit" />
-      ><input
+      <input
         v-model="keyword"
         placeholder="搜索小区、位置或户型"
         confirm-type="search"
@@ -286,6 +286,7 @@ const subscribeArea = () => {
   >
 </template>
 <style scoped>
+/* Legacy declarations below are intentionally reset by the canonical listing layer. */
 .location {
   font-size: 36rpx;
   color: #173f3c;
@@ -503,4 +504,44 @@ const subscribeArea = () => {
 .property>.property-copy>.price{margin-top:auto;padding-top:12rpx}
 .cover-benefit{position:absolute;bottom:0;left:0;padding:8rpx 11rpx;border-radius:0 10rpx 0 0;background:#d66d50;color:#fff;font-size:18rpx;font-weight:700;line-height:1.1}.service-tags{display:flex;gap:7rpx;overflow:hidden;margin-top:9rpx;white-space:nowrap}.service-tags text{flex:none;padding:5rpx 8rpx;border-radius:7rpx;background:#edf0dc;color:#536a45;font-size:18rpx;line-height:1.2}.service-tags text:nth-child(2){background:#f8eadf;color:#b7644b}.property>.property-copy>.service-tags+.price{margin-top:auto;padding-top:8rpx}
 .property>.property-copy>.price .price-unit{margin-left:3rpx;color:#8a8f85;font-size:19rpx;font-weight:400}
+
+/* Canonical listing layer: one layout, one spacing scale, no positional price hacks. */
+.location {
+  display:flex; align-items:flex-end; justify-content:space-between; gap:18rpx;
+  min-width:0; margin:26rpx 0 10rpx; color:#29382d;
+  font-size:44rpx; font-weight:800; line-height:1.18; letter-spacing:-2rpx;
+}
+.location > text:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.location text { float:none; flex:none; padding:0 0 4rpx; color:#7b8778; font-size:22rpx; font-weight:600; line-height:1.2; letter-spacing:0; }
+.page-subtitle { margin:0 0 26rpx; color:#7e867d; font-size:23rpx; line-height:1.55; }
+.search { display:flex; align-items:center; gap:14rpx; margin:0 0 16rpx; padding:18rpx 20rpx; border:1rpx solid #e8e3da; border-radius:18rpx; background:#fffdf9; box-shadow:none; }
+.search image { width:32rpx; height:32rpx; flex:none; }
+.search input { flex:1; min-width:0; color:#334034; font-size:26rpx; }
+.clear { flex:none; padding:4rpx 8rpx; color:#7a8576; font-size:32rpx; line-height:1; }
+.favorite-filter { display:flex; align-items:center; gap:8rpx; width:max-content; margin:0 0 18rpx; padding:10rpx 14rpx; border:1rpx solid #d9ded2; border-radius:12rpx; color:#697564; font-size:22rpx; line-height:1.2; }
+.favorite-filter image { width:24rpx; height:24rpx; }
+.favorite-filter.active { border-color:#e9c9bc; background:#fcf1ed; color:#cc654b; }
+.filter-block { display:block; margin:18rpx 0; }
+.filter-label { margin-bottom:10rpx; color:#5a6757; font-size:22rpx; font-weight:700; line-height:1.25; }
+.chips { width:100%; white-space:nowrap; }
+.chips text { display:inline-block; box-sizing:border-box; min-height:58rpx; margin-right:10rpx; padding:16rpx 18rpx; border:1rpx solid #e8e5df; border-radius:12rpx; background:#fffdf9; color:#6f796e; font-size:22rpx; line-height:1.15; }
+.chips .active { border-color:#cbd7ad; background:#e6ecd7; color:#42523b; font-weight:700; }
+.grid { display:block; margin-top:30rpx; }
+.property { position:relative; display:flex; align-items:stretch; gap:18rpx; min-height:216rpx; margin:0 0 18rpx; padding:12rpx; overflow:hidden; border:1rpx solid #eee6dc; border-radius:20rpx; background:#fffdf9; box-sizing:border-box; }
+.cover { position:relative; flex:none; width:244rpx; height:192rpx; overflow:hidden; border-radius:14rpx; background:#dde5d4; }
+.cover image { width:100%; height:100%; }
+.cover > text { display:grid; width:100%; height:100%; place-items:center; color:#fff; font-size:27rpx; }
+.badge { top:9rpx; left:9rpx; padding:5rpx 8rpx; border-radius:8rpx; background:#536a45; color:#fff; font-size:18rpx; line-height:1.1; }
+.favorite { top:9rpx; right:9rpx; width:44rpx; height:44rpx; background:rgba(47,44,34,.33); }
+.favorite image { width:28rpx; height:28rpx; }.favorite.active { background:#d66d50; }
+.cover-benefit { bottom:0; left:0; padding:8rpx 11rpx; border-radius:0 10rpx 0 0; background:#d66d50; color:#fff; font-size:18rpx; font-weight:700; line-height:1.1; }
+.property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:9rpx 4rpx 3rpx 0; }
+.property .small { overflow:hidden; margin:0; color:#29382d; font-size:28rpx; font-weight:700; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
+.property .summary { display:-webkit-box; overflow:hidden; min-height:0; margin:9rpx 0 0; color:#7e867d; font-size:21rpx; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.service-tags { display:flex; gap:7rpx; overflow:hidden; margin-top:9rpx; white-space:nowrap; }
+.service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
+.property > .property-copy > .price { display:inline-flex; width:max-content; align-items:baseline; gap:3rpx; margin:auto 0 0; padding-top:10rpx; color:#d76440; font-size:34rpx; font-weight:800; line-height:1.1; white-space:nowrap; }
+.property > .property-copy > .price .price-unit { color:#8a8f85; font-size:20rpx; font-weight:400; }
+.area-subscribe { margin-top:26rpx; padding:24rpx; border:0; border-radius:18rpx; background:#e9eddc; }.area-subscribe strong { font-size:27rpx; }.area-subscribe text { font-size:21rpx; line-height:1.45; }.area-subscribe b { color:#526442; font-size:22rpx; }
+.empty-match { margin-top:24rpx; }.request-banner { margin:34rpx 0 12rpx; padding:25rpx 24rpx; border-radius:18rpx; background:#40543f; }.request-banner strong { font-size:29rpx; line-height:1.3; }.request-banner > view > text { margin-top:7rpx; line-height:1.45; }.request-banner > text { font-size:22rpx; }
 </style>
