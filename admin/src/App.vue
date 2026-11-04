@@ -297,6 +297,36 @@ function selectChannelLocation(item: ChannelConfig, index: number, location: Loc
   void loadChannelMapPreview(index, item.latitude, item.longitude)
 }
 
+function mapPreviewCenter(latitude: number, longitude: number, points: LocationSearchItem[]) {
+  if (!points.length) return { latitude, longitude }
+  const total = points.reduce((result, point) => ({ latitude: result.latitude + point.latitude, longitude: result.longitude + point.longitude }), { latitude: 0, longitude: 0 })
+  return { latitude: total.latitude / points.length, longitude: total.longitude / points.length }
+}
+
+function selectChannelMapPoint(item: ChannelConfig, index: number, event: MouseEvent) {
+  const target = event.currentTarget as HTMLButtonElement
+  const bounds = target.getBoundingClientRect()
+  if (!bounds.width || !bounds.height) return
+  const points = channelLocationResults.value[index] || []
+  const fallbackLatitude = item.latitude || 30.45604
+  const fallbackLongitude = item.longitude || 114.425337
+  const center = mapPreviewCenter(fallbackLatitude, fallbackLongitude, points)
+  const zoom = points.length > 1 ? 12 : 14
+  const worldSize = 256 * (2 ** zoom)
+  const clickX = ((event.clientX - bounds.left) / bounds.width - 0.5) * 620
+  const clickY = ((event.clientY - bounds.top) / bounds.height - 0.5) * 260
+  const centerX = ((center.longitude + 180) / 360) * worldSize
+  const centerLatitudeRadians = center.latitude * Math.PI / 180
+  const centerY = (1 - Math.asinh(Math.tan(centerLatitudeRadians)) / Math.PI) / 2 * worldSize
+  const longitude = ((centerX + clickX) / worldSize) * 360 - 180
+  const mercatorY = centerY + clickY
+  const latitude = Math.atan(Math.sinh(Math.PI * (1 - 2 * mercatorY / worldSize))) * 180 / Math.PI
+  item.latitude = Number(latitude.toFixed(7))
+  item.longitude = Number(longitude.toFixed(7))
+  channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
+  void loadChannelMapPreview(index, item.latitude, item.longitude)
+}
+
 async function loadChannelMapPreview(index: number, latitude: number, longitude: number, points: LocationSearchItem[] = []) {
   const pointValue = points.slice(0, 8).map((point) => `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`).join(';')
   const mapKey = `${latitude.toFixed(6)},${longitude.toFixed(6)}|${pointValue}`
@@ -698,7 +728,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                       <label><span>标题</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="invalidateChannelLocation(item, index)" /></label>
                       <label><span>副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label>
                       <label><span>搜索关键词（未选地点时使用）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" @input="invalidateChannelLocation(item, index)" /></label>
-                      <label class="channel-location-field"><span>地图范围（可选）</span><div class="channel-location-action"><el-button :loading="channelLocationLoading[index]" @click="searchChannelLocation(item, index)">{{ item.latitude && item.longitude ? '重新搜索地点' : '搜索地点' }}</el-button><el-button v-if="item.latitude && item.longitude" text type="danger" @click="clearChannelLocation(item, index)">清除位置</el-button></div><small v-if="item.latitude && item.longitude">已选中心：{{ item.latitude.toFixed(6) }}, {{ item.longitude.toFixed(6) }} · 半径 {{ item.radiusKm }} 公里</small><small v-else>地图默认显示武汉；搜索后候选地点会以 A、B、C 标记直接显示在图上。</small><div v-if="channelMapLoading[index]" class="channel-map-loading">正在加载地图预览…</div><img v-else-if="channelMapPreview[index]" class="channel-map-preview" :src="channelMapPreview[index]" alt="频道范围地图预览" /><div v-if="channelLocationResults[index]?.length" class="admin-search-results channel-location-results"><button v-for="(location, locationIndex) in channelLocationResults[index]" :key="location.id" type="button" @click="selectChannelLocation(item, index, location)"><span><strong>{{ String.fromCharCode(65 + locationIndex) }} · {{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div></label>
+                      <label class="channel-location-field"><span>地图范围（可选）</span><div class="channel-location-action"><el-button :loading="channelLocationLoading[index]" @click="searchChannelLocation(item, index)">{{ item.latitude && item.longitude ? '重新搜索地点' : '搜索地点' }}</el-button><el-button v-if="item.latitude && item.longitude" text type="danger" @click="clearChannelLocation(item, index)">清除位置</el-button></div><div v-if="channelMapLoading[index]" class="channel-map-loading">正在加载地图预览…</div><button v-else-if="channelMapPreview[index]" class="channel-map-picker" type="button" title="点击地图设置频道中心" @click="selectChannelMapPoint(item, index, $event)"><img class="channel-map-preview" :src="channelMapPreview[index]" alt="频道范围地图预览，点击可选点" /></button><small v-if="item.latitude && item.longitude">已选中心：{{ item.latitude.toFixed(6) }}, {{ item.longitude.toFixed(6) }} · 半径 {{ item.radiusKm }} 公里</small><small v-else>点击地图可直接选点；搜索后候选地点会以 A、B、C 标记显示在图上。</small><div v-if="channelLocationResults[index]?.length" class="admin-search-results channel-location-results"><button v-for="(location, locationIndex) in channelLocationResults[index]" :key="location.id" type="button" @click="selectChannelLocation(item, index, location)"><span><strong>{{ String.fromCharCode(65 + locationIndex) }} · {{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div></label>
                       <label><span>地图关联半径（选点后启用）</span><el-input-number v-model="item.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /></label>
                     </div>
                   </article>
