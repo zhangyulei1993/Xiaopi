@@ -7,6 +7,7 @@ import AdminLayout from './layouts/AdminLayout.vue'
 import DashboardPage from './pages/DashboardPage.vue'
 import WechatUsersPage from './pages/WechatUsersPage.vue'
 import IntentionsPage from './pages/IntentionsPage.vue'
+import PropertiesPage from './pages/PropertiesPage.vue'
 import { pathForTab, tabFromRoute } from './router'
 import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from './types/domain'
 import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from './config/navigation'
@@ -621,11 +622,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
         </template>
 
-        <template v-else-if="tab === '房源列表'">
-          <section class="page-header"><div><span>房源管理</span><h1>房源列表</h1></div><el-button :loading="loading" @click="load">刷新数据</el-button></section>
-          <div class="property-status-grid"><button class="surface property-status-card" :class="{ active: propertyFilter === 'all' }" @click="propertyFilter = 'all'"><i>全</i><span>全部</span><strong>{{ properties.length }}</strong></button><button v-for="status in propertyStatuses" :key="status.key" class="surface property-status-card" :class="{ active: propertyFilter === status.key }" @click="propertyFilter = status.key"><i>{{ status.icon }}</i><span>{{ status.label }}</span><strong>{{ properties.filter(item => normalizedPropertyStatus(item.status) === status.key).length }}</strong></button></div>
-          <section class="surface property-list-panel"><div class="table-heading"><div><h2>{{ propertyFilter === 'all' ? '全部房源' : statusLabel(propertyFilter) }}</h2><p>共 {{ filteredProperties.length }} 套</p></div></div><div v-if="filteredProperties.length" class="property-icon-list"><article v-for="item in filteredProperties" :key="item.id" class="property-icon-item"><div class="property-cover"><img v-if="propertyCover(item)" :src="propertyCover(item)"/><el-icon v-else><House /></el-icon></div><div class="property-copy"><strong>{{ item.community || item.title }}</strong><span>{{ item.layout || '户型待补充' }} · {{ item.location || '位置待补充' }}</span><b>{{ item.rentMonthly > 0 ? `${item.rentMonthly} 元/月` : '租金待补充' }}</b></div><el-tag>{{ statusLabel(item.status) }}</el-tag><el-select :model-value="normalizedPropertyStatus(item.status)" size="small" @change="setPropertyStatus(item, $event)"><el-option v-for="status in propertyStatuses" :key="status.key" :label="status.label" :value="status.key"/></el-select></article></div><el-empty v-else description="该状态下暂无房源"/></section>
-        </template>
+        <PropertiesPage v-else-if="tab === '房源列表'" :properties="properties" :filtered-properties="filteredProperties" :filter="propertyFilter" :statuses="propertyStatuses" :loading="loading" :normalized-status="normalizedPropertyStatus" :status-label="statusLabel" :cover="propertyCover" @refresh="load" @filter="propertyFilter = $event" @status="setPropertyStatus" />
 
         <template v-else-if="tab === '小程序配置'">
           <section class="page-header">
