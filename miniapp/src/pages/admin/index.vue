@@ -21,12 +21,15 @@ const statusLabel = (status: string) =>
     draft: "草稿",
     pending_review: "待审核",
     published: "已发布",
+    available: "可租",
     offline: "已下架",
   })[status] || status;
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("adminWorkbench", "小皮工作台", "房源运营与数据处理");
 const summary = computed(() => ({
   draft: properties.value.filter((item) => item.status === "draft").length,
-  pending: leads.value.filter((item) => item.status !== "converted" && item.status !== "closed").length,
+  pending:
+    leads.value.filter((item) => item.status !== "converted" && item.status !== "closed").length +
+    requests.value.filter((item) => !item.status || item.status === "new").length,
   incomplete: properties.value.filter((item) => !item.community || !item.location || !item.latitude || !item.longitude || !item.media?.length).length,
 }));
 const load = async () => {
@@ -253,7 +256,7 @@ const copyProperty = async (property: Property) => {
           >
             确认发布</button
           ><button
-            v-else-if="property.status === 'published'"
+            v-else-if="property.status === 'published' || property.status === 'available'"
             class="danger"
             :loading="workingID === property.id"
             @click="changeStatus(property, 'offline')"
