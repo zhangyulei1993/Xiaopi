@@ -39,14 +39,14 @@ func OpenMySQL() (*MySQL, error) {
 func (s *MySQL) Close() error { return s.db.Close() }
 
 func (s *MySQL) ListProperties(ctx context.Context) ([]domain.Property, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,title,community,location,latitude,longitude,layout,rent_monthly,fee_text,description,status,owner_id,created_at,updated_at FROM properties ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,title,community,location,latitude,longitude,layout,rent_monthly,fee_text,rent_type,available_date,deposit_payment,utilities_text,area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,status,owner_id,created_at,updated_at FROM properties ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
 	items := make([]domain.Property, 0)
 	for rows.Next() {
 		var p domain.Property
-		if err := rows.Scan(&p.ID, &p.Title, &p.Community, &p.Location, &p.Latitude, &p.Longitude, &p.Layout, &p.RentMonthly, &p.FeeText, &p.Description, &p.Status, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Title, &p.Community, &p.Location, &p.Latitude, &p.Longitude, &p.Layout, &p.RentMonthly, &p.FeeText, &p.RentType, &p.AvailableDate, &p.DepositPayment, &p.UtilitiesText, &p.AreaSqm, &p.FloorInfo, &p.Orientation, &p.Elevator, &p.MetroMinutes, &p.VerificationDate, &p.RulesText, &p.Description, &p.Status, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, p)
@@ -86,12 +86,12 @@ func (s *MySQL) listPropertyMedia(ctx context.Context, propertyID string) ([]dom
 }
 
 func (s *MySQL) CreateProperty(ctx context.Context, p domain.Property) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO properties (id,title,community,location,latitude,longitude,layout,rent_monthly,fee_text,description,status,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Title, p.Community, p.Location, p.Latitude, p.Longitude, p.Layout, p.RentMonthly, p.FeeText, p.Description, p.Status, p.OwnerID, p.CreatedAt, p.UpdatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO properties (id,title,community,location,latitude,longitude,layout,rent_monthly,fee_text,rent_type,available_date,deposit_payment,utilities_text,area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,status,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Title, p.Community, p.Location, p.Latitude, p.Longitude, p.Layout, p.RentMonthly, p.FeeText, p.RentType, p.AvailableDate, p.DepositPayment, p.UtilitiesText, p.AreaSqm, p.FloorInfo, p.Orientation, p.Elevator, p.MetroMinutes, p.VerificationDate, p.RulesText, p.Description, p.Status, p.OwnerID, p.CreatedAt, p.UpdatedAt)
 	return err
 }
 
 func (s *MySQL) UpdateProperty(ctx context.Context, p domain.Property) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE properties SET title=?,community=?,location=?,latitude=?,longitude=?,layout=?,rent_monthly=?,fee_text=?,description=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, p.Title, p.Community, p.Location, p.Latitude, p.Longitude, p.Layout, p.RentMonthly, p.FeeText, p.Description, p.ID)
+	_, err := s.db.ExecContext(ctx, `UPDATE properties SET title=?,community=?,location=?,latitude=?,longitude=?,layout=?,rent_monthly=?,fee_text=?,rent_type=?,available_date=?,deposit_payment=?,utilities_text=?,area_sqm=?,floor_info=?,orientation=?,elevator=?,metro_minutes=?,verification_date=?,rules_text=?,description=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, p.Title, p.Community, p.Location, p.Latitude, p.Longitude, p.Layout, p.RentMonthly, p.FeeText, p.RentType, p.AvailableDate, p.DepositPayment, p.UtilitiesText, p.AreaSqm, p.FloorInfo, p.Orientation, p.Elevator, p.MetroMinutes, p.VerificationDate, p.RulesText, p.Description, p.ID)
 	return err
 }
 

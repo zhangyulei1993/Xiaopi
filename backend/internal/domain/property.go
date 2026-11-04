@@ -17,21 +17,32 @@ const (
 )
 
 type Property struct {
-	ID          string          `json:"id"`
-	Title       string          `json:"title"`
-	Community   string          `json:"community"`
-	Location    string          `json:"location"`
-	Latitude    float64         `json:"latitude"`
-	Longitude   float64         `json:"longitude"`
-	Layout      string          `json:"layout"`
-	RentMonthly int64           `json:"rentMonthly"`
-	FeeText     string          `json:"feeText"`
-	Description string          `json:"description"`
-	Status      PropertyStatus  `json:"status"`
-	OwnerID     string          `json:"ownerId"`
-	Media       []PropertyMedia `json:"media"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	ID               string          `json:"id"`
+	Title            string          `json:"title"`
+	Community        string          `json:"community"`
+	Location         string          `json:"location"`
+	Latitude         float64         `json:"latitude"`
+	Longitude        float64         `json:"longitude"`
+	Layout           string          `json:"layout"`
+	RentMonthly      int64           `json:"rentMonthly"`
+	FeeText          string          `json:"feeText"`
+	RentType         string          `json:"rentType"`
+	AvailableDate    string          `json:"availableDate"`
+	DepositPayment   string          `json:"depositPayment"`
+	UtilitiesText    string          `json:"utilitiesText"`
+	AreaSqm          int             `json:"areaSqm"`
+	FloorInfo        string          `json:"floorInfo"`
+	Orientation      string          `json:"orientation"`
+	Elevator         string          `json:"elevator"`
+	MetroMinutes     int             `json:"metroMinutes"`
+	VerificationDate string          `json:"verificationDate"`
+	RulesText        string          `json:"rulesText"`
+	Description      string          `json:"description"`
+	Status           PropertyStatus  `json:"status"`
+	OwnerID          string          `json:"ownerId"`
+	Media            []PropertyMedia `json:"media"`
+	CreatedAt        time.Time       `json:"createdAt"`
+	UpdatedAt        time.Time       `json:"updatedAt"`
 }
 
 type PropertyMedia struct {

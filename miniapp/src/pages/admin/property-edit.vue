@@ -60,6 +60,17 @@ const form = reactive<Partial<Property>>({
   layout: "",
   rentMonthly: 0,
   feeText: "直租无中介费",
+  rentType: "整租",
+  availableDate: "",
+  depositPayment: "押一付一",
+  utilitiesText: "民水民电",
+  areaSqm: 0,
+  floorInfo: "",
+  orientation: "",
+  elevator: "",
+  metroMinutes: 0,
+  verificationDate: "",
+  rulesText: "",
   description: "",
   ownerId: "xiaopi-admin",
 });
@@ -321,6 +332,7 @@ const completionCount = computed(
 );
 const syncLayout = () => {
   form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
+  form.rentType = rentType.value;
 };
 const select = (values: string[], target: { value: string }, index: number) => {
   target.value = values[index];
@@ -781,7 +793,17 @@ const mediaUrl = (url: string) =>
             ><input
               v-model.trim="form.feeText"
               maxlength="30"
-              placeholder="押一付一" /></view></view></view
+              placeholder="押一付一" /></view></view
+        ><view class="rent-row detail-row"
+          ><view class="field"
+            ><text>可入住日期</text
+            ><input v-model.trim="form.availableDate" maxlength="32" placeholder="如：随时 / 12月10日" /></view
+          ><view class="field"
+            ><text>押付方式</text
+            ><input v-model.trim="form.depositPayment" maxlength="64" placeholder="如：押一付一" /></view></view
+        ><view class="field"
+          ><text>水电与杂费</text
+          ><input v-model.trim="form.utilitiesText" maxlength="64" placeholder="如：民水民电，物业费另计" /></view></view
       ><view v-show="activeSection === 1" class="section-card"
         ><view class="section-head"
           ><text>02</text
@@ -834,6 +856,12 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
+        ><view class="detail-grid"
+          ><view class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
+          ><view class="field"><text>楼层</text><input v-model.trim="form.floorInfo" maxlength="64" placeholder="如：8/26层" /></view
+          ><view class="field"><text>朝向</text><input v-model.trim="form.orientation" maxlength="32" placeholder="如：南" /></view
+          ><view class="field"><text>电梯</text><input v-model.trim="form.elevator" maxlength="32" placeholder="如：有电梯" /></view
+          ><view class="field metro-field"><text>步行至地铁（分钟）</text><input v-model.number="form.metroMinutes" type="number" placeholder="如：8" /></view></view
         ></view
       ><view v-show="activeSection === 2" class="section-card"
         ><view class="section-head"
@@ -865,6 +893,12 @@ const mediaUrl = (url: string) =>
             placeholder="填写采光、楼层、朝向、入住要求、周边交通等信息"
           ></textarea
           ><text>{{ String(form.description || "").length }}/800</text></view
+        ><view class="field"
+          ><text>入住规则</text
+          ><input v-model.trim="form.rulesText" maxlength="200" placeholder="如：可做饭，宠物需沟通，女生优先" /></view
+        ><view class="field"
+          ><text>核验日期</text
+          ><input v-model.trim="form.verificationDate" maxlength="32" placeholder="如：2026-11-04" /></view
         ></view
       ><view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
@@ -1158,6 +1192,7 @@ const mediaUrl = (url: string) =>
   grid-template-columns: 1fr 1fr;
   gap: 14rpx;
 }
+.detail-row{margin-top:14rpx}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx;margin-top:16rpx}.detail-grid .field{margin-top:0}.detail-grid .metro-field{grid-column:span 2}
 .channel-scope {
   margin-top: 16rpx;
 }

@@ -10,6 +10,17 @@ export interface Property {
   layout: string;
   rentMonthly: number;
   feeText: string;
+  rentType?: string;
+  availableDate?: string;
+  depositPayment?: string;
+  utilitiesText?: string;
+  areaSqm?: number;
+  floorInfo?: string;
+  orientation?: string;
+  elevator?: string;
+  metroMinutes?: number;
+  verificationDate?: string;
+  rulesText?: string;
   description: string;
   status: string;
   ownerId?: string;

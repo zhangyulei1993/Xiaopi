@@ -261,7 +261,7 @@ const toggleFavorite = async (id: string) => {
             >{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</view
           ><view v-if="serviceLabels(item).length" class="service-tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view
           ><view class="price"
-            >{{ item.rentMonthly }} <small>元/月</small></view
+            >{{ item.rentMonthly }} <text class="price-unit">元/月</text></view
           ></view
         ></view
       ></view
@@ -496,4 +496,5 @@ const toggleFavorite = async (id: string) => {
 .location{min-width:0}.location>text:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property-copy{display:flex;min-width:0;flex:1;flex-direction:column;padding:9rpx 4rpx 3rpx 0}.property .small{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property .summary{position:static;display:-webkit-box;margin:9rpx 0 0;min-height:0;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.property-copy>.price{position:static;margin:12rpx 0 0;font-size:34rpx;line-height:1.1}.property>.property-copy>.price small{font-size:19rpx}.property{min-height:216rpx;box-sizing:border-box}
 .property>.property-copy>.price{margin-top:auto;padding-top:12rpx}
 .cover-benefit{position:absolute;bottom:0;left:0;padding:8rpx 11rpx;border-radius:0 10rpx 0 0;background:#d66d50;color:#fff;font-size:18rpx;font-weight:700;line-height:1.1}.service-tags{display:flex;gap:7rpx;overflow:hidden;margin-top:9rpx;white-space:nowrap}.service-tags text{flex:none;padding:5rpx 8rpx;border-radius:7rpx;background:#edf0dc;color:#536a45;font-size:18rpx;line-height:1.2}.service-tags text:nth-child(2){background:#f8eadf;color:#b7644b}.property>.property-copy>.service-tags+.price{margin-top:auto;padding-top:8rpx}
+.property>.property-copy>.price .price-unit{margin-left:3rpx;color:#8a8f85;font-size:19rpx;font-weight:400}
 </style>
