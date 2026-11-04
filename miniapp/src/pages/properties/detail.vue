@@ -73,9 +73,6 @@ const previewImage = (url: string) => {
     .map((media) => mediaUrl(media.url));
   if (urls.length) uni.previewImage({ current: mediaUrl(url), urls });
 };
-const playVideo = (index: number) => {
-  playingVideoIndex.value = index;
-};
 const amenities = computed(() => {
   const match = item.value?.description?.match(/^配套设施：([^\n]*)\n?/);
   if (!match?.[1]) return [];
@@ -242,26 +239,32 @@ const contact = () => {
     ><view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
       ><text class="detail-cover-icon">⌂</text><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
     ><view v-else class="media-gallery"
-      ><swiper class="media-swiper" circular :current="activeMediaIndex" @change="handleMediaChange"
-        ><swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`"
-          ><image
+      ><swiper class="media-swiper" circular :current="activeMediaIndex" @change="handleMediaChange">
+        <swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`">
+          <image
             v-if="media.type === 'image'"
             class="media-image"
             :src="mediaUrl(media.url)"
             mode="aspectFill"
-            @click="previewImage(media.url)" /><view v-else class="video-stage"
-            ><video
+            @click="previewImage(media.url)" />
+          <view v-else class="video-stage">
+            <video
               class="media-video"
               :src="mediaUrl(media.url)"
               :poster="videoPoster"
-              :controls="playingVideoIndex === index"
-              :autoplay="playingVideoIndex === index"
-              object-fit="cover"
-              @ended="playingVideoIndex = -1" /><view v-if="playingVideoIndex !== index" class="play-video" @click.stop="playVideo(index)"
-              ><text>▶</text><small>播放视频</small></view
-            ></view
-          ></swiper-item
-        ></swiper
+              controls
+              show-play-btn
+              show-progress
+              show-fullscreen-btn
+              enable-progress-gesture
+              object-fit="contain"
+              @play="playingVideoIndex = index"
+              @pause="playingVideoIndex = -1"
+              @ended="playingVideoIndex = -1"
+            ></video>
+          </view>
+        </swiper-item>
+      </swiper
       ><view class="media-counter">{{ activeMediaIndex + 1 }} / {{ mediaItems.length }}</view
       ><view v-if="mediaItems[activeMediaIndex]?.type === 'video'" class="media-kind">视频</view></view
     ><view class="card overview"
