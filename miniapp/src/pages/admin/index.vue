@@ -5,6 +5,7 @@ import { request } from "../../api/client";
 import { type Property, type PropertyLead, type RentalRequest, type OperationLog } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
+import { callPhone } from "../../utils/phone";
 const tab = ref<"leads" | "properties" | "requests">("properties"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
@@ -112,7 +113,7 @@ const publish = (property: Property) => {
     success: (result) => result.confirm && changeStatus(property, "published"),
   });
 };
-const contactLead = (phoneNumber: string) => uni.makePhoneCall({ phoneNumber });
+const contactLead = (phoneNumber: string) => callPhone(phoneNumber, "客户手机号缺失");
 const followUp = async (type: "lead" | "request", id: string) => {
   try {
     await request(type === "lead" ? "/v1/property-leads/follow-up" : "/v1/admin/rental-requests/follow-up", { method:"PATCH", data:{ id, status:"contacted", followUpNote:"已在工作台联系客户" } });

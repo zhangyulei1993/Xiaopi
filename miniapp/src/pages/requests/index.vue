@@ -4,6 +4,7 @@ import { reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
 import { createRentalRequest, getPublicConfig } from "../../api/properties";
 import { getSession } from "../../auth/session";
+import { callPhone } from "../../utils/phone";
 
 const propertyID = ref(""),
   propertyTitle = ref(""),
@@ -79,10 +80,7 @@ const submit = async () => {
     submitting.value = false;
   }
 };
-const call = () =>
-  contactPhone.value
-    ? uni.makePhoneCall({ phoneNumber: contactPhone.value })
-    : uni.showToast({ title: "联系电话尚未配置", icon: "none" });
+const call = () => callPhone(contactPhone.value);
 </script>
 <template>
   <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.94), rgba(247,246,241,.98)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover' } : {}"
@@ -93,7 +91,7 @@ const call = () =>
       }}</view
       ><small>{{
         propertyID
-          ? "提交后由运营人员联系确认看房时间"
+          ? "留下手机号和时间，小皮会回拨确认"
           : pagePresentation.subtitle
       }}</small></view
     ><view class="card form"
@@ -103,17 +101,17 @@ const call = () =>
           v-model.trim="form.phone"
           type="number"
           placeholder="用于接收匹配和预约通知" /></view
-      ><view class="field"
+      ><view v-if="!propertyID" class="field"
         ><text>意向地区 {{ propertyID ? "" : "*" }}</text
         ><input
           v-model.trim="form.location"
           placeholder="例如：佛祖岭、金融港" /></view
-      ><view class="field"
+      ><view v-if="!propertyID" class="field"
         ><text>期望户型</text
         ><input
           v-model.trim="form.layout"
           placeholder="例如：一室一厅 / 合租主卧" /></view
-      ><view class="field"
+      ><view v-if="!propertyID" class="field"
         ><text>月租预算</text
         ><view class="budget"
           ><input
@@ -139,14 +137,14 @@ const call = () =>
         ><textarea
           v-model.trim="form.note"
           maxlength="300"
-          placeholder="通勤地点、整租/合租、楼层、宠物、采光等"
+          :placeholder="propertyID ? '例如：工作日晚上、周末上午，或想先了解的问题' : '通勤地点、整租/合租、楼层、宠物、采光等'"
         ></textarea></view></view
     ><view class="privacy"
       >提交即表示同意小皮根据以上信息联系你，仅用于本次找房服务。</view
     ><view class="button" @click="submit">{{
-      submitting ? "提交中..." : propertyID ? "预约这套房源" : "提交找房需求"
+      submitting ? "提交中..." : propertyID ? "登记看房时间" : "提交找房需求"
     }}</view
-    ><view class="contact" @click="call">急着找房？直接联系小皮 ›</view></view
+    ><view class="contact" @click="call">想马上确认房源？联系小皮 ›</view></view
   >
 </template>
 <style scoped>
