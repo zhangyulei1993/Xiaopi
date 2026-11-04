@@ -265,8 +265,7 @@ const contact = () => {
           </view>
         </swiper-item>
       </swiper
-      ><view class="media-counter">{{ activeMediaIndex + 1 }} / {{ mediaItems.length }}</view
-      ><view v-if="mediaItems[activeMediaIndex]?.type === 'video'" class="media-kind">视频</view></view
+      ><view v-if="mediaItems[activeMediaIndex]?.type !== 'video'" class="media-counter">{{ activeMediaIndex + 1 }} / {{ mediaItems.length }}</view></view
     ><view class="card overview"
       ><view class="overview-top"
         ><view class="price">{{ item.rentMonthly }} <small>元/月</small></view
