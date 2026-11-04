@@ -14,9 +14,13 @@ const accessCode = ref('')
 const nickname = ref('')
 const avatarUrl = ref('')
 const showProfileSetup = ref(false)
+const brandName = ref('小皮租房')
 const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
 
-onLoad(() => loadPresentation())
+onLoad(async () => {
+  const config = await loadPresentation()
+  brandName.value = config?.heroTitle || brandName.value
+})
 
 const showLoginError = (message = '登录失败，请稍后重试') => {
   uni.showToast({ title: message, icon: 'none' })
@@ -131,9 +135,9 @@ const saveProfileAndEnter = async () => {
 
 <template>
   <view class="page" :style="pageStyle">
-    <view class="login-hero"><view class="brand-mark"><text>小</text><i></i></view><view class="hero-kicker">XIAOPI RENTAL</view><view class="hero-title">住进喜欢的生活</view><text>收藏好房、保留足迹，及时收到联系</text></view>
+    <view class="login-hero"><view class="brand-mark"><text>小</text><i></i></view><view class="hero-kicker">{{ brandName }}</view><view class="hero-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
     <view class="card login-card">
-      <view class="login-title"><view><strong>登录小皮</strong><text>微信账号安全登录</text></view><i>可信房源</i></view>
+      <view class="login-title"><view><strong>{{ presentation.title }}</strong><text>微信账号安全登录</text></view><i>可信房源</i></view>
       <button class="wechat-button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginWithWechat"><text>微</text><view><strong>微信一键登录</strong><small>推荐使用</small></view><b>›</b></button>
       <view class="divider"><text>测试访问</text></view>
       <view class="temporary-form">

@@ -69,6 +69,7 @@ func DefaultPublicConfig() PublicConfig {
 			"requests":          {Title: "小皮帮你找房", Subtitle: "告诉我们你的找房需求"},
 			"publish":           {Title: "发布房源", Subtitle: "提交真实房源线索"},
 			"me":                {Title: "我的", Subtitle: "管理关注与找房需求"},
+			"footprints":        {Title: "浏览足迹", Subtitle: "最近看过的房源"},
 			"adminWorkbench":    {Title: "小皮工作台", Subtitle: "房源运营与数据处理"},
 			"adminPropertyEdit": {Title: "编辑房源", Subtitle: "完善房源信息后发布"},
 			"authLogin":         {Title: "微信登录", Subtitle: "登录后管理你的找房服务"},
