@@ -2,9 +2,10 @@
 import { onLoad } from "@dcloudio/uni-app";
 import { reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
-import { bindWechatPhone, createRentalRequest, getPublicConfig, getWechatUserProfile, refreshAuth } from "../../api/properties";
+import { bindWechatPhone, createRentalRequest, getPublicConfig, getSubscriptionTemplates, getWechatUserProfile, refreshAuth, registerMessageSubscription } from "../../api/properties";
 import { getSession, saveSession } from "../../auth/session";
 import { callPhone } from "../../utils/phone";
+import { requestMessageSubscription } from "../../utils/subscribe";
 
 const propertyID = ref(""),
   propertyTitle = ref(""),
@@ -12,6 +13,7 @@ const propertyID = ref(""),
   contactPhone = ref(""),
   pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
+const areaTemplateID = ref("");
 const form = reactive({
   phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
   location: "",
@@ -31,6 +33,7 @@ onLoad(async (query) => {
 	areaMode.value = String(query?.mode || "") === "area";
 	if (areaMode.value) form.location = decodeURIComponent(String(query?.area || ""));
   const config = await getPublicConfig().catch(() => null);
+	areaTemplateID.value = (await getSubscriptionTemplates().catch(() => null))?.areaListing || "";
   contactPhone.value = config?.contactPhone || "";
   pagePresentation.value = config?.pagePresentations?.requests || pagePresentation.value;
 	if (getSession()?.role === "user") {
@@ -63,6 +66,7 @@ const submit = async () => {
   }
   submitting.value = true;
   try {
+	const messageAccepted = areaMode.value ? await requestMessageSubscription(areaTemplateID.value) : false;
     await createRentalRequest({
       requestType: propertyID.value ? "appointment" : areaMode.value ? "area_subscription" : "general",
       propertyId: propertyID.value,
@@ -74,6 +78,7 @@ const submit = async () => {
       moveInDate: form.moveInDate,
       note: form.note,
     });
+	if (messageAccepted) await registerMessageSubscription(areaTemplateID.value, form.location).catch(() => null);
 	if (!form.phone) { appointmentCreated.value = true; return; }
     uni.showModal({
       title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交",

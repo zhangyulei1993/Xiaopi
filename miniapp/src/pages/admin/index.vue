@@ -2,10 +2,11 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { request } from "../../api/client";
-import { type Property, type PropertyLead, type RentalRequest, type OperationLog, type FavoriteContact } from "../../api/properties";
+import { getSubscriptionTemplates, registerMessageSubscription, type Property, type PropertyLead, type RentalRequest, type OperationLog, type FavoriteContact } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
 import { callPhone } from "../../utils/phone";
+import { requestMessageSubscription } from "../../utils/subscribe";
 const tab = ref<"leads" | "properties" | "requests" | "interests">("properties"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
@@ -14,6 +15,7 @@ const tab = ref<"leads" | "properties" | "requests" | "interests">("properties")
   interests = ref<FavoriteContact[]>([]),
   loading = ref(false),
   workingID = ref("");
+const appointmentTemplateID = ref("");
 const statusLabel = (status: string) =>
   ({
     draft: "草稿",
@@ -37,6 +39,7 @@ const load = async () => {
       request<OperationLog[]>("/v1/admin/operation-logs").catch(() => []),
 	  request<FavoriteContact[]>("/v1/admin/favorite-contacts").catch(() => []),
     ]);
+	appointmentTemplateID.value = (await getSubscriptionTemplates().catch(() => null))?.appointment || "";
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : "加载失败",
@@ -116,6 +119,12 @@ const publish = (property: Property) => {
   });
 };
 const contactLead = (phoneNumber: string) => callPhone(phoneNumber, "客户手机号缺失");
+const enableAppointmentAlerts = async () => {
+	const accepted = await requestMessageSubscription(appointmentTemplateID.value);
+	if (!accepted) { uni.showToast({ title: "未开启预约提醒", icon: "none" }); return; }
+	await registerMessageSubscription(appointmentTemplateID.value);
+	uni.showToast({ title: "已开启一次预约提醒" });
+};
 const followUp = async (type: "lead" | "request", id: string) => {
   try {
     await request(type === "lead" ? "/v1/property-leads/follow-up" : "/v1/admin/rental-requests/follow-up", { method:"PATCH", data:{ id, status:"contacted", followUpNote:"已在工作台联系客户" } });
@@ -146,7 +155,7 @@ const copyProperty = async (property: Property) => {
       ><view
         ><view class="title">房源总览</view
         ></view
-      ><view class="refresh" @click="load">刷新</view></view
+      ><view class="head-actions"><view class="alert-switch" @click="enableAppointmentAlerts">开启预约提醒</view><view class="refresh" @click="load">刷新</view></view></view
     ><view class="summary"
       ><view
         ><strong>{{ summary.draft }}</strong
@@ -272,6 +281,7 @@ const copyProperty = async (property: Property) => {
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
 }
+.head-actions{display:flex;align-items:center;gap:10rpx}.alert-switch{padding:12rpx 18rpx;border-radius:999rpx;background:#40543f;color:#fff;font-size:22rpx}
 .summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

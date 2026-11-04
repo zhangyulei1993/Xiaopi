@@ -190,7 +190,8 @@ const toggleFavorite = async (id: string) => {
 const subscribeArea = () => {
 	if (!getSession()) { uni.navigateTo({ url: "/pages/auth/login" }); return; }
 	if (isAdmin.value) return;
-	const area = activeAreaName.value || "当前片区";
+	const area = activeAreaName.value;
+	if (!area) { uni.showToast({ title: "请先选择或搜索片区", icon: "none" }); return; }
 	uni.navigateTo({ url: `/pages/requests/index?mode=area&area=${encodeURIComponent(area)}` });
 };
 </script>

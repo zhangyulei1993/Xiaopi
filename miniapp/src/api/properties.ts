@@ -94,6 +94,9 @@ export interface Footprint { propertyId: string; viewedAt: string; viewCount: nu
 export const recordFootprint = (propertyId: string) => request(`/v1/footprints/${encodeURIComponent(propertyId)}`, { method: "POST" });
 export const listFootprints = () => request<Footprint[]>("/v1/footprints");
 export const clearFootprints = () => request("/v1/footprints", { method: "DELETE" });
+export interface SubscriptionTemplates { areaListing: string; appointment: string }
+export const getSubscriptionTemplates = () => request<SubscriptionTemplates>("/v1/subscription-templates");
+export const registerMessageSubscription = (templateId: string, area = "") => request("/v1/message-subscriptions", { method: "POST", data: { templateId, area } });
 
 export interface WechatLoginResult {
   accessToken: string;

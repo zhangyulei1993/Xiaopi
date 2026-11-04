@@ -78,6 +78,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/avatar", s.requireRoles(s.uploadUserAvatar, roleUser, roleAdmin))
 	mux.HandleFunc("POST /api/v1/auth/temporary/login", s.temporaryLogin)
 	mux.HandleFunc("POST /api/v1/auth/refresh", s.requireRoles(s.refreshAuth, roleUser, roleAdmin))
+	mux.HandleFunc("GET /api/v1/subscription-templates", s.subscriptionTemplates)
+	mux.HandleFunc("POST /api/v1/message-subscriptions", s.requireRoles(s.registerMessageSubscription, roleUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/users", s.requireRoles(s.listUsers, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/admin-users", s.requireRoles(s.listAdminUsers, roleAdmin))
 	mux.HandleFunc("POST /api/v1/admin/admin-users", s.requireRoles(s.assignAdminUser, roleAdmin))
@@ -223,6 +225,7 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create rental request")
 		return
 	}
+	go s.notifyAdminsOfRequest(context.Background(), item)
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": item})
 }
 
@@ -605,6 +608,16 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
+		}
+	}
+	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
+		if items, err := s.store.ListProperties(r.Context()); err == nil {
+			for _, item := range items {
+				if item.ID == input.PropertyID {
+					go s.notifyAreaSubscribers(context.Background(), item)
+					break
+				}
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})

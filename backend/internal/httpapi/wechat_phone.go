@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,14 @@ func (s *Server) bindWechatPhone(w http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to bind phone")
 		return
+	}
+	if messageStore, ok := s.messageStore(); ok {
+		if items, err := messageStore.ListUnnotifiedRentalRequests(r.Context(), userID); err == nil {
+			for _, item := range items {
+				item.Phone = phone
+				go s.notifyAdminsOfRequest(context.Background(), item)
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]string{"phone": phone}})
 }

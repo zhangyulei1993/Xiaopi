@@ -242,6 +242,67 @@ func (s *MySQL) ClearPropertyFootprints(ctx context.Context, userID string) erro
 	return err
 }
 
+func (s *MySQL) AddMessageSubscriptionGrant(ctx context.Context, userID, templateID, area string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO message_subscription_grants (user_id,template_id,area) VALUES (?,?,?)`, userID, templateID, area)
+	return err
+}
+func (s *MySQL) ListAdminMessageRecipients(ctx context.Context, templateID string) ([]domain.MessageRecipient, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT g.id,g.user_id,u.open_id,g.area FROM message_subscription_grants g JOIN users u ON u.id=g.user_id JOIN admin_users a ON a.user_id=g.user_id AND a.status='active' WHERE g.template_id=? AND g.status='active' AND g.id=(SELECT MIN(g2.id) FROM message_subscription_grants g2 WHERE g2.user_id=g.user_id AND g2.template_id=g.template_id AND g2.status='active') ORDER BY g.created_at LIMIT 50`, templateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.MessageRecipient{}
+	for rows.Next() {
+		var item domain.MessageRecipient
+		if err := rows.Scan(&item.GrantID, &item.UserID, &item.OpenID, &item.Area); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+func (s *MySQL) ListAreaMessageRecipients(ctx context.Context, templateID string, property domain.Property) ([]domain.MessageRecipient, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT g.id,g.user_id,u.open_id,g.area FROM message_subscription_grants g JOIN users u ON u.id=g.user_id WHERE g.template_id=? AND g.status='active' AND g.area<>'' AND g.id=(SELECT MIN(g2.id) FROM message_subscription_grants g2 WHERE g2.user_id=g.user_id AND g2.template_id=g.template_id AND g2.area=g.area AND g2.status='active') AND (INSTR(?,g.area)>0 OR INSTR(?,g.area)>0 OR INSTR(?,g.area)>0) ORDER BY g.created_at LIMIT 200`, templateID, property.Location, property.Community, property.Title)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.MessageRecipient{}
+	for rows.Next() {
+		var item domain.MessageRecipient
+		if err := rows.Scan(&item.GrantID, &item.UserID, &item.OpenID, &item.Area); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+func (s *MySQL) ConsumeMessageSubscriptionGrant(ctx context.Context, id uint64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE message_subscription_grants SET status='used',used_at=CURRENT_TIMESTAMP WHERE id=? AND status='active'`, id)
+	return err
+}
+func (s *MySQL) ListUnnotifiedRentalRequests(ctx context.Context, userID string) ([]domain.RentalRequest, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests WHERE user_id=? AND admin_notified_at IS NULL AND status='new' ORDER BY created_at DESC LIMIT 20`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.RentalRequest{}
+	for rows.Next() {
+		var item domain.RentalRequest
+		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.Phone, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+func (s *MySQL) MarkRentalRequestAdminNotified(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rental_requests SET admin_notified_at=CURRENT_TIMESTAMP WHERE id=?`, id)
+	return err
+}
+
 func (s *MySQL) AddPropertyStatusChange(ctx context.Context, change domain.PropertyStatusChange) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO property_status_history (id,property_id,from_status,to_status,operator_id,note,created_at) VALUES (?,?,?,?,?,?,?)`, change.ID, change.PropertyID, change.From, change.To, change.OperatorID, change.Note, change.CreatedAt)
 	return err
