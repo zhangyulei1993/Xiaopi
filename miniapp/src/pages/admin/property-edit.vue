@@ -20,6 +20,10 @@ type PendingImage = {
   width: number;
   height: number;
   size: number;
+  originalPath: string;
+  originalWidth: number;
+  originalHeight: number;
+  originalSize: number;
 };
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MIN_IMAGE_EDGE = 640;
@@ -396,6 +400,7 @@ onShow(() => {
   const image = images.value[result.index];
   if (image) {
     images.value.splice(result.index, 1, {
+      ...image,
       path: result.path,
       width: Number(result.width) || 1200,
       height: Number(result.height) || 900,
@@ -469,7 +474,16 @@ const processPickedMedia = async (type: "image" | "video", files: any[]) => {
         rejected++;
         continue;
       }
-      accepted.push({ path, width: info.width, height: info.height, size: Number(file.size || 0) });
+      accepted.push({
+        path,
+        width: info.width,
+        height: info.height,
+        size: Number(file.size || 0),
+        originalPath: path,
+        originalWidth: info.width,
+        originalHeight: info.height,
+        originalSize: Number(file.size || 0),
+      });
     } catch {
       rejected++;
     }
@@ -487,7 +501,13 @@ const processPickedMedia = async (type: "image" | "video", files: any[]) => {
 const cropImage = (index: number) => {
   const image = images.value[index];
   if (!image) return;
-  uni.setStorageSync("xiaopi-property-image-crop-source", { ...image, index });
+  uni.setStorageSync("xiaopi-property-image-crop-source", {
+    index,
+    path: image.originalPath || image.path,
+    width: image.originalWidth || image.width,
+    height: image.originalHeight || image.height,
+    size: image.originalSize || image.size,
+  });
   uni.navigateTo({ url: "/pages/admin/image-crop" });
 };
 const previewPickedImages = (index: number) => {
@@ -854,7 +874,7 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="media-guidance"
           ><strong>封面与展示</strong
-          ><text>列表会按 4:3 展示图片；上传后可自己调整每张图片的裁切位置。</text
+          ><text>列表会按 4:3 展示图片；未保存前可反复裁切，始终以原图为准。</text
           ><small>单张不超过10MB，短边至少640px；支持相册或拍照。</small></view
         ><view v-if="existingImages.length" class="uploaded-gallery"
           ><text class="media-group-title">已上传图片</text
@@ -882,7 +902,7 @@ const mediaUrl = (url: string) =>
               class="cover-mark"
               >{{ coverImageIndex === index ? "封面" : `${image.width}×${image.height}` }}</text
             ><view class="media-tools" @click.stop
-              ><text @click="cropImage(index)">裁切</text
+              ><text @click="cropImage(index)">{{ image.path === image.originalPath ? "裁切" : "重裁" }}</text
               ><text v-if="coverImageIndex !== index" @click="setCover(index)">封面</text
               ><text v-if="index > 0" @click="moveImage(index, -1)">←</text
               ><text v-if="index < images.length - 1" @click="moveImage(index, 1)">→</text
