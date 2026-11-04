@@ -911,8 +911,8 @@ const mediaUrl = (url: string) =>
           ></view
         ><view v-if="videos.length || existingVideos.length" class="video-preview-list"
           ><text class="media-group-title">房源视频</text
-          ><view v-for="(media, index) in existingVideos" :key="media.url" class="video-card"
-            ><video
+          ><view v-for="(media, index) in existingVideos" :key="media.url" class="video-entry"
+            ><view class="video-card"><video
               :id="`existing-video-${index}`"
               :src="mediaUrl(media.url)"
               controls
@@ -921,15 +921,15 @@ const mediaUrl = (url: string) =>
               @play="markVideoPlaying(`existing-video-${index}`)"
               @pause="markVideoPaused(`existing-video-${index}`)"
               @ended="markVideoPaused(`existing-video-${index}`)"
-            /><text>已上传视频</text><view
+            /><text>已上传视频</text></view><button
               class="video-toggle"
               @click.stop="toggleVideo(`existing-video-${index}`)"
-              >{{ playingVideoId === `existing-video-${index}` ? "暂停" : "播放" }}</view></view
+              >{{ playingVideoId === `existing-video-${index}` ? "暂停播放" : "播放视频" }}</button></view
           ><view
             v-for="(path, index) in videos"
             :key="path"
-            class="video-card"
-            ><video
+            class="video-entry"
+            ><view class="video-card"><video
               :id="`pending-video-${index}`"
               :src="path"
               controls
@@ -942,10 +942,10 @@ const mediaUrl = (url: string) =>
               class="remove"
               @click="videos.splice(index, 1)"
               >×</text
-            ><view
+            ></view><button
               class="video-toggle"
               @click.stop="toggleVideo(`pending-video-${index}`)"
-              >{{ playingVideoId === `pending-video-${index}` ? "暂停" : "播放" }}</view></view
+              >{{ playingVideoId === `pending-video-${index}` ? "暂停播放" : "播放视频" }}</button></view
           ></view
         ><view class="media-actions"
           ><view @click="pick('image')"
@@ -1562,24 +1562,23 @@ const mediaUrl = (url: string) =>
   border-radius: 18rpx;
   background: #1e2825;
 }
-.video-card + .video-card { margin-top: 14rpx; }
+.video-entry + .video-entry { margin-top: 14rpx; }
 .video-card video {
   display: block;
   width: 100%;
   height: 100%;
 }
 .video-toggle {
-  position: absolute;
-  top: 14rpx;
-  right: 14rpx;
-  min-width: 88rpx;
-  padding: 10rpx 16rpx;
-  border-radius: 22rpx;
-  background: rgba(20, 29, 23, 0.78);
-  color: #fff;
-  font-size: 21rpx;
-  line-height: 1;
-  text-align: center;
+  width: 100%;
+  height: 72rpx;
+  margin: 12rpx 0 0;
+  border: 0;
+  border-radius: 14rpx;
+  background: #eef3eb;
+  color: #40543f;
+  font-size: 23rpx;
+  font-weight: 600;
+  line-height: 72rpx;
 }
 .media-actions {
   display: grid;
