@@ -630,6 +630,7 @@ const contact = () => {
   bottom: 0;
   display: grid;
   grid-template-columns: 180rpx 1fr;
+  align-items: stretch;
   gap: 18rpx;
   padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.96);
@@ -652,6 +653,7 @@ const contact = () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 84rpx;
   border-radius: 999rpx;
   background: #0e8177;
   color: #fff;
@@ -661,7 +663,7 @@ const contact = () => {
 .reserve.disabled {
   background: #b9cbc7;
 }
-.user-action-bar{grid-template-columns:210rpx 1fr}.reserve-secondary{border:1rpx solid #cbd3c5;background:#f2f4ed;color:#40543f}.contact-primary{gap:12rpx}.contact-primary text{font-size:28rpx}
+.user-action-bar{grid-template-columns:210rpx 1fr}.reserve-secondary{border:1rpx solid #cbd3c5!important;background:#f2f4ed!important;color:#40543f!important;line-height:84rpx}.contact-primary{gap:12rpx}.contact-primary text{font-size:28rpx}
 
 /* Keep detail information-first while matching the light community palette. */
 .detail-page { padding-bottom:164rpx; }.detail-cover,.media-image,.media-video { border-radius:24rpx; background:#dce4d5; }.detail-cover { height:440rpx; }.media-list { gap:14rpx; }.media-image,.media-video { height:440rpx; }.overview { margin-top:18rpx; border:0; border-radius:24rpx; }.overview .title { margin-top:18rpx; font-size:40rpx; }.overview .muted { margin-top:8rpx; font-size:25rpx; }.overview .price { color:#d76440; }.heart { color:#657162; }.heart.active { color:#d76440; }.tags text { border-radius:8rpx; background:#edf0e6; color:#5b6956; }.location-card,.nearby-card { border:0; border-radius:24rpx; }.location-heading strong { color:#29382d; }.location-heading > text,.navigate-button { color:#536a45; }.navigate-button { border-radius:12rpx; background:#e9eee0; }.detail-map { border-radius:16rpx; }.row { border-color:#eeece7; }.row text:first-child { color:#8a9389; }.desc { color:#64705f; }.amenity-icon { background:#edf0e6; }.nearby-heading > text,.nearby-price strong { color:#d76440; }.nearby-item { border-color:#eeece7; }.action-bar { background:rgba(255,255,255,.97); box-shadow:0 -6rpx 24rpx rgba(45,55,43,.07); }.contact-action { color:#5a6657; }.reserve { border-radius:16rpx; background:#40543f; }.reserve.disabled { background:#b5bdb0; }
