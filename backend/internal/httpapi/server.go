@@ -203,12 +203,16 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if (item.RequestType == "general" && len(item.Phone) < 6) || item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment") {
+	if item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment" && item.RequestType != "area_subscription") {
 		writeError(w, http.StatusBadRequest, "请填写有效的找房需求")
 		return
 	}
 	if item.RequestType == "appointment" && item.PropertyID == "" {
 		writeError(w, http.StatusBadRequest, "预约房源不能为空")
+		return
+	}
+	if item.RequestType == "area_subscription" && item.Location == "" {
+		writeError(w, http.StatusBadRequest, "订阅片区不能为空")
 		return
 	}
 	item.ID, _ = newID()

@@ -45,6 +45,7 @@ const areas = computed(() =>
     : [{ label: "全部", keyword: "" }],
 );
 const isAdmin = computed(() => currentRole.value === "admin");
+const activeAreaName = computed(() => selectedArea.value !== "全部" ? selectedArea.value : channelFilter.value?.title || keyword.value.trim());
 const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase(),
     price = priceRanges[selectedPrice.value];
@@ -186,6 +187,12 @@ const toggleFavorite = async (id: string) => {
     });
   }
 };
+const subscribeArea = () => {
+	if (!getSession()) { uni.navigateTo({ url: "/pages/auth/login" }); return; }
+	if (isAdmin.value) return;
+	const area = activeAreaName.value || "当前片区";
+	uni.navigateTo({ url: `/pages/requests/index?mode=area&area=${encodeURIComponent(area)}` });
+};
 </script>
 <template>
   <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.92), rgba(247,246,241,.96)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : {}"
@@ -261,7 +268,8 @@ const toggleFavorite = async (id: string) => {
           ></view
         ></view
       ></view
-    ><view v-else class="empty-match card"
+    ><view v-if="!loading && !loadFailed && !isAdmin" class="area-subscribe card" @click="subscribeArea"><view><strong>{{ activeAreaName ? `${activeAreaName} 没找到合适的？` : '还没找到合适的房源？' }}</strong><text>预约该片区新房源，有房发布时及时通知</text></view><b>预约新房源 ›</b></view
+    ><view v-if="!loading && !loadFailed && !filteredProperties.length" class="empty-match card"
       ><view class="empty-icon">⌕</view
       ><view class="empty-title">暂时没有完全匹配的房源</view
       ><view class="muted">{{ isAdmin ? "可调整地区、预算或关键词后重新查看。" : "留下地区、预算和入住需求，小皮会为你继续匹配。" }}</view
@@ -487,6 +495,7 @@ const toggleFavorite = async (id: string) => {
 /* Search results use the same calm, photo-first rhythm as the home page. */
 .location{margin:18rpx 0 22rpx;font-size:42rpx;line-height:1.15}.location text{padding-top:10rpx;font-size:22rpx}.search{gap:13rpx;padding:18rpx 20rpx;border-color:#ece5da;border-radius:18rpx}.search image{width:32rpx;height:32rpx;flex:none}.search input{font-size:26rpx}.favorite-filter{display:flex;align-items:center;gap:7rpx;margin:2rpx 0 16rpx;padding:10rpx 15rpx;border-radius:12rpx;font-size:22rpx}.favorite-filter image{width:24rpx;height:24rpx}.favorite-filter:not(.active) image{filter:invert(39%) sepia(10%) saturate(709%) hue-rotate(50deg)}.filter-block{margin:14rpx 0}.filter-label{font-size:22rpx}.chips text{padding:11rpx 17rpx;font-size:22rpx}.grid{display:block;margin-top:26rpx}.property{position:relative;display:flex;gap:18rpx;align-items:stretch;margin-bottom:18rpx;padding:12rpx;border:1rpx solid #eee6dc;border-radius:20rpx;background:#fffdf9;overflow:hidden}.cover{flex:none;width:244rpx;height:192rpx;border-radius:14rpx}.cover>text{color:#fff;font-size:27rpx}.badge{top:9rpx;left:9rpx;padding:5rpx 8rpx;font-size:18rpx}.favorite{top:9rpx;right:9rpx;width:44rpx;height:44rpx;background:rgba(47,44,34,.33)}.favorite image{width:28rpx;height:28rpx}.favorite.active{background:#d66d50}.property .small{min-width:0;flex:1;margin:9rpx 0 0;font-size:28rpx;line-height:1.3}.property .summary{position:absolute;display:-webkit-box;overflow:hidden;margin:50rpx 8rpx 0 274rpx;min-height:0;color:#7e867d;font-size:20rpx;line-height:1.45;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.price{position:absolute;margin:139rpx 0 0 274rpx;color:#d76440;font-size:32rpx}.property>.price small{margin-left:3rpx;color:#8a8f85;font-size:19rpx}.request-banner{margin:32rpx 0 12rpx;padding:25rpx 24rpx;border-radius:18rpx}.request-banner>text{display:flex;align-items:center;gap:5rpx;font-size:22rpx}.request-banner>text image{width:22rpx;height:22rpx;filter:brightness(0) invert(1)}
 .page-subtitle{margin:-15rpx 0 20rpx;color:#7e867d;font-size:22rpx}
+.area-subscribe{display:flex;align-items:center;justify-content:space-between;gap:20rpx;margin-top:24rpx;border:0;background:#e9eddc}.area-subscribe strong,.area-subscribe text{display:block}.area-subscribe strong{font-size:27rpx}.area-subscribe text{margin-top:7rpx;color:#7b8579;font-size:21rpx}.area-subscribe b{flex:none;color:#526442;font-size:22rpx}
 .location{margin:18rpx 0 12rpx}.page-subtitle{margin:0 0 24rpx;line-height:1.55}.search{margin-bottom:20rpx}.filter-block{margin:18rpx 0}.grid{margin-top:30rpx}.request-banner{margin-top:40rpx}
 .location{display:flex;align-items:flex-end;justify-content:space-between;gap:18rpx;font-size:44rpx;line-height:1.18}.location text{float:none;flex:none;padding:0 0 4rpx;font-size:22rpx;line-height:1.2}.filter-label{margin-bottom:10rpx;font-weight:600;line-height:1.25}.chips text{line-height:1.2}.property .small{font-weight:700}.property .summary{line-height:1.5}.request-banner strong{font-size:29rpx;line-height:1.3}.request-banner>view>text{display:block;margin-top:7rpx;line-height:1.45}
 .location{min-width:0}.location>text:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property-copy{display:flex;min-width:0;flex:1;flex-direction:column;padding:9rpx 4rpx 3rpx 0}.property .small{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.property .summary{position:static;display:-webkit-box;margin:9rpx 0 0;min-height:0;-webkit-line-clamp:2;-webkit-box-orient:vertical}.property>.property-copy>.price{position:static;margin:12rpx 0 0;font-size:34rpx;line-height:1.1}.property>.property-copy>.price small{font-size:19rpx}.property{min-height:216rpx;box-sizing:border-box}

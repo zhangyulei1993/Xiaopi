@@ -200,7 +200,7 @@ const copyProperty = async (property: Property) => {
       ></template
     ><template v-else-if="tab === 'requests'"
       ><view v-for="item in requests" :key="item.id" class="card item"
-        ><view class="row"><view class="title small">{{ item.requestType === 'appointment' ? '预约看房' : '找房需求' }}</view><text class="status">{{ item.status || 'new' }}</text></view
+        ><view class="row"><view class="title small">{{ item.requestType === 'appointment' ? '预约看房' : item.requestType === 'area_subscription' ? '片区新房预约' : '找房需求' }}</view><text class="status">{{ item.status || 'new' }}</text></view
         ><view class="muted info">{{ item.location || '地区待确认' }} · {{ item.layout || '户型不限' }}</view
         ><view class="property-meta"><text>¥ {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} / 月</text><text>{{ item.moveInDate || '入住时间待定' }}</text></view
         ><view v-if="item.note" class="note">{{ item.note }}</view

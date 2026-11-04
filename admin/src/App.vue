@@ -25,7 +25,8 @@ type RentalRequest = { id: string; requestType: string; propertyId: string; phon
 type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
 type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
 type TemporaryAccess = { id: number; phone: string; accessCode: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
-type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
+type FavoriteContact = { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
+type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
@@ -50,6 +51,7 @@ const adminFailed = ref(false)
 const properties = ref<Property[]>([])
 const leads = ref<Lead[]>([])
 const rentalRequests = ref<RentalRequest[]>([])
+const favoriteContacts = ref<FavoriteContact[]>([])
 const users = ref<WechatUser[]>([])
 const admins = ref<AdminUser[]>([])
 const temporaryAccess = ref<TemporaryAccess[]>([])
@@ -117,10 +119,11 @@ async function load() {
   loading.value = true
   pageError.value = ''
   try {
-    const [propertyData, leadData, rentalData, configData, userData, adminData, temporaryData] = await Promise.all([
+    const [propertyData, leadData, rentalData, favoriteData, configData, userData, adminData, temporaryData] = await Promise.all([
       api<Property[]>('/v1/properties'),
       api<Lead[]>('/v1/property-leads'),
       api<RentalRequest[]>('/v1/admin/rental-requests'),
+      api<FavoriteContact[]>('/v1/admin/favorite-contacts'),
       api<PublicConfig>('/v1/config/public'),
       api<WechatUser[]>('/v1/admin/users'),
       api<AdminUser[]>('/v1/admin/admin-users'),
@@ -129,6 +132,7 @@ async function load() {
     properties.value = propertyData || []
     leads.value = leadData || []
     rentalRequests.value = rentalData || []
+    favoriteContacts.value = favoriteData || []
     users.value = userData || []
     admins.value = adminData || []
     temporaryAccess.value = temporaryData || []
@@ -455,7 +459,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
         <template v-else-if="tab === '租客需求'">
           <section class="page-header"><div><span>业务管理</span><h1>租客需求</h1></div><el-button :loading="loading" @click="load">刷新数据</el-button></section>
           <div class="stats-grid list-stats"><section class="surface compact-stat"><span>需求总数</span><strong>{{ rentalRequests.length }}</strong></section><section class="surface compact-stat"><span>预约房源</span><strong>{{ rentalRequests.filter(item => item.requestType === 'appointment').length }}</strong></section><section class="surface compact-stat"><span>自主找房</span><strong>{{ rentalRequests.filter(item => item.requestType === 'general').length }}</strong></section></div>
-          <section class="surface table-panel"><div class="table-heading"><div><h2>需求记录</h2><p>优先联系新提交的用户，并按预算与区域推荐房源</p></div></div><el-table :data="rentalRequests" empty-text="暂无租客需求"><el-table-column label="类型" width="110"><template #default="scope"><el-tag :type="scope.row.requestType === 'appointment' ? 'warning' : 'success'">{{ scope.row.requestType === 'appointment' ? '预约房源' : '帮我找房' }}</el-tag></template></el-table-column><el-table-column prop="phone" label="联系电话" min-width="145"/><el-table-column label="地区与户型" min-width="190"><template #default="scope">{{ scope.row.location || '未指定地区' }}<br/><span class="muted-table-text">{{ scope.row.layout || '户型不限' }}</span></template></el-table-column><el-table-column label="月租预算" min-width="145"><template #default="scope">{{ scope.row.budgetMin || 0 }}–{{ scope.row.budgetMax || '不限' }} 元</template></el-table-column><el-table-column label="入住日期" min-width="125"><template #default="scope">{{ scope.row.moveInDate || '待沟通' }}</template></el-table-column><el-table-column prop="note" label="补充要求" min-width="220" show-overflow-tooltip/><el-table-column label="提交时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column></el-table></section>
+          <section class="surface table-panel"><div class="table-heading"><div><h2>需求记录</h2><p>优先联系新提交的用户，并按预算与区域推荐房源</p></div></div><el-table :data="rentalRequests" empty-text="暂无租客需求"><el-table-column label="类型" width="130"><template #default="scope"><el-tag :type="scope.row.requestType === 'appointment' ? 'warning' : 'success'">{{ scope.row.requestType === 'appointment' ? '预约看房' : scope.row.requestType === 'area_subscription' ? '片区新房预约' : '帮我找房' }}</el-tag></template></el-table-column><el-table-column prop="phone" label="联系电话" min-width="145"><template #default="scope">{{ scope.row.phone || '待绑定' }}</template></el-table-column><el-table-column label="地区与户型" min-width="190"><template #default="scope">{{ scope.row.location || '未指定地区' }}<br/><span class="muted-table-text">{{ scope.row.layout || '户型不限' }}</span></template></el-table-column><el-table-column label="月租预算" min-width="145"><template #default="scope">{{ scope.row.budgetMin || 0 }}–{{ scope.row.budgetMax || '不限' }} 元</template></el-table-column><el-table-column label="入住日期" min-width="125"><template #default="scope">{{ scope.row.moveInDate || '待沟通' }}</template></el-table-column><el-table-column prop="note" label="补充要求" min-width="220" show-overflow-tooltip/><el-table-column label="提交时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column></el-table></section>
+        </template>
+
+        <template v-else-if="tab === '用户意向'">
+          <section class="page-header"><div><span>用户行为</span><h1>用户意向</h1></div><el-button :loading="loading" @click="load">刷新数据</el-button></section>
+          <section class="surface table-panel"><div class="table-heading"><div><h2>房源收藏记录</h2><p>收藏仅代表用户兴趣，不要求绑定手机号</p></div></div><el-table :data="favoriteContacts" empty-text="暂无收藏记录"><el-table-column label="用户" min-width="210"><template #default="scope"><div class="user-cell"><el-avatar :size="38" :src="scope.row.avatarUrl">微</el-avatar><div><strong>{{ scope.row.nickname || '微信用户' }}</strong><span>{{ scope.row.userId }}</span></div></div></template></el-table-column><el-table-column prop="propertyName" label="关注房源" min-width="220"/><el-table-column label="手机号" min-width="150"><template #default="scope">{{ scope.row.phone || '未绑定' }}</template></el-table-column><el-table-column label="关注时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column></el-table></section>
         </template>
 
         <template v-else-if="tab === '管理员列表'">

@@ -12,6 +12,7 @@ const groups = [
       { key: '房源列表', label: '房源列表', icon: House },
       { key: '线索管理', label: '线索管理', icon: Collection },
       { key: '租客需求', label: '租客需求', icon: Collection },
+      { key: '用户意向', label: '用户意向', icon: Collection },
       { key: '微信用户', label: '微信用户', icon: User },
     ],
   },

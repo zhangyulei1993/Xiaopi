@@ -4,16 +4,13 @@ import { computed, ref } from "vue";
 import { request, resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
-  bindWechatPhone,
-  getWechatUserProfile,
-  refreshAuth,
   listFavorites,
   listProperties,
   recordFootprint,
   setFavorite,
   type Property,
 } from "../../api/properties";
-import { getSession, hasRole, saveSession } from "../../auth/session";
+import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { usePagePresentation } from "../../utils/presentation";
 import { callPhone } from "../../utils/phone";
@@ -22,7 +19,6 @@ const item = ref<Property | null>(null),
   loading = ref(true),
   loadFailed = ref(false),
   favorite = ref(false);
-const showPhoneBind = ref(false), bindingPhone = ref(false);
 const relatedRadiusKm = ref(3);
 const allProperties = ref<Property[]>([]);
 const activeMediaIndex = ref(0);
@@ -215,30 +211,12 @@ const toggle = async () => {
     await setFavorite(item.value.id, next);
     favorite.value = next;
     uni.showToast({ title: next ? "已收藏" : "已取消收藏" });
-	if (next) {
-		const profile = await getWechatUserProfile().catch(() => null);
-		if (!profile?.phone) showPhoneBind.value = true;
-	}
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : "操作失败",
       icon: "none",
     });
   }
-};
-const bindPhoneAfterAction = async (event: { detail: { code?: string; errMsg?: string } }) => {
-	const code = event.detail.code;
-	if (!code || bindingPhone.value) return;
-	bindingPhone.value = true;
-	try {
-		const result = await bindWechatPhone(code);
-		uni.setStorageSync("xiaopi_bound_phone", result.phone);
-		const refreshed = await refreshAuth();
-		saveSession(refreshed.accessToken, refreshed.role);
-		showPhoneBind.value = false;
-		uni.showToast({ title: "手机号已绑定" });
-	} catch (error) { uni.showToast({ title: error instanceof Error ? error.message : "绑定失败", icon: "none" }); }
-	finally { bindingPhone.value = false; }
 };
 const reserve = () => {
   if (!item.value || !requireUser()) return;
@@ -424,7 +402,6 @@ const contact = () => {
     ><view v-else class="action-bar user-action-bar"
       ><view class="reserve reserve-secondary" @click="reserve">预约看房</view
       ><view class="reserve contact-primary" @click="contact"><text>☎</text> 联系小皮</view></view
-    ><view v-if="showPhoneBind" class="phone-bind-mask" @click="showPhoneBind = false"><view class="phone-bind-sheet" @click.stop><view class="phone-bind-mark">✓</view><strong>收藏成功</strong><text>绑定微信手机号后，小皮可以在工作台看到你的意向并及时联系你。</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAction">绑定手机号</button><view @click="showPhoneBind = false">暂不绑定</view></view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
 </template>
@@ -679,7 +656,6 @@ const contact = () => {
   background: #b9cbc7;
 }
 .user-action-bar{grid-template-columns:210rpx 1fr}.reserve-secondary{border:1rpx solid #cbd3c5;background:#f2f4ed;color:#40543f}.contact-primary{gap:12rpx}.contact-primary text{font-size:28rpx}
-.phone-bind-mask{position:fixed;z-index:20;inset:0;display:flex;align-items:flex-end;background:rgba(27,34,27,.42)}.phone-bind-sheet{width:100%;padding:42rpx 36rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:34rpx 34rpx 0 0;background:#fff;text-align:center}.phone-bind-mark{display:grid;place-items:center;width:66rpx;height:66rpx;margin:0 auto 18rpx;border-radius:22rpx;background:#e6edd7;color:#40543f;font-size:32rpx;font-weight:800}.phone-bind-sheet strong,.phone-bind-sheet text{display:block}.phone-bind-sheet strong{font-size:34rpx}.phone-bind-sheet text{margin:14rpx auto 24rpx;max-width:590rpx;color:#7b8579;font-size:24rpx;line-height:1.6}.phone-bind-sheet button{border:0;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx}.phone-bind-sheet button::after{border:0}.phone-bind-sheet>view:last-child{margin-top:20rpx;color:#929a91;font-size:23rpx}
 
 /* Keep detail information-first while matching the light community palette. */
 .detail-page { padding-bottom:164rpx; }.detail-cover,.media-image,.media-video { border-radius:24rpx; background:#dce4d5; }.detail-cover { height:440rpx; }.media-list { gap:14rpx; }.media-image,.media-video { height:440rpx; }.overview { margin-top:18rpx; border:0; border-radius:24rpx; }.overview .title { margin-top:18rpx; font-size:40rpx; }.overview .muted { margin-top:8rpx; font-size:25rpx; }.overview .price { color:#d76440; }.heart { color:#657162; }.heart.active { color:#d76440; }.tags text { border-radius:8rpx; background:#edf0e6; color:#5b6956; }.location-card,.nearby-card { border:0; border-radius:24rpx; }.location-heading strong { color:#29382d; }.location-heading > text,.navigate-button { color:#536a45; }.navigate-button { border-radius:12rpx; background:#e9eee0; }.detail-map { border-radius:16rpx; }.row { border-color:#eeece7; }.row text:first-child { color:#8a9389; }.desc { color:#64705f; }.amenity-icon { background:#edf0e6; }.nearby-heading > text,.nearby-price strong { color:#d76440; }.nearby-item { border-color:#eeece7; }.action-bar { background:rgba(255,255,255,.97); box-shadow:0 -6rpx 24rpx rgba(45,55,43,.07); }.contact-action { color:#5a6657; }.reserve { border-radius:16rpx; background:#40543f; }.reserve.disabled { background:#b5bdb0; }

@@ -67,7 +67,7 @@ export const createPropertyLead = (lead: Partial<PropertyLead>) =>
   request<PropertyLead>("/v1/property-leads", { method: "POST", data: lead });
 export interface RentalRequest {
   id?: string;
-  requestType: "general" | "appointment";
+  requestType: "general" | "appointment" | "area_subscription";
   propertyId?: string;
   phone: string;
   location: string;
