@@ -22,6 +22,7 @@ const statusLabel = (status: string) =>
     pending_review: "待审核",
     published: "已发布",
     available: "可租",
+    rented: "已租",
     offline: "已下架",
   })[status] || status;
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("adminWorkbench", "小皮工作台", "房源运营与数据处理");
@@ -257,11 +258,24 @@ const copyProperty = async (property: Property) => {
             确认发布</button
           ><button
             v-else-if="property.status === 'published' || property.status === 'available'"
+            :loading="workingID === property.id"
+            @click="changeStatus(property, 'rented')"
+          >
+            标记已租</button
+          ><button
+            v-if="property.status === 'published' || property.status === 'available'"
             class="danger"
             :loading="workingID === property.id"
             @click="changeStatus(property, 'offline')"
           >
             下架
+          </button><button
+            v-else-if="property.status === 'rented'"
+            class="primary"
+            :loading="workingID === property.id"
+            @click="changeStatus(property, 'published')"
+          >
+            重新上架
           </button></view
         ></view
       ><view v-if="!properties.length" class="empty muted"

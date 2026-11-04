@@ -302,6 +302,7 @@ const mediaCount = computed(
     existingMedia.value.filter((item) => item.type === "image").length +
     images.value.length,
 );
+const videoCount = computed(() => existingVideos.value.length + videos.value.length);
 const existingImages = computed(() =>
   existingMedia.value.filter((item) => item.type === "image"),
 );
@@ -427,7 +428,7 @@ const pick = (type: "image" | "video") => {
   const count =
     type === "image"
       ? Math.max(0, 9 - mediaCount.value)
-      : 1 - videos.value.length;
+      : 1 - videoCount.value;
   if (count <= 0) {
     uni.showToast({
       title: type === "image" ? "最多上传 9 张图片" : "最多上传 1 个视频",
@@ -602,7 +603,15 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
   );
 const save = async (openPreview = false) => {
   if (saving.value) return;
-  if (!requiredReady.value) {
+  const minimumDraftReady = Boolean(form.title?.trim() && form.community?.trim());
+  if (!minimumDraftReady) {
+    uni.showToast({
+      title: "草稿至少填写标题和小区",
+      icon: "none",
+    });
+    return;
+  }
+  if (openPreview && !requiredReady.value) {
     uni.showToast({
       title: "请完成标题、小区、位置、地图定位、户型和月租",
       icon: "none",
@@ -768,7 +777,7 @@ const mediaUrl = resolveAssetUrl;
             :latitude="mapLatitude"
             :longitude="mapLongitude"
             :markers="mapMarkers"
-            :circles="channelCircles"
+              :circles="geoReady ? [] : channelCircles"
             :scale="geoReady ? 15 : 11"
             show-location
             @tap="selectPointOnMap"
@@ -997,7 +1006,7 @@ const mediaUrl = resolveAssetUrl;
           ><view @click="pick('image')"
             ><strong>＋ 图片</strong><small>{{ mediaCount }}/9</small></view
           ><view @click="pick('video')"
-            ><strong>＋ 视频</strong><small>{{ videos.length }}/1</small></view
+            ><strong>＋ 视频</strong><small>{{ videoCount }}/1</small></view
           ></view
         ></view
       ><view v-if="activeSection === 3" class="media-limit-hint"

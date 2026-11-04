@@ -71,8 +71,14 @@ const priceUnit = computed(() =>
   Number(item.value?.rentMonthly) > 0 ? "元/月" : "租金",
 );
 const isAdminPreview = computed(
-  () => isAdmin.value && item.value?.status !== "published",
+  () => isAdmin.value && !["published", "available"].includes(item.value?.status || ""),
 );
+const adminPreviewLabel = computed(() => {
+  const status = item.value?.status;
+  if (status === "offline") return "已下架预览";
+  if (status === "pending_review") return "待发布预览";
+  return "草稿预览";
+});
 const activeVideoIsPortrait = computed(() => {
   const active = mediaItems.value[activeMediaIndex.value];
   const dimensions = videoDimensions.value[activeMediaIndex.value];
@@ -150,7 +156,7 @@ const nearbyProperties = computed(() => {
     .filter(
       (property) =>
         property.id !== item.value?.id &&
-        property.status === "published" &&
+        ["published", "available"].includes(property.status) &&
         Number(property.latitude) &&
         Number(property.longitude),
     )
@@ -319,7 +325,7 @@ const contact = () => {
         ><image v-if="media.type === 'image'" :src="mediaUrl(media.url)" mode="aspectFill" /><text v-else>视频</text></view></view
       ></scroll-view
     ><view class="card overview"
-      ><view v-if="isAdminPreview" class="admin-preview-tag">草稿预览</view
+      ><view v-if="isAdminPreview" class="admin-preview-tag">{{ adminPreviewLabel }}</view
       ><view class="overview-top"
         ><view class="price" :class="{ pending: priceText === '待补充' }">{{ priceText }} <text class="price-unit">{{ priceUnit }}</text></view
         ><view v-if="!isAdmin" class="heart" :class="{ active: favorite }" @click="toggle"
