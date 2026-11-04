@@ -57,6 +57,7 @@ const favorites = () => {
   uni.setStorageSync("xiaopi_show_favorites", true);
   browse();
 };
+const footprints = () => uni.navigateTo({ url: "/pages/footprints/index" });
 const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
 const editProperty = () =>
   uni.navigateTo({ url: "/pages/admin/property-edit" });
@@ -199,6 +200,7 @@ const logout = () => {
     <view class="card menu">
       <view @click="browse">浏览全部房源 <text>›</text></view>
       <view v-if="!isAdmin" @click="favorites">我的关注 <text>›</text></view>
+      <view v-if="!isAdmin && isLoggedIn" @click="footprints">浏览足迹 <text>›</text></view>
       <view v-if="!isAdmin" @click="requestHome"
         >提交找房需求 <text>›</text></view
       >

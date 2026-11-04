@@ -50,13 +50,13 @@ const loginWithWechat = () => {
 
 const loginTemporarily = async () => {
   if (isLoggingIn.value) return
-  if (!/^\+?\d{6,20}$/.test(phone.value.trim()) || accessCode.value.trim().length !== 8) {
-    showLoginError('请输入手机号和 8 位访问码')
+  if (!/^\+?\d{6,20}$/.test(phone.value.trim()) || !/^\d{6}$/.test(accessCode.value.trim())) {
+	showLoginError('请输入手机号和 6 位数字访问码')
     return
   }
   isLoggingIn.value = true
   try {
-    const result = await temporaryLogin(phone.value.trim(), accessCode.value.trim().toUpperCase())
+	const result = await temporaryLogin(phone.value.trim(), accessCode.value.trim())
     completeLogin(result.accessToken, result.role, result.phone)
   } catch (error) {
     showLoginError(error instanceof Error ? error.message : undefined)
@@ -75,7 +75,7 @@ const loginTemporarily = async () => {
       <view class="muted">可使用管理员发放的访问码登录</view>
       <view class="temporary-form">
         <input v-model="phone" type="number" maxlength="20" placeholder="手机号" />
-        <input v-model="accessCode" maxlength="8" placeholder="8 位访问码" />
+        <input v-model="accessCode" type="number" maxlength="6" placeholder="6 位数字访问码" />
       </view>
       <button class="button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginTemporarily">
         使用访问码登录

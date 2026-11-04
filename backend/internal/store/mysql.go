@@ -198,6 +198,33 @@ func (s *MySQL) SetPropertyFavorite(ctx context.Context, userID, propertyID stri
 	return err
 }
 
+func (s *MySQL) RecordPropertyFootprint(ctx context.Context, userID, propertyID string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO user_footprints (user_id,property_id) VALUES (?,?) ON DUPLICATE KEY UPDATE viewed_at=CURRENT_TIMESTAMP,view_count=view_count+1`, userID, propertyID)
+	return err
+}
+
+func (s *MySQL) ListPropertyFootprints(ctx context.Context, userID string) ([]domain.Footprint, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT property_id,viewed_at,view_count FROM user_footprints WHERE user_id=? ORDER BY viewed_at DESC LIMIT 100`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.Footprint, 0)
+	for rows.Next() {
+		var item domain.Footprint
+		if err := rows.Scan(&item.PropertyID, &item.ViewedAt, &item.ViewCount); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) ClearPropertyFootprints(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM user_footprints WHERE user_id=?`, userID)
+	return err
+}
+
 func (s *MySQL) AddPropertyStatusChange(ctx context.Context, change domain.PropertyStatusChange) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO property_status_history (id,property_id,from_status,to_status,operator_id,note,created_at) VALUES (?,?,?,?,?,?,?)`, change.ID, change.PropertyID, change.From, change.To, change.OperatorID, change.Note, change.CreatedAt)
 	return err
@@ -347,6 +374,8 @@ func mergeTemporaryUser(ctx context.Context, tx *sql.Tx, temporaryID, userID, ph
 	}{
 		{`INSERT IGNORE INTO property_favorites (user_id,property_id,created_at) SELECT ?,property_id,created_at FROM property_favorites WHERE user_id=?`, []any{userID, temporaryID}},
 		{`DELETE FROM property_favorites WHERE user_id=?`, []any{temporaryID}},
+		{`INSERT INTO user_footprints (user_id,property_id,viewed_at,view_count) SELECT ?,property_id,viewed_at,view_count FROM user_footprints WHERE user_id=? ON DUPLICATE KEY UPDATE viewed_at=GREATEST(viewed_at,VALUES(viewed_at)),view_count=view_count+VALUES(view_count)`, []any{userID, temporaryID}},
+		{`DELETE FROM user_footprints WHERE user_id=?`, []any{temporaryID}},
 		{`UPDATE rental_requests SET user_id=? WHERE user_id=?`, []any{userID, temporaryID}},
 		{`UPDATE properties SET owner_id=? WHERE owner_id=?`, []any{userID, temporaryID}},
 		{`UPDATE property_status_history SET operator_id=? WHERE operator_id=?`, []any{userID, temporaryID}},
@@ -460,7 +489,13 @@ func (s *MySQL) SetTemporaryAccessStatus(ctx context.Context, phone, status stri
 	return nil
 }
 
-func (s *MySQL) LoginTemporaryUser(ctx context.Context, candidate domain.User, phone, codeHash string, now time.Time) (domain.User, error) {
+func (s *MySQL) FindBoundWechatUserByPhone(ctx context.Context, phone string) (domain.User, error) {
+	var user domain.User
+	err := s.db.QueryRowContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users WHERE phone=? AND phone<>'' AND open_id NOT LIKE 'temporary:%' LIMIT 1`, phone).Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+	return user, err
+}
+
+func (s *MySQL) LoginTemporaryUser(ctx context.Context, phone, codeHash string, now time.Time) (domain.User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.User{}, err
@@ -471,14 +506,8 @@ func (s *MySQL) LoginTemporaryUser(ctx context.Context, candidate domain.User, p
 		return domain.User{}, err
 	}
 	var user domain.User
-	err = tx.QueryRowContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users WHERE phone=? LIMIT 1 FOR UPDATE`, phone).Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		_, err = tx.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status) VALUES (?,?,?,?,?,?)`, candidate.ID, candidate.OpenID, candidate.Nickname, candidate.AvatarURL, candidate.Phone, candidate.Status)
-		if err != nil {
-			return domain.User{}, err
-		}
-		user = candidate
-	} else if err != nil {
+	err = tx.QueryRowContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users WHERE phone=? AND phone<>'' AND open_id NOT LIKE 'temporary:%' LIMIT 1 FOR UPDATE`, phone).Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
 		return domain.User{}, err
 	} else if _, err := tx.ExecContext(ctx, `UPDATE users SET status='active',updated_at=CURRENT_TIMESTAMP WHERE id=?`, user.ID); err != nil {
 		return domain.User{}, err

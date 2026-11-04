@@ -104,6 +104,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
 	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
 	mux.HandleFunc("DELETE /api/v1/favorites/{propertyID}", s.requireRoles(s.unfavoriteProperty, roleUser))
+	mux.HandleFunc("POST /api/v1/footprints/{propertyID}", s.requireRoles(s.recordFootprint, roleUser))
+	mux.HandleFunc("GET /api/v1/footprints", s.requireRoles(s.listFootprints, roleUser))
+	mux.HandleFunc("DELETE /api/v1/footprints", s.requireRoles(s.clearFootprints, roleUser))
 	return logging(cors(mux))
 }
 
@@ -444,7 +447,7 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 func visibleProperties(items []domain.Property, showAll bool) []domain.Property {
 	result := make([]domain.Property, 0, len(items))
 	for _, item := range items {
-		if showAll || item.Status == domain.PropertyPublished {
+		if showAll || item.Status == domain.PropertyPublished || item.Status == domain.PropertyAvailable {
 			result = append(result, item)
 		}
 	}

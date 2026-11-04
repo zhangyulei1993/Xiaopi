@@ -19,13 +19,13 @@ type PublicConfig = {
   featuredChannels: ChannelConfig[]
   pagePresentations: Record<string, PagePresentation>
 }
-type Property = { title: string; community: string; status: string }
+type Property = { id: string; title: string; community: string; location: string; layout: string; rentMonthly: number; status: string; media?: { type: string; url: string }[] }
 type Lead = { sourceName: string; community: string; sourcePhone: string; status: string }
 type RentalRequest = { id: string; requestType: string; propertyId: string; phone: string; location: string; layout: string; budgetMin: number; budgetMax: number; moveInDate: string; note: string; status: string; createdAt: string }
 type WechatUser = { id: string; nickname: string; avatarUrl: string; phone: string; status: string; createdAt: string }
 type AdminUser = { id: number; userId: string; nickname: string; avatarUrl: string; phone: string; role: string; status: string; createdBy: string; createdAt: string }
 type TemporaryAccess = { id: number; phone: string; accessCode: string; status: string; expiresAt: string; createdBy: string; createdAt: string }
-type TabKey = '运营总览' | '房源审核' | '线索管理' | '租客需求' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
+type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
@@ -59,6 +59,7 @@ const generatingTemporaryCode = ref(false)
 const generatedTemporaryCode = ref('')
 const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
+const propertyFilter = ref('all')
 const pagePresentationOptions = [
   { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'propertyDetail', label: '房源详情' }, { key: 'requests', label: '找房需求' }, { key: 'publish', label: '发布房源' }, { key: 'me', label: '我的' }, { key: 'adminWorkbench', label: '运营工作台' }, { key: 'adminPropertyEdit', label: '编辑房源' }, { key: 'authLogin', label: '微信登录' },
 ]
@@ -174,6 +175,23 @@ const rows = computed(() => {
 const currentMetric = computed(() => tab.value === '线索管理' ? '线索总数' : '房源总数')
 const statusType = (status: string) => status === '正常' || status === 'PUBLISHED' ? 'success' : status === 'PENDING' ? 'warning' : 'info'
 const formatTime = (value: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
+const propertyStatuses = [
+  { key: 'published', label: '已发布', icon: '✓' }, { key: 'available', label: '可租', icon: '钥' },
+  { key: 'rented', label: '已租', icon: '住' }, { key: 'offline', label: '已下架', icon: '下' },
+  { key: 'draft', label: '未发布（草稿）', icon: '稿' },
+]
+const normalizedPropertyStatus = (status: string) => status === 'pending_review' ? 'draft' : status
+const filteredProperties = computed(() => propertyFilter.value === 'all' ? properties.value : properties.value.filter(item => normalizedPropertyStatus(item.status) === propertyFilter.value))
+const statusLabel = (status: string) => propertyStatuses.find(item => item.key === normalizedPropertyStatus(status))?.label || status
+async function setPropertyStatus(item: Property, status: string) {
+  try { await api('/v1/properties/status', { method: 'PATCH', body: JSON.stringify({ propertyId: item.id, status, note: `后台调整为${statusLabel(status)}` }) }); item.status = status }
+  catch (error) { pageError.value = error instanceof Error ? error.message : '房源状态更新失败' }
+}
+const propertyCover = (item: Property) => {
+  const url = item.media?.find(media => media.type === 'image')?.url || ''
+  if (!url || /^https?:\/\//.test(url)) return url
+  return `${apiBase.replace(/\/api\/?$/, '')}${url.startsWith('/') ? url : `/${url}`}`
+}
 
 const configDirty = computed(() => Boolean(savedConfigJSON.value) && JSON.stringify(publicConfig) !== savedConfigJSON.value)
 const configErrors = computed(() => {
@@ -409,7 +427,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="hero-meter"><span>当前待跟进线索</span><strong>{{ leads.length }}</strong></div>
           </section>
           <div v-loading="loading" class="stats-grid dashboard-grid">
-            <button class="surface stat-card" @click="tab = '房源审核'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong></button>
+            <button class="surface stat-card" @click="tab = '房源列表'"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong></button>
             <button class="surface stat-card" @click="tab = '线索管理'"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong></button>
             <button class="surface stat-card" @click="tab = '微信用户'"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong></button>
             <button class="surface stat-card" @click="tab = '小程序配置'"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong></button>
@@ -482,7 +500,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
           <section class="surface temporary-access-panel">
             <div class="temporary-form">
-              <el-input v-model.trim="temporaryPhone" placeholder="用户手机号" clearable />
+              <el-select v-model="temporaryPhone" filterable clearable placeholder="搜索已绑定手机号的微信用户"><el-option v-for="item in users.filter(user => user.phone && !user.id.startsWith('tmp-'))" :key="item.id" :label="`${item.nickname || '微信用户'} · ${item.phone}`" :value="item.phone" /></el-select>
               <el-input-number v-model="temporaryHours" :min="1" :max="720" controls-position="right" />
               <span class="hours-unit">小时有效</span>
               <el-button type="primary" :loading="generatingTemporaryCode" :disabled="!temporaryPhone" @click="generateTemporaryAccess">生成访问码</el-button>
@@ -501,6 +519,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <el-table-column label="操作" width="100" align="center"><template #default="scope"><el-popconfirm v-if="scope.row.status === 'active'" title="确认撤销该手机号的访问码？" @confirm="revokeTemporaryAccess(scope.row)"><template #reference><el-button link type="danger">撤销</el-button></template></el-popconfirm><span v-else>-</span></template></el-table-column>
             </el-table>
           </section>
+        </template>
+
+        <template v-else-if="tab === '房源列表'">
+          <section class="page-header"><div><span>房源管理</span><h1>房源列表</h1></div><el-button :loading="loading" @click="load">刷新数据</el-button></section>
+          <div class="property-status-grid"><button class="surface property-status-card" :class="{ active: propertyFilter === 'all' }" @click="propertyFilter = 'all'"><i>全</i><span>全部</span><strong>{{ properties.length }}</strong></button><button v-for="status in propertyStatuses" :key="status.key" class="surface property-status-card" :class="{ active: propertyFilter === status.key }" @click="propertyFilter = status.key"><i>{{ status.icon }}</i><span>{{ status.label }}</span><strong>{{ properties.filter(item => normalizedPropertyStatus(item.status) === status.key).length }}</strong></button></div>
+          <section class="surface property-list-panel"><div class="table-heading"><div><h2>{{ propertyFilter === 'all' ? '全部房源' : statusLabel(propertyFilter) }}</h2><p>共 {{ filteredProperties.length }} 套</p></div></div><div v-if="filteredProperties.length" class="property-icon-list"><article v-for="item in filteredProperties" :key="item.id" class="property-icon-item"><div class="property-cover"><img v-if="propertyCover(item)" :src="propertyCover(item)"/><el-icon v-else><House /></el-icon></div><div class="property-copy"><strong>{{ item.community || item.title }}</strong><span>{{ item.layout || '户型待补充' }} · {{ item.location || '位置待补充' }}</span><b>{{ item.rentMonthly > 0 ? `${item.rentMonthly} 元/月` : '租金待补充' }}</b></div><el-tag>{{ statusLabel(item.status) }}</el-tag><el-select :model-value="normalizedPropertyStatus(item.status)" size="small" @change="setPropertyStatus(item, $event)"><el-option v-for="status in propertyStatuses" :key="status.key" :label="status.label" :value="status.key"/></el-select></article></div><el-empty v-else description="该状态下暂无房源"/></section>
         </template>
 
         <template v-else-if="tab === '小程序配置'">

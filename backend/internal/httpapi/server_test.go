@@ -204,7 +204,15 @@ func (f *fakeStore) SetTemporaryAccessStatus(_ context.Context, phone, status st
 	}
 	return sql.ErrNoRows
 }
-func (f *fakeStore) LoginTemporaryUser(_ context.Context, user domain.User, phone, codeHash string, now time.Time) (domain.User, error) {
+func (f *fakeStore) FindBoundWechatUserByPhone(_ context.Context, phone string) (domain.User, error) {
+	for _, user := range f.users {
+		if user.Phone == phone && !strings.HasPrefix(user.OpenID, "temporary:") {
+			return user, nil
+		}
+	}
+	return domain.User{}, sql.ErrNoRows
+}
+func (f *fakeStore) LoginTemporaryUser(_ context.Context, phone, codeHash string, now time.Time) (domain.User, error) {
 	if f.temporaryHashes[phone] != codeHash || len(f.temporaryAccess) == 0 || f.temporaryAccess[0].Status != "active" || !f.temporaryAccess[0].ExpiresAt.After(now) {
 		return domain.User{}, sql.ErrNoRows
 	}
@@ -213,8 +221,7 @@ func (f *fakeStore) LoginTemporaryUser(_ context.Context, user domain.User, phon
 			return existing, nil
 		}
 	}
-	f.users = append(f.users, user)
-	return user, nil
+	return domain.User{}, sql.ErrNoRows
 }
 
 func testServer(dataStore Store) *Server {
@@ -320,8 +327,8 @@ func TestAssignAdminRequiresExistingWechatUserPhone(t *testing.T) {
 	}
 }
 
-func TestTemporaryAccessCreatesDistinctAuthenticatedUser(t *testing.T) {
-	dataStore := &fakeStore{}
+func TestTemporaryAccessAuthenticatesExistingBoundWechatUser(t *testing.T) {
+	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", OpenID: "openid-1", Phone: "13800138000", Status: domain.UserActive}}}
 	server := testServer(dataStore)
 	adminToken, err := server.tokens.issue("operator", roleAdmin)
 	if err != nil {
@@ -334,8 +341,8 @@ func TestTemporaryAccessCreatesDistinctAuthenticatedUser(t *testing.T) {
 	data := responseData[struct {
 		AccessCode string `json:"accessCode"`
 	}](t, created)
-	if len(data.AccessCode) != 8 {
-		t.Fatalf("expected 8 character access code, got %q", data.AccessCode)
+	if len(data.AccessCode) != 6 {
+		t.Fatalf("expected 6 digit access code, got %q", data.AccessCode)
 	}
 	listed := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/admin/temporary-access", nil, adminToken)
 	items := responseData[[]domain.TemporaryAccess](t, listed)

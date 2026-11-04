@@ -13,7 +13,8 @@ func TestCanTransitionPropertyStatus(t *testing.T) {
 		{string(PropertyPublished), string(PropertyOffline), true},
 		{string(PropertyOffline), string(PropertyPending), true},
 		{string(PropertyDraft), string(PropertyPublished), true},
-		{string(PropertyPublished), string(PropertyDraft), false},
+		{string(PropertyPublished), string(PropertyDraft), true},
+		{string(PropertyAvailable), string(PropertyRented), true},
 	}
 	for _, test := range tests {
 		if got := CanTransitionPropertyStatus(test.from, test.to); got != test.want {

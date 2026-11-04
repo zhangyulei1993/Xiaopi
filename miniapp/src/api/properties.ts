@@ -89,6 +89,10 @@ export const setFavorite = (propertyId: string, favorite: boolean) =>
     `/v1/favorites/${encodeURIComponent(propertyId)}`,
     { method: favorite ? "PUT" : "DELETE" },
   );
+export interface Footprint { propertyId: string; viewedAt: string; viewCount: number }
+export const recordFootprint = (propertyId: string) => request(`/v1/footprints/${encodeURIComponent(propertyId)}`, { method: "POST" });
+export const listFootprints = () => request<Footprint[]>("/v1/footprints");
+export const clearFootprints = () => request("/v1/footprints", { method: "DELETE" });
 
 export interface WechatLoginResult {
   accessToken: string;

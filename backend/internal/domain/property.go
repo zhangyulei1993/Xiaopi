@@ -13,6 +13,8 @@ const (
 	PropertyDraft     PropertyStatus = "draft"
 	PropertyPending   PropertyStatus = "pending_review"
 	PropertyPublished PropertyStatus = "published"
+	PropertyAvailable PropertyStatus = "available"
+	PropertyRented    PropertyStatus = "rented"
 	PropertyOffline   PropertyStatus = "offline"
 )
 
@@ -76,7 +78,7 @@ func (p *Property) TakeOffline() {
 
 func IsPropertyStatus(value string) bool {
 	switch PropertyStatus(value) {
-	case PropertyDraft, PropertyPending, PropertyPublished, PropertyOffline:
+	case PropertyDraft, PropertyPending, PropertyPublished, PropertyAvailable, PropertyRented, PropertyOffline:
 		return true
 	default:
 		return false
@@ -84,14 +86,5 @@ func IsPropertyStatus(value string) bool {
 }
 
 func CanTransitionPropertyStatus(from, to string) bool {
-	switch PropertyStatus(from) {
-	case PropertyDraft, PropertyOffline:
-		return PropertyStatus(to) == PropertyPending || PropertyStatus(to) == PropertyPublished
-	case PropertyPending:
-		return PropertyStatus(to) == PropertyPublished || PropertyStatus(to) == PropertyDraft
-	case PropertyPublished:
-		return PropertyStatus(to) == PropertyOffline
-	default:
-		return false
-	}
+	return IsPropertyStatus(from) && IsPropertyStatus(to) && from != to
 }

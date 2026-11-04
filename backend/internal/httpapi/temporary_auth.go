@@ -20,7 +20,8 @@ type temporaryAuthStore interface {
 	ListTemporaryAccess(context.Context) ([]domain.TemporaryAccess, error)
 	UpsertTemporaryAccess(context.Context, string, string, string, string, time.Time) (domain.TemporaryAccess, error)
 	SetTemporaryAccessStatus(context.Context, string, string) error
-	LoginTemporaryUser(context.Context, domain.User, string, string, time.Time) (domain.User, error)
+	LoginTemporaryUser(context.Context, string, string, time.Time) (domain.User, error)
+	FindBoundWechatUserByPhone(context.Context, string) (domain.User, error)
 }
 
 func (s *Server) temporaryAuthStore() (temporaryAuthStore, bool) {
@@ -73,6 +74,13 @@ func (s *Server) createTemporaryAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "temporary authentication unavailable")
 		return
 	}
+	if _, err := store.FindBoundWechatUserByPhone(r.Context(), phone); errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusBadRequest, "该手机号尚未绑定微信用户")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to verify wechat user")
+		return
+	}
 	expiresAt := time.Now().Add(time.Duration(input.ExpiresInHours) * time.Hour)
 	item, err := store.UpsertTemporaryAccess(r.Context(), phone, s.temporaryCodeHash(phone, code), code, claimsFromContext(r.Context()).Subject, expiresAt)
 	if err != nil {
@@ -116,9 +124,9 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	phone := normalizePhone(input.Phone)
-	code := strings.ToUpper(strings.TrimSpace(input.AccessCode))
-	if phone == "" || len(code) != 8 {
-		writeError(w, http.StatusBadRequest, "请输入手机号和 8 位访问码")
+	code := strings.TrimSpace(input.AccessCode)
+	if phone == "" || len(code) != 6 || strings.Trim(code, "0123456789") != "" {
+		writeError(w, http.StatusBadRequest, "请输入手机号和 6 位数字访问码")
 		return
 	}
 	store, ok := s.temporaryAuthStore()
@@ -126,9 +134,7 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "temporary authentication unavailable")
 		return
 	}
-	userID := temporaryUserID(phone)
-	user := domain.User{ID: userID, OpenID: "temporary:" + phone, Phone: phone, Status: domain.UserActive}
-	authenticatedUser, err := store.LoginTemporaryUser(r.Context(), user, phone, s.temporaryCodeHash(phone, code), time.Now())
+	authenticatedUser, err := store.LoginTemporaryUser(r.Context(), phone, s.temporaryCodeHash(phone, code), time.Now())
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusUnauthorized, "手机号或访问码错误，或访问码已过期")
 		return
@@ -146,8 +152,8 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func temporaryAccessCode() (string, error) {
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	random := make([]byte, 8)
+	const alphabet = "0123456789"
+	random := make([]byte, 6)
 	if _, err := rand.Read(random); err != nil {
 		return "", err
 	}

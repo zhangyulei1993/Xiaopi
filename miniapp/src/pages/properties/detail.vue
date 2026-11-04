@@ -6,6 +6,7 @@ import {
   getPublicConfig,
   listFavorites,
   listProperties,
+  recordFootprint,
   setFavorite,
   type Property,
 } from "../../api/properties";
@@ -39,6 +40,7 @@ const load = async (id = "") => {
     ]);
     allProperties.value = items;
     item.value = items.find((property) => property.id === id) || null;
+	if (item.value && getSession()?.role === "user") await recordFootprint(id).catch(() => null);
     activeMediaIndex.value = 0;
     playingVideoIndex.value = -1;
     videoDimensions.value = {};
