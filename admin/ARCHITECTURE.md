@@ -3,6 +3,8 @@
 ## Runtime layers
 
 - `src/main.ts`: application bootstrap, Element Plus and router registration.
+- `src/App.vue`: minimal application entry.
+- `src/pages/AdminWorkspacePage.vue`: authenticated workspace coordinator; it owns shared operator state while route modules migrate out.
 - `src/router.ts`: refresh-safe hash routes. The hash strategy matches the current `/admin/` static deployment and requires no server rewrite.
 - `src/services/`: API clients and transport concerns. Components should not assemble authorization headers themselves.
 - `src/types/`: shared domain contracts returned by the API.
