@@ -58,7 +58,12 @@ const bindPhone = async (event: {
     const result = await bindWechatPhone(code);
     phone.value = result.phone;
     uni.setStorageSync("xiaopi_bound_phone", result.phone);
-    uni.showToast({ title: "手机号绑定成功" });
+    const refreshed = await refreshAuth();
+    saveSession(refreshed.accessToken, refreshed.role);
+    role.value = refreshed.role;
+    uni.showToast({
+      title: refreshed.role === "admin" ? "已进入管理员身份" : "手机号绑定成功",
+    });
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : "手机号绑定失败",

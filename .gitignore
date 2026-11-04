@@ -1,4 +1,5 @@
 docker/.env
+.env
 docker/mysql/data/
 docker/redis/data/
 *.pem

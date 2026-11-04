@@ -15,18 +15,19 @@ services:
       APP_PORT: 18080
       MYSQL_HOST: 127.0.0.1
       MYSQL_PORT: 3306
-      MYSQL_USER: xiaopi_user
-      MYSQL_PASSWORD: xiaopi_pass
-      MYSQL_DATABASE: xiaopi_platform
+      MYSQL_USER: ${MYSQL_USER:-xiaopi_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-xiaopi_platform}
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: 6379
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-xiaopi_admin_2026}
-      JWT_ADMIN_SECRET: ${JWT_ADMIN_SECRET:-xiaopi-admin-secret}
-      WECHAT_MINI_APP_ID: ${WECHAT_MINI_APP_ID:-}
-      WECHAT_MINI_APP_SECRET: ${WECHAT_MINI_APP_SECRET:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      JWT_ADMIN_SECRET: ${JWT_ADMIN_SECRET:?JWT_ADMIN_SECRET is required}
+      WECHAT_MINI_APP_ID: ${WECHAT_MINI_APP_ID:?WECHAT_MINI_APP_ID is required}
+      WECHAT_MINI_APP_SECRET: ${WECHAT_MINI_APP_SECRET:?WECHAT_MINI_APP_SECRET is required}
       WECHAT_MOCK_ENABLED: ${WECHAT_MOCK_ENABLED:-false}
       CONTACT_PHONE: ${CONTACT_PHONE:-}
+      TENCENT_MAP_KEY: ${TENCENT_MAP_KEY:?TENCENT_MAP_KEY is required}
     volumes:
       - ../backend:/workspace/backend
     depends_on:
@@ -41,10 +42,10 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: xiaopi_platform
-      MYSQL_USER: xiaopi_user
-      MYSQL_PASSWORD: xiaopi_pass
-      MYSQL_ROOT_PASSWORD: xiaopi_root_pass
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-xiaopi_platform}
+      MYSQL_USER: ${MYSQL_USER:-xiaopi_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       TZ: Asia/Shanghai
     volumes:
       - ./mysql/data-xiaopi:/var/lib/mysql
@@ -55,7 +56,7 @@ services:
       - --collation-server=utf8mb4_0900_ai_ci
       - --default-time-zone=+08:00
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uxiaopi_user", "-pxiaopi_pass"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p\"$${MYSQL_PASSWORD}\""]
       interval: 5s
       timeout: 5s
       retries: 20

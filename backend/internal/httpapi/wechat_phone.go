@@ -32,7 +32,7 @@ func (s *Server) bindWechatPhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := claimsFromContext(r.Context()).Subject
-	if err := store.UpdateUserPhone(r.Context(), userID, phone); errors.Is(err, domain.ErrPhoneInUse) {
+	if err := store.BindUserPhone(r.Context(), userID, phone); errors.Is(err, domain.ErrPhoneInUse) {
 		writeError(w, http.StatusConflict, "该手机号已绑定其他微信用户")
 		return
 	} else if errors.Is(err, sql.ErrNoRows) {

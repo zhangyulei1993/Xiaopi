@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +27,12 @@ type fakeStore struct {
 	rentalRequests  []domain.RentalRequest
 	favorites       map[string][]string
 	statusErr       error
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return function(request)
 }
 
 func (f *fakeStore) ListProperties(context.Context) ([]domain.Property, error) {
@@ -88,7 +96,26 @@ func (f *fakeStore) SetPropertyFavorite(_ context.Context, userID, propertyID st
 	return nil
 }
 func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error) { return f.users, nil }
-func (f *fakeStore) UpdateUserPhone(_ context.Context, userID, phone string) error {
+func (f *fakeStore) BindUserPhone(_ context.Context, userID, phone string) error {
+	for index := range f.users {
+		if f.users[index].ID == userID {
+			continue
+		}
+		if f.users[index].Phone != phone {
+			continue
+		}
+		if !strings.HasPrefix(f.users[index].OpenID, "temporary:") {
+			return domain.ErrPhoneInUse
+		}
+		temporaryID := f.users[index].ID
+		for adminIndex := range f.admins {
+			if f.admins[adminIndex].UserID == temporaryID {
+				f.admins[adminIndex].UserID = userID
+			}
+		}
+		f.users = append(f.users[:index], f.users[index+1:]...)
+		break
+	}
 	for index := range f.users {
 		if f.users[index].ID == userID {
 			f.users[index].Phone = phone
@@ -471,5 +498,49 @@ func TestRefreshAuthReflectsCurrentAdminAssignment(t *testing.T) {
 	}](t, downgraded)
 	if downgradedAuth.Role != roleUser {
 		t.Fatalf("expected user role after disable, got %q", downgradedAuth.Role)
+	}
+}
+
+func TestBindWechatPhoneMergesTemporaryAdminIdentity(t *testing.T) {
+	t.Setenv("WECHAT_MINI_APP_ID", "wx-test")
+	t.Setenv("WECHAT_MINI_APP_SECRET", "secret-test")
+	dataStore := &fakeStore{
+		users: []domain.User{
+			{ID: "wx-real-user", OpenID: "openid-real", Status: domain.UserActive},
+			{ID: "tmp-user", OpenID: "temporary:13800138000", Phone: "13800138000", Status: domain.UserActive},
+		},
+		admins: []domain.AdminUser{{ID: 1, UserID: "tmp-user", Phone: "13800138000", Role: roleAdmin, Status: "active"}},
+	}
+	server := testServer(dataStore)
+	server.httpClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body := `{"access_token":"access-token","expires_in":7200}`
+		if strings.Contains(request.URL.Path, "getuserphonenumber") {
+			body = `{"errcode":0,"phone_info":{"phoneNumber":"+8613800138000","purePhoneNumber":"13800138000"}}`
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	token, err := server.tokens.issue("wx-real-user", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/phone", map[string]string{"code": "phone-code"}, token)
+	if bound.Code != http.StatusOK {
+		t.Fatalf("expected phone binding success, got %d: %s", bound.Code, bound.Body.String())
+	}
+	if len(dataStore.users) != 1 || dataStore.users[0].ID != "wx-real-user" || dataStore.users[0].Phone != "13800138000" {
+		t.Fatalf("temporary identity was not merged: %#v", dataStore.users)
+	}
+	if len(dataStore.admins) != 1 || dataStore.admins[0].UserID != "wx-real-user" {
+		t.Fatalf("administrator assignment was not transferred: %#v", dataStore.admins)
+	}
+	refreshed := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, token)
+	if refreshed.Code != http.StatusOK {
+		t.Fatalf("expected refresh success, got %d: %s", refreshed.Code, refreshed.Body.String())
+	}
+	auth := responseData[struct {
+		Role string `json:"role"`
+	}](t, refreshed)
+	if auth.Role != roleAdmin {
+		t.Fatalf("expected merged user to become admin, got %q", auth.Role)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -266,19 +267,24 @@ func (s *MySQL) ListUsers(ctx context.Context) ([]domain.User, error) {
 	return items, rows.Err()
 }
 
-func (s *MySQL) UpdateUserPhone(ctx context.Context, userID, phone string) error {
+func (s *MySQL) BindUserPhone(ctx context.Context, userID, phone string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var existingID string
-	err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE phone=? AND id<>? LIMIT 1 FOR UPDATE`, phone, userID).Scan(&existingID)
-	if err == nil {
-		return domain.ErrPhoneInUse
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	var existingID, existingOpenID string
+	err = tx.QueryRowContext(ctx, `SELECT id,open_id FROM users WHERE phone=? AND id<>? LIMIT 1 FOR UPDATE`, phone, userID).Scan(&existingID, &existingOpenID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
+	}
+	if err == nil {
+		if !strings.HasPrefix(existingOpenID, "temporary:") {
+			return domain.ErrPhoneInUse
+		}
+		if err := mergeTemporaryUser(ctx, tx, existingID, userID, phone); err != nil {
+			return err
+		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE users SET phone=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, phone, userID)
 	if err != nil {
@@ -288,6 +294,55 @@ func (s *MySQL) UpdateUserPhone(ctx context.Context, userID, phone string) error
 		return sql.ErrNoRows
 	}
 	return tx.Commit()
+}
+
+func mergeTemporaryUser(ctx context.Context, tx *sql.Tx, temporaryID, userID, phone string) error {
+	var role, status, createdBy string
+	adminErr := tx.QueryRowContext(ctx, `SELECT role,status,created_by FROM admin_users WHERE user_id=? FOR UPDATE`, temporaryID).Scan(&role, &status, &createdBy)
+	if adminErr != nil && !errors.Is(adminErr, sql.ErrNoRows) {
+		return adminErr
+	}
+	if adminErr == nil {
+		var currentStatus string
+		currentErr := tx.QueryRowContext(ctx, `SELECT status FROM admin_users WHERE user_id=? FOR UPDATE`, userID).Scan(&currentStatus)
+		switch {
+		case errors.Is(currentErr, sql.ErrNoRows):
+			if _, err := tx.ExecContext(ctx, `UPDATE admin_users SET user_id=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?`, userID, temporaryID); err != nil {
+				return err
+			}
+		case currentErr != nil:
+			return currentErr
+		default:
+			if currentStatus == "active" || status == "active" {
+				status = "active"
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE admin_users SET role=?,status=?,created_by=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?`, role, status, createdBy, userID); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM admin_users WHERE user_id=?`, temporaryID); err != nil {
+				return err
+			}
+		}
+	}
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT IGNORE INTO property_favorites (user_id,property_id,created_at) SELECT ?,property_id,created_at FROM property_favorites WHERE user_id=?`, []any{userID, temporaryID}},
+		{`DELETE FROM property_favorites WHERE user_id=?`, []any{temporaryID}},
+		{`UPDATE rental_requests SET user_id=? WHERE user_id=?`, []any{userID, temporaryID}},
+		{`UPDATE properties SET owner_id=? WHERE owner_id=?`, []any{userID, temporaryID}},
+		{`UPDATE property_status_history SET operator_id=? WHERE operator_id=?`, []any{userID, temporaryID}},
+		{`UPDATE operation_logs SET operator_id=? WHERE operator_id=?`, []any{userID, temporaryID}},
+		{`UPDATE temporary_access_codes SET status='disabled',updated_at=CURRENT_TIMESTAMP WHERE phone=?`, []any{phone}},
+		{`DELETE FROM users WHERE id=?`, []any{temporaryID}},
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement.query, statement.args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *MySQL) ListAdminUsers(ctx context.Context) ([]domain.AdminUser, error) {

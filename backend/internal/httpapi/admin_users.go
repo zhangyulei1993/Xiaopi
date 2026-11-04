@@ -13,7 +13,7 @@ import (
 
 type userAdminStore interface {
 	ListUsers(context.Context) ([]domain.User, error)
-	UpdateUserPhone(context.Context, string, string) error
+	BindUserPhone(context.Context, string, string) error
 	ListAdminUsers(context.Context) ([]domain.AdminUser, error)
 	AssignAdminByPhone(context.Context, string, string) (domain.AdminUser, error)
 	SetAdminStatus(context.Context, string, string) error
