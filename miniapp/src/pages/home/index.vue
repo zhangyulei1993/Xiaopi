@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { API_ORIGIN } from "../../api/client";
+import { resolveAssetUrl } from "../../api/client";
 import { getPublicConfig, listProperties, type Property, type PublicConfig } from "../../api/properties";
 import pinIcon from "../../static/icons/pin.svg";
 import searchIcon from "../../static/icons/search.svg";
@@ -37,10 +37,10 @@ const homeProperties = computed(() => properties.value.filter((item) => {
   return kindMatched && areaMatched && priceMatched;
 }));
 const homePresentation = computed(() => config.value.pagePresentations?.home || { title: "今天想住哪里？", subtitle: "搜索小区、地铁或商圈", backgroundImage: "" });
-const presentationImage = (path?: string) => path ? (path.startsWith("http") ? path : `${API_ORIGIN.replace(/\/api$/, "")}${path}`) : heroFallback;
+const presentationImage = (path?: string) => path ? resolveAssetUrl(path) : heroFallback;
 const coverUrl = (item?: Property) => {
   const cover = item?.media?.find((media) => media.type === "image")?.url;
-  return cover ? (cover.startsWith("http") ? cover : `${API_ORIGIN}${cover}`) : "";
+  return cover ? resolveAssetUrl(cover) : "";
 };
 const serviceLabels = (item: Property) => {
   const source = String(item.feeText || "");

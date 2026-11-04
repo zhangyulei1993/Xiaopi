@@ -6,8 +6,8 @@
   "scripts": {
     "dev:mp-weixin": "VITE_API_BASE=https://api.xiaopizufang.cn/api TREE_BUILD_ENV=online UNI_OUTPUT_DIR=dist/mp-weixin uni -p mp-weixin --mode development",
     "dev:mp-weixin:local": "VITE_API_BASE=https://api.xiaopizufang.cn/api TREE_BUILD_ENV=online UNI_OUTPUT_DIR=dist/mp-weixin uni -p mp-weixin --mode development",
-    "build:mp-weixin": "VITE_API_BASE=https://api.xiaopizufang.cn/api TREE_BUILD_ENV=online UNI_OUTPUT_DIR=dist/mp-weixin uni build -p mp-weixin --mode development --emptyOutDir",
-    "build:mp-weixin:local": "VITE_API_BASE=https://api.xiaopizufang.cn/api TREE_BUILD_ENV=online UNI_OUTPUT_DIR=dist/mp-weixin uni build -p mp-weixin --mode development --emptyOutDir"
+    "build:mp-weixin": "VITE_API_BASE=https://api.xiaopizufang.cn/api TREE_BUILD_ENV=online UNI_OUTPUT_DIR=dist/mp-weixin uni build -p mp-weixin --mode production --emptyOutDir && cp project.private.config.json dist/mp-weixin/project.private.config.json",
+    "build:mp-weixin:local": "VITE_API_BASE=https://api.xiaopizufang.cn/api TREE_BUILD_ENV=online UNI_OUTPUT_DIR=dist/mp-weixin uni build -p mp-weixin --mode development --emptyOutDir && cp project.private.config.json dist/mp-weixin/project.private.config.json"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-alpha-5010220260604001",

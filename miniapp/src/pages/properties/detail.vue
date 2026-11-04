@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLoad } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { API_ORIGIN, request } from "../../api/client";
+import { request, resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
   listFavorites,
@@ -58,8 +58,7 @@ const load = async (id = "") => {
   }
 };
 onLoad((query) => load(String(query?.id || "")));
-const mediaUrl = (url: string) =>
-  url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
+const mediaUrl = resolveAssetUrl;
 const mediaItems = computed(() => item.value?.media || []);
 const isAdmin = computed(() => hasRole("admin"));
 const priceText = computed(() =>

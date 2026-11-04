@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLoad } from "@dcloudio/uni-app";
 import { reactive, ref } from "vue";
-import { API_ORIGIN } from "../../api/client";
+import { resolveAssetUrl } from "../../api/client";
 import { createRentalRequest, getPublicConfig } from "../../api/properties";
 import { getSession } from "../../auth/session";
 
@@ -85,7 +85,7 @@ const call = () =>
     : uni.showToast({ title: "联系电话尚未配置", icon: "none" });
 </script>
 <template>
-  <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.94), rgba(247,246,241,.98)), url(${pagePresentation.backgroundImage.startsWith('http') ? pagePresentation.backgroundImage : API_ORIGIN.replace(/\/api$/, '') + pagePresentation.backgroundImage})`, backgroundSize: 'cover' } : {}"
+  <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.94), rgba(247,246,241,.98)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover' } : {}"
     ><view class="request-hero"
       ><text>{{ propertyID ? "预约房源" : pagePresentation.title }}</text
       ><view>{{

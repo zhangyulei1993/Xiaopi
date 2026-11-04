@@ -6,12 +6,12 @@
   "versionCode": "100",
   "mp-weixin": {
     "appid": "wx687f06fd8ecc8164",
-    "setting": { "urlCheck": false, "es6": true, "minified": true },
+    "setting": { "urlCheck": true, "es6": true, "minified": true },
     "permission": {
       "scope.userLocation": {
         "desc": "用于在地图中选择房源位置并关联附近精选频道"
       }
     },
-    "requiredPrivateInfos": ["chooseLocation"]
+    "requiredPrivateInfos": ["chooseLocation", "getLocation"]
   }
 }

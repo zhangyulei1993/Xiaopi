@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { API_ORIGIN } from "../api/client";
+import { resolveAssetUrl } from "../api/client";
 import { getPublicConfig } from "../api/properties";
 
 export type PagePresentation = { title: string; subtitle: string; backgroundImage: string };
@@ -18,7 +18,7 @@ export const usePagePresentation = (key: string, title: string, subtitle: string
   const pageStyle = computed(() => {
     const path = presentation.value.backgroundImage;
     if (!path) return {};
-    const url = path.startsWith("http") ? path : `${API_ORIGIN.replace(/\/api$/, "")}${path}`;
+    const url = resolveAssetUrl(path);
     return { backgroundImage: `linear-gradient(rgba(247,246,241,.92),rgba(247,246,241,.97)), url(${url})`, backgroundSize: "cover", backgroundAttachment: "fixed" };
   });
   return { presentation, loadPresentation, pageStyle };

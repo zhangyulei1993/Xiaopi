@@ -3,6 +3,20 @@ import { clearSession, getSession } from '../auth/session'
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 export const API_ORIGIN = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE
 
+export const resolveAssetUrl = (path = '') => {
+  const value = String(path).trim()
+  if (!value) return ''
+
+  if (value.startsWith('/')) return `${API_ORIGIN}${value}`
+
+  if (/^https?:\/\//i.test(value)) {
+    const secure = value.replace(/^http:\/\//i, 'https://')
+    return secure.replace(/^https:\/\/150\.158\.157\.213(?=\/|$)/i, API_ORIGIN)
+  }
+
+  return `${API_ORIGIN}/${value.replace(/^\/+/, '')}`
+}
+
 export type RequestOptions = Omit<UniApp.RequestOptions, 'url' | 'method'> & {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 }
@@ -22,6 +36,7 @@ export function request<T>(url: string, options: RequestOptions = {}) {
     uni.request({
       ...options,
       header,
+      timeout: options.timeout || 15000,
       url: `${API_BASE}${url}`,
       success: (res) => {
         const body = res.data as { code?: number; data?: T; message?: string }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { API_ORIGIN } from "../../api/client";
+import { resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
   listFavorites,
@@ -156,11 +156,7 @@ const open = (id: string) =>
   requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
 const coverUrl = (item: Property) => {
   const cover = item.media?.find((media) => media.type === "image")?.url;
-  return cover
-    ? cover.startsWith("http")
-      ? cover
-      : `${API_ORIGIN}${cover}`
-    : "";
+  return cover ? resolveAssetUrl(cover) : "";
 };
 const serviceLabels = (item: Property) => {
   const source = String(item.feeText || "");
@@ -192,7 +188,7 @@ const toggleFavorite = async (id: string) => {
 };
 </script>
 <template>
-  <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.92), rgba(247,246,241,.96)), url(${pagePresentation.backgroundImage.startsWith('http') ? pagePresentation.backgroundImage : API_ORIGIN.replace(/\/api$/, '') + pagePresentation.backgroundImage})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : {}"
+  <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.92), rgba(247,246,241,.96)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : {}"
     ><view class="location"
       >{{ pagePresentation.title || "找一处合适的家" }} <text>{{ filteredProperties.length }} 套可租</text></view
     ><view v-if="pagePresentation.subtitle" class="page-subtitle">{{ pagePresentation.subtitle }}</view

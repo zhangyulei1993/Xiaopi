@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, reactive, ref } from "vue";
-import { API_ORIGIN, request } from "../../api/client";
+import { API_ORIGIN, request, resolveAssetUrl } from "../../api/client";
 import {
   createProperty,
   getPublicConfig,
@@ -581,10 +581,23 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
       header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
       formData: { propertyId, mediaType: type, sort: String(sort) },
       success: (res) => {
-        if (res.statusCode >= 200 && res.statusCode < 300) resolve();
-        else reject(new Error("素材上传失败"));
+        let message = "素材上传失败";
+        try {
+          const body = JSON.parse(String(res.data || "{}"));
+          if (body?.message) message = body.message;
+          if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) {
+            resolve();
+            return;
+          }
+        } catch {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve();
+            return;
+          }
+        }
+        reject(new Error(message));
       },
-      fail: reject,
+      fail: (error) => reject(new Error(error.errMsg || "素材上传失败")),
     }),
   );
 const save = async (openPreview = false) => {
@@ -651,8 +664,7 @@ const save = async (openPreview = false) => {
     uploadProgress.value = "";
   }
 };
-const mediaUrl = (url: string) =>
-  url.startsWith("http") ? url : `${API_ORIGIN}${url}`;
+const mediaUrl = resolveAssetUrl;
 </script>
 <template>
   <view class="page editor-page" :style="pageStyle"
