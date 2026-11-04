@@ -949,11 +949,13 @@ const mediaUrl = (url: string) =>
           ></view
         ><view class="media-actions"
           ><view @click="pick('image')"
-            ><strong>＋ 图片</strong><small>{{ mediaCount }}/9 · ≥640px · ≤10MB</small></view
+            ><strong>＋ 图片</strong><small>{{ mediaCount }}/9</small></view
           ><view @click="pick('video')"
-            ><strong>＋ 视频</strong><small>{{ videos.length }}/1 · ≤20MB · 60秒</small></view
+            ><strong>＋ 视频</strong><small>{{ videos.length }}/1</small></view
           ></view
         ></view
+      ><view v-if="activeSection === 3" class="media-limit-hint"
+        >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
         ><view v-if="activeSection < 3" class="step-actions"
@@ -1602,6 +1604,13 @@ const mediaUrl = (url: string) =>
   margin-top: 8rpx;
   color: #78a39d;
   font-size: 20rpx;
+}
+.media-limit-hint {
+  padding: 24rpx 24rpx 0;
+  color: #91a19b;
+  font-size: 20rpx;
+  line-height: 1.45;
+  text-align: center;
 }
 .save-space {
   height: 150rpx;
