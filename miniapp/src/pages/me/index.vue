@@ -20,9 +20,9 @@ const role = ref<SessionRole | null>(null);
 const phone = ref("");
 const isBindingPhone = ref(false);
 const nickname = ref("");
+const savedNickname = ref("");
 const avatarUrl = ref("");
 const isUploadingAvatar = ref(false);
-const isChoosingAvatar = ref(false);
 const isSavingProfile = ref(false);
 const isLoggedIn = computed(() => role.value !== null);
 const isAdmin = computed(() => role.value === "admin");
@@ -43,6 +43,7 @@ onShow(async () => {
     role.value = refreshed.role;
     const profile = await getWechatUserProfile();
     nickname.value = profile.nickname || "";
+    savedNickname.value = profile.nickname || "";
     avatarUrl.value = profile.avatarUrl || "";
     phone.value = profile.phone || phone.value;
   } catch {
@@ -60,11 +61,12 @@ const login = () => uni.navigateTo({ url: "/pages/auth/login" });
 const saveNickname = async () => {
   if (!isLoggedIn.value || isSavingProfile.value) return;
   const nextNickname = nickname.value.trim();
-  if (!nextNickname) return;
+  if (!nextNickname || nextNickname === savedNickname.value) return;
   isSavingProfile.value = true;
   try {
     const profile = await updateWechatUserProfile(nextNickname, avatarUrl.value);
     nickname.value = profile.nickname || "";
+    savedNickname.value = profile.nickname || "";
     avatarUrl.value = profile.avatarUrl || "";
     uni.showToast({ title: "昵称已更新" });
   } catch (error) {
@@ -85,12 +87,7 @@ const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
 const editProperty = () =>
   uni.navigateTo({ url: "/pages/admin/property-edit" });
 
-const beginAvatarChoose = () => {
-  if (!isUploadingAvatar.value) isChoosingAvatar.value = true;
-};
-
 const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
-  isChoosingAvatar.value = false;
   const path = event.detail.avatarUrl;
   if (!path || isUploadingAvatar.value) return;
   isUploadingAvatar.value = true;
@@ -108,6 +105,7 @@ const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
             .then((profile) => {
               avatarUrl.value = profile.avatarUrl || nextAvatar;
               nickname.value = profile.nickname || nickname.value;
+              savedNickname.value = profile.nickname || savedNickname.value;
               uni.showToast({ title: "头像已更新" });
             })
             .catch((error) => uni.showToast({ title: error instanceof Error ? error.message : "头像保存失败", icon: "none" }));
@@ -173,7 +171,7 @@ const logout = () => {
   <view class="page" :style="pageStyle">
     <view class="me-head"><view><text>PERSONAL SPACE</text><view>{{ presentation.title }}</view></view><text class="me-head-note">{{ isAdmin ? "运营工作台" : "收藏、足迹与找房进度" }}</text></view>
     <view class="profile" :class="{ guest: !isLoggedIn }" @click="!isLoggedIn && login()">
-      <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isChoosingAvatar || isUploadingAvatar" @tap.stop="beginAvatarChoose" @chooseavatar="chooseAvatar" @error="isChoosingAvatar = false"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><input v-if="isLoggedIn" v-model="nickname" class="nickname-input" type="nickname" maxlength="32" placeholder="点击填写微信昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><view v-else class="title">登录后开始找房</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
+      <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isUploadingAvatar" @chooseavatar="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><input v-if="isLoggedIn" v-model="nickname" class="nickname-input" type="nickname" maxlength="32" placeholder="点击填写微信昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><view v-else class="title">登录后开始找房</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
       <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : "微信一键登录" }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
