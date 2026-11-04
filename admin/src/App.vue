@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown, ArrowUp, Collection, Delete, House, Location, Plus, RefreshLeft, User } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Delete, House, Plus, RefreshLeft } from '@element-plus/icons-vue'
 
 import AdminLayout from './layouts/AdminLayout.vue'
+import DashboardPage from './pages/DashboardPage.vue'
 import { pathForTab, tabFromRoute } from './router'
 import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from './types/domain'
 import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from './config/navigation'
@@ -543,18 +544,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
   <AdminLayout v-else :active="tab" :title="tab" @select="selectTab" @logout="logout">
         <el-alert v-if="pageError" class="page-error" :title="pageError" type="error" show-icon :closable="false" />
 
-        <template v-if="tab === '运营总览'">
-          <section class="dashboard-hero">
-            <div><span class="dashboard-kicker">XIAOPI OPERATIONS</span><h1>运营总览</h1></div>
-            <div class="hero-meter"><span>当前待跟进线索</span><strong>{{ leads.length }}</strong></div>
-          </section>
-          <div v-loading="loading" class="stats-grid dashboard-grid">
-            <button class="surface stat-card" @click="selectTab('房源列表')"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ properties.length }}</strong></button>
-            <button class="surface stat-card" @click="selectTab('线索管理')"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leads.length }}</strong></button>
-            <button class="surface stat-card" @click="selectTab('微信用户')"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ users.length }}</strong></button>
-            <button class="surface stat-card" @click="selectTab('小程序配置')"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ publicConfig.locations.length }}</strong></button>
-          </div>
-        </template>
+        <DashboardPage v-if="tab === '运营总览'" :loading="loading" :property-count="properties.length" :lead-count="leads.length" :user-count="users.length" :location-count="publicConfig.locations.length" @navigate="selectTab" />
 
         <template v-else-if="tab === '微信用户'">
           <section class="page-header">
