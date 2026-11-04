@@ -22,6 +22,7 @@ const isBindingPhone = ref(false);
 const nickname = ref("");
 const avatarUrl = ref("");
 const isUploadingAvatar = ref(false);
+const isChoosingAvatar = ref(false);
 const isSavingProfile = ref(false);
 const isLoggedIn = computed(() => role.value !== null);
 const isAdmin = computed(() => role.value === "admin");
@@ -56,34 +57,21 @@ onShow(async () => {
 });
 
 const login = () => uni.navigateTo({ url: "/pages/auth/login" });
-const editNickname = () => {
+const saveNickname = async () => {
   if (!isLoggedIn.value || isSavingProfile.value) return;
-  (uni.showModal as any)({
-    title: "修改昵称",
-    editable: true,
-    placeholderText: "输入昵称",
-    defaultContent: nickname.value,
-    confirmText: "保存",
-    success: async (result: { confirm: boolean; content?: string }) => {
-      if (!result.confirm) return;
-      const nextNickname = String(result.content || "").trim();
-      if (!nextNickname) {
-        uni.showToast({ title: "昵称不能为空", icon: "none" });
-        return;
-      }
-      isSavingProfile.value = true;
-      try {
-        const profile = await updateWechatUserProfile(nextNickname, avatarUrl.value);
-        nickname.value = profile.nickname || "";
-        avatarUrl.value = profile.avatarUrl || "";
-        uni.showToast({ title: "昵称已更新" });
-      } catch (error) {
-        uni.showToast({ title: error instanceof Error ? error.message : "保存失败", icon: "none" });
-      } finally {
-        isSavingProfile.value = false;
-      }
-    },
-  });
+  const nextNickname = nickname.value.trim();
+  if (!nextNickname) return;
+  isSavingProfile.value = true;
+  try {
+    const profile = await updateWechatUserProfile(nextNickname, avatarUrl.value);
+    nickname.value = profile.nickname || "";
+    avatarUrl.value = profile.avatarUrl || "";
+    uni.showToast({ title: "昵称已更新" });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "保存失败", icon: "none" });
+  } finally {
+    isSavingProfile.value = false;
+  }
 };
 const publish = () => uni.navigateTo({ url: "/pages/publish/index" });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
@@ -97,7 +85,12 @@ const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
 const editProperty = () =>
   uni.navigateTo({ url: "/pages/admin/property-edit" });
 
+const beginAvatarChoose = () => {
+  if (!isUploadingAvatar.value) isChoosingAvatar.value = true;
+};
+
 const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
+  isChoosingAvatar.value = false;
   const path = event.detail.avatarUrl;
   if (!path || isUploadingAvatar.value) return;
   isUploadingAvatar.value = true;
@@ -180,7 +173,7 @@ const logout = () => {
   <view class="page" :style="pageStyle">
     <view class="me-head"><view><text>PERSONAL SPACE</text><view>{{ presentation.title }}</view></view><text class="me-head-note">{{ isAdmin ? "运营工作台" : "收藏、足迹与找房进度" }}</text></view>
     <view class="profile" :class="{ guest: !isLoggedIn }" @click="!isLoggedIn && login()">
-      <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" @chooseavatar.stop="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><view class="title" :class="{ 'title-editable': isLoggedIn }" @click.stop="editNickname">{{ isAdmin ? nickname || "小皮管理员" : isLoggedIn ? nickname || "微信用户" : "登录后开始找房" }}</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
+      <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isChoosingAvatar || isUploadingAvatar" @tap.stop="beginAvatarChoose" @chooseavatar="chooseAvatar" @error="isChoosingAvatar = false"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><input v-if="isLoggedIn" v-model="nickname" class="nickname-input" type="nickname" maxlength="32" placeholder="点击填写微信昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><view v-else class="title">登录后开始找房</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
       <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : "微信一键登录" }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
@@ -224,7 +217,7 @@ const logout = () => {
   font-size: 48rpx;
   font-weight: 700;
 }
-.avatar-button{margin:0;padding:0;border:0}.avatar-button::after{border:0}.title-editable::after{content:'· 编辑';margin-left:10rpx;color:rgba(231,237,207,.72);font-size:19rpx;font-weight:500;letter-spacing:0}.title-editable:active{opacity:.7}
+.avatar-button{margin:0;padding:0;border:0}.avatar-button::after{border:0}.nickname-input{width:100%;height:48rpx;padding:0;border:0;background:transparent;color:#fff;font-size:34rpx;font-weight:700;line-height:48rpx;letter-spacing:-1rpx}.nickname-input::placeholder{color:rgba(255,255,255,.8);font-weight:500}
 .avatar image { width:100%;height:100%;border-radius:inherit }.profile .title{color:#fff;font-size:34rpx;line-height:1.25}.profile-sub{margin-top:8rpx;color:rgba(255,255,255,.62);font-size:23rpx}.profile-arrow{font-size:48rpx}.profile-editor{padding:26rpx;border:0}.profile-editor-title{display:flex;align-items:baseline;justify-content:space-between;color:#304530;font-size:28rpx;font-weight:700}.profile-editor-title small{color:#929b91;font-size:21rpx;font-weight:400}
 .profile-fields { display: grid; grid-template-columns: 112rpx 1fr 112rpx; align-items: center; gap: 18rpx; margin-top: 24rpx; }
 .avatar-picker { width: 112rpx; height: 112rpx; margin: 0; padding: 0; border: 0; border-radius: 50%; background: #edf3e9; color: #52634f; font-size: 21rpx; line-height: 112rpx; overflow: hidden; }
