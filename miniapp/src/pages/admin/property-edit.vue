@@ -98,7 +98,7 @@ const buildingRules = ref<BuildingRule[]>([]);
 const showUnitDetails = ref(false);
 const showStructureSetup = ref(false);
 const ruleSaving = ref(false);
-const ruleDraft = reactive({ unitCount: 1, floorStart: 1, floorCount: 6, householdsPerFloor: 2 });
+const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
 const titleParts = ref(["community", "unit", "layout", "rentType"]);
 const titlePartOptions = [
   { key: "community", label: "小区" },
@@ -386,15 +386,32 @@ watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo,
     ? generatedTitle.value
     : "";
 }, { immediate: true });
+const defaultBuildingRules = Array.from({ length: 30 }, (_, index) => ({
+  id: `default-building-${index + 1}`,
+  community: "",
+  buildingNo: `${index + 1}栋`,
+  unitCount: 3,
+  floorStart: 1,
+  floorCount: 33,
+  householdsPerFloor: 6,
+}));
+// Until a community has verified building data, use one predictable hierarchy
+// for every selected community. Exact rules saved later replace only their
+// matching building and leave the remainder usable.
+const buildingOptions = computed(() => {
+  const exactRules = new Map(buildingRules.value.map((rule) => [rule.buildingNo, rule]));
+  const defaults = defaultBuildingRules.map((rule) => ({
+    ...rule,
+    community: String(form.community || ""),
+    ...(exactRules.get(rule.buildingNo) || {}),
+  }));
+  const extras = buildingRules.value.filter((rule) => !defaultBuildingRules.some((item) => item.buildingNo === rule.buildingNo));
+  return [...defaults, ...extras];
+});
 const selectedBuildingRule = computed(() =>
-  buildingRules.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
+  buildingOptions.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
 );
-const hasStructureRule = computed(() => Boolean(
-  selectedBuildingRule.value &&
-  selectedBuildingRule.value.unitCount > 0 &&
-  selectedBuildingRule.value.floorCount > 0 &&
-  selectedBuildingRule.value.householdsPerFloor > 0,
-));
+const hasStructureRule = computed(() => Boolean(selectedBuildingRule.value));
 const unitOptions = computed(() => {
   const total = selectedBuildingRule.value?.unitCount || 0;
   return Array.from({ length: total }, (_, index) => String(index + 1));
@@ -410,8 +427,7 @@ const householdOptions = computed(() => {
   return Array.from({ length: total }, (_, index) => String(index + 1).padStart(2, "0"));
 });
 const generatedRoomNo = computed(() => {
-  if (!selectedFloor.value || !roomNo.value) return "";
-  return `${selectedFloor.value}${roomNo.value}`;
+  return roomNo.value;
 });
 const loadBuildingRules = async () => {
   const community = String(form.community || "").trim();
@@ -422,7 +438,7 @@ const loadBuildingRules = async () => {
   buildingRules.value = await listBuildingRules(community).catch(() => []);
 };
 const selectBuildingRule = (event: { detail: { value: string | number } }) => {
-  const rule = buildingRules.value[Number(event.detail.value)];
+  const rule = buildingOptions.value[Number(event.detail.value)];
   if (!rule) return;
   buildingNo.value = rule.buildingNo;
   unitNo.value = "";
@@ -937,17 +953,16 @@ const mediaUrl = resolveAssetUrl;
           ><view class="unit-disclosure-head" @click="showUnitDetails = !showUnitDetails"
             ><view><strong>补充门牌信息 <small>选填</small></strong><text>没有楼栋、单元或房号，直接跳过即可</text></view><b>{{ showUnitDetails ? "收起" : "补充 ›" }}</b></view
           ><view v-if="showUnitDetails" class="address-structure"
-            ><view class="structure-heading"><view><strong>楼栋、单元与房号</strong><small>仅用于标题或定位补充，不影响发布</small></view></view
+            ><view class="structure-heading"><view><strong>楼栋、单元与房号</strong><small>默认 30 栋 · 3 单元 · 33 层 · 每层 6 户</small></view></view
             ><view class="unit-row"
-              ><picker v-if="buildingRules.length" :range="buildingRules" range-key="buildingNo" @change="selectBuildingRule"><view class="field picker-field"><text>楼栋</text><strong>{{ buildingNo || "选择楼栋" }}</strong></view></picker
-              ><view v-else class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋（可不填）" /></view
-              ><view class="field"><text>房号</text><input v-if="!hasStructureRule" v-model.trim="roomNo" maxlength="20" placeholder="如：1203（可不填）" /><strong v-else>{{ generatedRoomNo || roomNo || "请选择" }}</strong></view></view
+              ><picker :range="buildingOptions" range-key="buildingNo" @change="selectBuildingRule"><view class="field picker-field"><text>楼栋</text><strong>{{ buildingNo || "选择楼栋" }}</strong></view></picker
+              ><view class="field"><text>房号</text><strong>{{ generatedRoomNo || "选择楼栋后生成" }}</strong></view></view
             ><view v-if="hasStructureRule" class="structure-picker-grid"
               ><picker :range="unitOptions" @change="chooseUnit"><view><small>单元</small><strong>{{ unitNo ? `${unitNo}单元` : "选择" }}</strong></view></picker
               ><picker :range="floorOptions" :disabled="!unitNo" @change="chooseFloor"><view><small>楼层</small><strong>{{ selectedFloor ? `${selectedFloor}层` : "选择" }}</strong></view></picker
               ><picker :range="householdOptions" :disabled="!selectedFloor" @change="chooseHousehold"><view><small>户号</small><strong>{{ roomNo ? `${roomNo}室` : "选择" }}</strong></view></picker></view
-            ><view v-else class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>需要按楼层自动生成房号？</text><b>{{ showStructureSetup ? "收起设置" : "设置该栋规则" }}</b></view
-            ><view v-if="showStructureSetup" class="rule-setup"
+            ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>有该小区的真实楼栋资料？</text><b>{{ showStructureSetup ? "收起" : "覆盖默认规则" }}</b></view
+            ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
               ><view class="rule-setup-head"><text>楼栋结构规则</text><small>保存后，下次录入同一小区可直接选择</small></view
               ><view class="rule-inputs"><view><small>单元数</small><input v-model.number="ruleDraft.unitCount" type="number" /></view><view><small>起始层</small><input v-model.number="ruleDraft.floorStart" type="number" /></view><view><small>总层数</small><input v-model.number="ruleDraft.floorCount" type="number" /></view><view><small>每层户数</small><input v-model.number="ruleDraft.householdsPerFloor" type="number" /></view></view
               ><button :loading="ruleSaving" :disabled="!buildingNo || ruleSaving" @click="saveCurrentBuildingRule">保存楼栋规则</button></view
