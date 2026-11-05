@@ -246,12 +246,12 @@ const removeProperty = (property: Property) => {
 };
 const openMoreActions = (property: Property) => {
   const actions = property.status === "offline"
-    ? [{ label: "设为已租", status: "rented" }, { label: "删除房源", destructive: true }]
+    ? [{ label: "设为已租", status: "rented" }]
     : property.status === "rented"
-      ? [{ label: "删除房源", destructive: true }]
+      ? []
       : property.status === "draft" || property.status === "pending_review"
-        ? [{ label: "删除房源", destructive: true }]
-        : [{ label: "下架房源", status: "offline" }, { label: "删除房源", destructive: true }];
+        ? []
+        : [{ label: "下架房源", status: "offline" }];
   uni.showActionSheet({
     itemList: actions.map((action) => action.label),
     itemColor: "#526442",
@@ -263,6 +263,7 @@ const openMoreActions = (property: Property) => {
     },
   });
 };
+const hasMoreActions = (status: string) => ["published", "available", "offline"].includes(status);
 const subscribeArea = () => {
 	if (!getSession()) { uni.navigateTo({ url: "/pages/auth/login" }); return; }
 	if (isAdmin.value) return;
@@ -359,7 +360,7 @@ const subscribeArea = () => {
         ></view
         ><view v-if="isAdmin" class="admin-card-actions" :class="`status-${item.status}`" @click.stop
           ><view class="admin-inline-status"><i></i><text>{{ statusLabel(item.status) }}</text></view
-          ><view class="admin-inline-actions"><template v-if="['draft', 'pending_review'].includes(item.status)"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'published')">发布</button></template><template v-else-if="item.status === 'published' || item.status === 'available'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">标记已租</button></template><template v-else-if="item.status === 'rented'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">设为可租</button></template><template v-else><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">上架可租</button></template><button class="action-more" @click.stop="openMoreActions(item)">•••</button></view></view
+          ><view class="admin-inline-actions"><template v-if="['draft', 'pending_review'].includes(item.status)"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'published')">发布</button></template><template v-else-if="item.status === 'published' || item.status === 'available'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">标记已租</button></template><template v-else-if="item.status === 'rented'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">设为可租</button></template><template v-else><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">上架可租</button></template><button class="action-delete-inline" @click.stop="removeProperty(item)">删除</button><button v-if="hasMoreActions(item.status)" class="action-more" @click.stop="openMoreActions(item)">•••</button></view></view
         ></view
       ></view
     ><view v-if="!loading && !loadFailed && !isAdmin" class="area-subscribe card" @click="subscribeArea"><view><strong>{{ activeAreaName ? `${activeAreaName} 没找到合适的？` : '还没找到合适的房源？' }}</strong><text>预约该片区新房源，有房发布时及时通知</text></view><b>预约新房源 ›</b></view
@@ -653,10 +654,11 @@ const subscribeArea = () => {
 .status-rented .admin-inline-status { color:#66717a; }.status-rented .admin-inline-status i { background:#77828a; }
 .status-offline .admin-inline-status { color:#7a6759; }.status-offline .admin-inline-status i { background:#9a8271; }
 .admin-inline-actions { display:flex; min-width:0; flex:1; align-items:center; justify-content:flex-end; gap:8rpx; }
-.admin-inline-actions button { min-width:0; margin:0; padding:0 16rpx; border:1rpx solid transparent; border-radius:9rpx; font-size:20rpx; font-weight:650; line-height:50rpx; }
+.admin-inline-actions button { min-width:0; margin:0; padding:0 14rpx; border:1rpx solid transparent; border-radius:9rpx; font-size:20rpx; font-weight:650; line-height:50rpx; }
 .admin-inline-actions button::after { border:0; }
 .action-edit { border-color:#dfe5da!important; background:#fff!important; color:#5d6b58!important; }
 .action-primary { border-color:#40543f!important; background:#40543f!important; color:#fff!important; }
+.action-delete-inline { border-color:#efdcd4!important; background:#fff8f5!important; color:#b76c57!important; }
 .action-more { width:50rpx; padding:0!important; background:#f1f3ed!important; color:#657160!important; font-size:18rpx!important; letter-spacing:1rpx; }
 .admin-inline-actions button:active { opacity:.78; transform:scale(.985); }
 </style>
