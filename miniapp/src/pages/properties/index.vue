@@ -346,8 +346,7 @@ const subscribeArea = () => {
               v-if="coverUrl(item)"
               :src="coverUrl(item)"
               mode="aspectFill"
-            /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view><view class="source-badge" :class="{ transfer: item.listingSource === '转租', tenant: !isAdmin }">{{ item.listingSource === '转租' ? '转租' : '直租' }}</view
-            ><view v-if="serviceLabels(item)[1]" class="cover-benefit">{{ serviceLabels(item)[1] }}</view
+            /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
             ><view
               v-if="!isAdmin"
               class="favorite"
@@ -358,7 +357,7 @@ const subscribeArea = () => {
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
-          ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view
+          ><view v-if="serviceLabels(item).length" class="service-tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view
           ><view class="price"
             >¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view
           ></view
@@ -626,24 +625,21 @@ const subscribeArea = () => {
 .chips .active { border-color:#cbd7ad; background:#e6ecd7; color:#42523b; font-weight:700; }
 .grid { display:block; margin-top:30rpx; }
 .property { position:relative; display:flex; align-items:stretch; gap:18rpx; min-height:216rpx; margin:0 0 18rpx; padding:12rpx; overflow:hidden; border:1rpx solid #eee6dc; border-radius:20rpx; background:#fffdf9; box-sizing:border-box; }
-.cover { position:relative; flex:none; width:244rpx; height:192rpx; overflow:hidden; border-radius:14rpx; background:#dde5d4; }
+.cover { position:relative; flex:none; width:244rpx; height:200rpx; overflow:hidden; border-radius:14rpx; background:#dde5d4; }
 .cover image { width:100%; height:100%; }
 .cover > text { display:grid; width:100%; height:100%; place-items:center; color:#fff; font-size:27rpx; }
 .badge { top:9rpx; left:9rpx; padding:5rpx 8rpx; border-radius:8rpx; background:#536a45; color:#fff; font-size:18rpx; line-height:1.1; }
 .favorite { top:9rpx; right:9rpx; width:44rpx; height:44rpx; background:rgba(47,44,34,.33); }
 .favorite image { width:28rpx; height:28rpx; }.favorite.active { background:#d66d50; }
 .cover-benefit { bottom:0; left:0; padding:8rpx 11rpx; border-radius:0 10rpx 0 0; background:#d66d50; color:#fff; font-size:18rpx; font-weight:700; line-height:1.1; }
-.source-badge { position:absolute; top:9rpx; right:9rpx; padding:5rpx 9rpx; border-radius:8rpx; background:rgba(255,255,255,.92); color:#405f58; font-size:18rpx; font-weight:800; line-height:1.1; }
-.source-badge.tenant { top:60rpx; }
-.source-badge.transfer { background:#f8eadf; color:#b7644b; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:9rpx 4rpx 3rpx 0; }
-.property-listing-title { display:-webkit-box; overflow:hidden; max-height:80rpx; margin:0; color:#2d3d30; font-size:30rpx; font-weight:800; line-height:1.32; letter-spacing:-.5rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-.property-listing-address { overflow:hidden; max-height:28rpx; margin:8rpx 0 0; color:#7f897e; font-size:20rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
+.property-listing-title { display:-webkit-box; overflow:hidden; max-height:77rpx; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.32; letter-spacing:-.4rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.property-listing-address { overflow:hidden; max-height:31rpx; margin:6rpx 0 0; color:#778176; font-size:22rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .service-tags { display:flex; gap:7rpx; overflow:hidden; margin-top:9rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
 .property > .property-copy > .price { display:inline-flex; width:max-content; align-items:baseline; gap:3rpx; margin:auto 0 0; padding-top:10rpx; color:#d76440; font-size:34rpx; font-weight:800; line-height:1.1; white-space:nowrap; }
 .property > .property-copy > .price .price-unit { color:#8a8f85; font-size:20rpx; font-weight:400; }
-.property { height:216rpx; min-height:216rpx; }
+.property { height:224rpx; min-height:224rpx; }
 .property .summary { margin-top:8rpx; color:#7f897e; font-size:18rpx; line-height:1.4; -webkit-line-clamp:1; }
 .area-subscribe { margin-top:26rpx; padding:24rpx; border:0; border-radius:18rpx; background:#e9eddc; }.area-subscribe strong { font-size:27rpx; }.area-subscribe text { font-size:21rpx; line-height:1.45; }.area-subscribe b { color:#526442; font-size:22rpx; }
 .empty-match { margin-top:24rpx; }.request-banner { margin:34rpx 0 12rpx; padding:25rpx 24rpx; border-radius:18rpx; background:#40543f; }.request-banner strong { font-size:29rpx; line-height:1.3; }.request-banner > view > text { margin-top:7rpx; line-height:1.45; }.request-banner > text { font-size:22rpx; }
@@ -652,7 +648,7 @@ const subscribeArea = () => {
 .property-main .cover { flex:none; }
 .property-main .property-copy { min-width:0; flex:1; }
 .admin-property { display:block; height:auto; min-height:0; padding:14rpx; overflow:visible; border-color:#e5e9df; border-radius:22rpx; background:#fffefa; }
-.admin-property .property-main { height:192rpx; min-height:192rpx; }
+.admin-property .property-main { height:200rpx; min-height:200rpx; }
 .badge.status-draft,.badge.status-pending_review { background:#a4773f; }
 .badge.status-rented { background:#69737d; }
 .badge.status-offline { background:#8a7566; }
@@ -666,6 +662,6 @@ const subscribeArea = () => {
 .action-offline { border-color:#eadbd0!important; background:#fff8f3!important; color:#9b694d!important; }
 .action-delete-inline { border-color:#efdcd4!important; background:#fff8f5!important; color:#b76c57!important; }
 .admin-inline-actions button:active { opacity:.78; transform:scale(.985); }
-.listing-skeletons{margin-top:30rpx}.listing-skeleton{display:flex;height:216rpx;gap:18rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx;background:#fffdf9;box-sizing:border-box}.skeleton-cover,.skeleton-copy>view{background:linear-gradient(100deg,#ebece6 25%,#f6f5f0 42%,#ebece6 58%);background-size:200% 100%;animation:listing-skeleton-shift 1.2s linear infinite}.skeleton-cover{width:244rpx;height:192rpx;flex:none;border-radius:14rpx}.skeleton-copy{min-width:0;flex:1;padding-top:12rpx}.skeleton-copy>view{height:28rpx;margin-bottom:18rpx;border-radius:8rpx}.skeleton-copy>view:nth-child(2){width:72%;height:20rpx}.skeleton-copy>view:nth-child(3){width:48%;height:34rpx;margin-top:52rpx}@keyframes listing-skeleton-shift{to{background-position:-200% 0}}
+.listing-skeletons{margin-top:30rpx}.listing-skeleton{display:flex;height:224rpx;gap:18rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx;background:#fffdf9;box-sizing:border-box}.skeleton-cover,.skeleton-copy>view{background:linear-gradient(100deg,#ebece6 25%,#f6f5f0 42%,#ebece6 58%);background-size:200% 100%;animation:listing-skeleton-shift 1.2s linear infinite}.skeleton-cover{width:244rpx;height:200rpx;flex:none;border-radius:14rpx}.skeleton-copy{min-width:0;flex:1;padding-top:12rpx}.skeleton-copy>view{height:28rpx;margin-bottom:18rpx;border-radius:8rpx}.skeleton-copy>view:nth-child(2){width:72%;height:20rpx}.skeleton-copy>view:nth-child(3){width:48%;height:34rpx;margin-top:52rpx}@keyframes listing-skeleton-shift{to{background-position:-200% 0}}
 .property:active{opacity:.92}.chips text:active,.favorite-filter:active{transform:scale(.98)}
 </style>

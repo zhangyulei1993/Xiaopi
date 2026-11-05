@@ -61,7 +61,6 @@ const serviceLabels = (item: Property) => {
     .filter((label, index) => index === 0 || source.includes(label))
     .slice(0, 2);
 };
-const listingSourceLabel = (item: Property) => item.listingSource === "转租" ? "转租" : "直租";
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
 const doorplate = (item: Property) => [
   item.buildingNo,
@@ -133,7 +132,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view v-if="serviceLabels(item).length" class="tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -149,7 +148,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .hero-title{display:-webkit-box;overflow:hidden;max-width:570rpx;color:#334025;font-size:56rpx;font-weight:900;line-height:1.22;letter-spacing:-3rpx;text-shadow:0 2rpx 0 rgba(255,255,255,.18);-webkit-line-clamp:2;-webkit-box-orient:vertical}.hero-accent{width:116rpx;height:8rpx;margin:18rpx 0 0 178rpx;border-radius:999rpx;background:#d66d50;transform:rotate(-3deg)}.hero-search{margin-top:38rpx}
 .hero-search{min-height:92rpx;box-sizing:border-box}.hero-search span{font-size:26rpx;line-height:1.35}.hero-search b{line-height:1.2}.section-head{margin-top:58rpx;margin-bottom:26rpx}.section-head strong{font-size:40rpx;line-height:1.2}.recommend-head{margin-top:62rpx;margin-bottom:26rpx}.listing-info strong{font-size:30rpx}.listing-info>b{font-size:36rpx}.request-fab{bottom:calc(116rpx + env(safe-area-inset-bottom))}
 .channel-glyph{display:block;width:22rpx;height:22rpx;border:3rpx solid rgba(255,255,255,.92);border-radius:50%;box-sizing:border-box}.channel-glyph:after{display:block;width:8rpx;height:8rpx;margin:4rpx;border-radius:50%;background:rgba(255,255,255,.92);content:""}.mark-campus .channel-glyph{border-radius:4rpx}.mark-campus .channel-glyph:after{width:12rpx;height:3rpx;margin:7rpx 2rpx;border-radius:3rpx}.mark-work .channel-glyph{border:0;border-radius:0;background:linear-gradient(90deg,rgba(255,255,255,.92) 0 28%,transparent 28% 37%,rgba(255,255,255,.92) 37% 63%,transparent 63% 72%,rgba(255,255,255,.92) 72%)}.mark-work .channel-glyph:after{display:none}.mark-life .channel-glyph{border-radius:50% 50% 6rpx 6rpx;transform:rotate(45deg)}.mark-life .channel-glyph:after{margin:4rpx}.channel-title{display:block;overflow:hidden;margin-top:15rpx;color:#fff;font-size:28rpx;font-weight:700;line-height:1.2;letter-spacing:-1rpx;text-overflow:ellipsis;white-space:nowrap}.channel-subtitle{display:block;overflow:hidden;margin-top:7rpx;color:rgba(255,255,255,.82);font-size:21rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
-.listing-status,.listing-source{position:absolute;left:12rpx;padding:7rpx 11rpx;border-radius:10rpx;color:#fff;font-size:20rpx;font-weight:700;line-height:1.1}.listing-status{top:12rpx;background:#167b70}.listing-source{top:52rpx;background:rgba(49,77,59,.92)}.listing-source.transfer{background:rgba(183,100,75,.94)}.listing-info .tags text{background:#f8eadf;color:#b7644b}.listing-price{display:inline-flex;align-items:baseline;gap:3rpx;margin-top:11rpx;color:#d66d50;font-size:36rpx;font-weight:800;line-height:1.1;white-space:nowrap}.listing-price .price-unit{color:#8b8a7f;font-size:19rpx;font-weight:400}
+.listing-status{position:absolute;top:12rpx;left:12rpx;padding:7rpx 11rpx;border-radius:10rpx;background:#167b70;color:#fff;font-size:20rpx;font-weight:700;line-height:1.1}.listing-info .tags text{background:#edf0dc;color:#536a45}.listing-info .tags text:nth-child(2){background:#f8eadf;color:#b7644b}.listing-price{display:inline-flex;align-items:baseline;gap:3rpx;margin-top:11rpx;color:#d66d50;font-size:36rpx;font-weight:800;line-height:1.1;white-space:nowrap}.listing-price .price-unit{color:#8b8a7f;font-size:19rpx;font-weight:400}
 
 /* Keep the primary CTA in the document flow: it should never cover a channel or heading. */
 .home-page{padding-bottom:42rpx}.request-fab{position:static;display:flex;align-items:center;justify-content:center;gap:8rpx;width:max-content;margin:28rpx 32rpx 0;padding:18rpx 22rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:999rpx;background:#5e6d2e;color:#fff;box-shadow:0 10rpx 22rpx rgba(58,65,26,.18);font-size:25rpx;font-weight:700;line-height:1.2}.request-fab image{width:30rpx;height:30rpx}.recommend-head{margin-top:46rpx}.channel{flex:none}.channel-title,.channel-subtitle{max-width:100%}
@@ -183,11 +182,11 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing{gap:16rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx}
 .listing-image{width:278rpx;height:196rpx}
 .listing-info strong{display:-webkit-box;overflow:hidden;font-size:28rpx;line-height:1.35;text-overflow:ellipsis;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.listing{height:204rpx;box-sizing:border-box}
-.listing-image{width:240rpx;height:180rpx}
-.listing-info{display:flex;height:180rpx;flex-direction:column;box-sizing:border-box}
-.home-listing-title{display:-webkit-box;overflow:hidden;max-height:80rpx;color:#2d3d30;font-size:30rpx;font-weight:800;line-height:1.32;letter-spacing:-.5rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.home-listing-address{overflow:hidden;max-height:28rpx;margin-top:7rpx;color:#7f897e;font-size:20rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.listing{height:220rpx;box-sizing:border-box}
+.listing-image{width:240rpx;height:196rpx}
+.listing-info{display:flex;height:196rpx;flex-direction:column;box-sizing:border-box}
+.home-listing-title{display:-webkit-box;overflow:hidden;max-height:77rpx;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.32;letter-spacing:-.4rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.home-listing-address{overflow:hidden;max-height:31rpx;margin-top:6rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .listing-info .tags{height:27rpx;margin-top:7rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:17rpx}
 .listing-price{min-height:34rpx;margin-top:auto;font-size:34rpx}
