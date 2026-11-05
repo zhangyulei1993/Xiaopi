@@ -91,7 +91,9 @@ const roomCount = ref("一室"),
   bathroomCount = ref("一卫"),
   balcony = ref("有阳台"),
   toiletType = ref("独卫"),
-  bayWindow = ref("有飘窗");
+  bayWindow = ref("有飘窗"),
+  privateBathroom = ref(true),
+  hasBayWindow = ref(true);
 const buildingNo = ref("");
 const unitNo = ref("");
 const roomNo = ref("");
@@ -102,7 +104,8 @@ const structureStep = ref<StructureStep>("");
 const showStructureSetup = ref(false);
 const ruleSaving = ref(false);
 const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
-const titleParts = ref(["community", "unit", "layout", "rentType"]);
+// 标题严格按用户点选的先后顺序拼接，避免默认顺序干扰发布者表达。
+const titleParts = ref<string[]>([]);
 const titlePartOptions = [
   { key: "community", label: "小区" },
   { key: "unit", label: "门牌" },
@@ -115,14 +118,6 @@ const toggleTitlePart = (key: string) => {
   titleParts.value = titleParts.value.includes(key)
     ? titleParts.value.filter((item) => item !== key)
     : [...titleParts.value, key];
-};
-const moveTitlePart = (key: string, direction: -1 | 1) => {
-  const index = titleParts.value.indexOf(key);
-  const nextIndex = index + direction;
-  if (index < 0 || nextIndex < 0 || nextIndex >= titleParts.value.length) return;
-  const next = [...titleParts.value];
-  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-  titleParts.value = next;
 };
 const orderedTitlePartOptions = computed(() => [
   ...titleParts.value.map((key) => titlePartOptions.find((option) => option.key === key)).filter(Boolean),
@@ -427,14 +422,14 @@ const generatedTitle = computed(() => {
   if (!community) return "选择小区后自动生成";
   const values: Record<string, string> = {
     community,
-    unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(" · "),
+    unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(""),
     floor: selectedFloor.value ? `${selectedFloor.value}层` : "",
     layout: rentType.value === "合租" ? roomType.value : `${roomCount.value}${hallCount.value}`,
     rentType: rentType.value,
     area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
   };
   const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
-  return parts.join(" · ") || community;
+  return parts.join("");
 });
 watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
@@ -582,6 +577,8 @@ const saveCurrentBuildingRule = async () => {
   }
 };
 const syncLayout = () => {
+  toiletType.value = privateBathroom.value ? "独卫" : "非独卫";
+  bayWindow.value = hasBayWindow.value ? "有飘窗" : "无飘窗";
   form.layout = rentType.value === "整租"
     ? `${roomCount.value}${hallCount.value} · 整租 · ${bathroomCount.value} · ${balcony.value}`
     : `合租 · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
@@ -610,6 +607,14 @@ const toggleNoAgentFee = (event: { detail?: { value?: string[] } }) => {
 const toggleElevator = (event: { detail?: { value?: string[] } }) => {
   form.elevator = event.detail?.value?.length ? "有电梯" : "";
 };
+const togglePrivateBathroom = (event: { detail?: { value?: string[] } }) => {
+  privateBathroom.value = Boolean(event.detail?.value?.length);
+  syncLayout();
+};
+const toggleBayWindow = (event: { detail?: { value?: string[] } }) => {
+  hasBayWindow.value = Boolean(event.detail?.value?.length);
+  syncLayout();
+};
 const parseLayout = (value = "") => {
   const parts = value.split(" · ");
   if (parts[1] === "整租") {
@@ -626,11 +631,15 @@ const parseLayout = (value = "") => {
     roomType.value = parts[1] || "主卧";
     toiletType.value = parts[2] || "独卫";
     bayWindow.value = parts[3] || "有飘窗";
+    privateBathroom.value = toiletType.value === "独卫";
+    hasBayWindow.value = bayWindow.value === "有飘窗";
   } else if (parts[1] === "合租") {
     rentType.value = "合租";
     roomType.value = parts[2] || "主卧";
     toiletType.value = parts[3] || "独卫";
     bayWindow.value = parts[4] || "有飘窗";
+    privateBathroom.value = toiletType.value === "独卫";
+    hasBayWindow.value = bayWindow.value === "有飘窗";
   }
 };
 const loadProperty = async () => {
@@ -652,6 +661,7 @@ const loadProperty = async () => {
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
     parseLayout(property.layout);
+    titleParts.value = ["community", "unit", "layout", "rentType"];
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
     form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
@@ -1180,20 +1190,16 @@ const mediaUrl = resolveAssetUrl;
               ><small>本次出租 · 房型</small
               ><strong>{{ roomType }}</strong></view
             ></picker
-          ><picker
-            :range="toilets"
-            @change="toiletType = pickLayoutValue(toilets, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><small>卫生间</small
-              ><strong>{{ toiletType }}</strong></view
-            ></picker
-          ><picker
-            :range="windows"
-            @change="bayWindow = pickLayoutValue(windows, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><small>飘窗（凸出窗台）</small
-              ><strong>{{ bayWindow === "有飘窗" ? "有" : "无" }}</strong></view
-            ></picker></template
+          ><view class="picker-item shared-checkbox-item"
+            ><small>卫生间</small
+            ><checkbox-group @change="togglePrivateBathroom"
+              ><label><checkbox value="private" :checked="privateBathroom" color="#0e8177" />独立卫生间</label
+            ></checkbox-group></view
+          ><view class="picker-item shared-checkbox-item"
+            ><small>飘窗（凸出窗台）</small
+            ><checkbox-group @change="toggleBayWindow"
+              ><label><checkbox value="bay-window" :checked="hasBayWindow" color="#0e8177" />有飘窗</label
+            ></checkbox-group></view></template
           ></view
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
@@ -1256,7 +1262,7 @@ const mediaUrl = resolveAssetUrl;
             ><input v-model.trim="form.availableDate" maxlength="32" placeholder="默认拎包入住，可填写具体日期" /></view
           ><view class="field utility-summary"><text>水电与杂费</text><strong>{{ form.utilitiesText || "请选择" }}</strong></view></view
         ><view class="term-block"><text>水电与杂费</text><radio-group class="utility-options" @change="setUtilities($event.detail.value)"><label v-for="option in utilityOptions" :key="option" :class="{ active: form.utilitiesText === option }"><radio :value="String(utilityOptions.indexOf(option))" :checked="form.utilitiesText === option" color="#0e8177" />{{ option }}</label></radio-group></view>
-        <view class="rent-summary"><text>对外展示</text><strong>¥ {{ Number(form.rentMonthly) || 0 }} <small>/月</small></strong><span>{{ form.depositPayment || "待填写押付方式" }}</span></view>
+        <view class="rent-summary"><text>对外展示</text><strong>{{ Number(form.rentMonthly) || 0 }}/月</strong><span>{{ form.depositPayment || "待填写押付方式" }}</span></view>
         </view
       ><view v-show="activeSection === 4" class="section-card"
         ><view class="section-head"
@@ -1354,8 +1360,8 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
-        ><view><strong>发布标题</strong><small>点选信息；已选内容可用左右箭头调整拼接顺序</small></view
-        ><view class="title-part-list"><view v-for="(option, index) in orderedTitlePartOptions" :key="option.key" class="title-part" :class="{ active: titleParts.includes(option.key) }"><view class="title-part-name" @click="toggleTitlePart(option.key)"><text>{{ titleParts.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view><view v-if="titleParts.includes(option.key)" class="title-part-actions"><text :class="{ disabled: index === 0 }" @click="moveTitlePart(option.key, -1)">←</text><text :class="{ disabled: index === titleParts.length - 1 }" @click="moveTitlePart(option.key, 1)">→</text></view></view></view>
+        ><view><strong>发布标题</strong><small>按点选先后自动拼接，不添加分隔符</small></view
+        ><view class="title-part-list"><view v-for="option in orderedTitlePartOptions" :key="option.key" class="title-part" :class="{ active: titleParts.includes(option.key) }" @click="toggleTitlePart(option.key)"><view class="title-part-name"><text>{{ titleParts.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view></view></view>
         <view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle || "请至少选择一项" }}</strong></view></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
@@ -1595,9 +1601,6 @@ const mediaUrl = resolveAssetUrl;
 .title-part-name { display:flex;align-items:center;gap:7rpx;padding:10rpx 12rpx; }
 .title-part-name text { display:flex;width:26rpx;height:26rpx;align-items:center;justify-content:center;border-radius:50%;background:#f0f4f2;color:#78938e;font-size:18rpx; }
 .title-part.active .title-part-name text { background:#0e8177;color:#fff; }
-.title-part-actions { display:flex;align-items:center;border-left:1rpx solid #cce6de; }
-.title-part-actions text { padding:10rpx 9rpx;color:#0e8177;font-size:22rpx;line-height:1; }
-.title-part-actions text.disabled { opacity:.28; }
 .rent-type-tabs { display:grid;grid-template-columns:1fr 1fr;gap:12rpx;padding:8rpx;border-radius:18rpx;background:#eef5f2; }
 .rent-type-tabs>view { padding:18rpx 20rpx;border-radius:13rpx;background:transparent;color:#6f8983; }
 .rent-type-tabs>view.active { background:#0e8177;color:#fff;box-shadow:0 8rpx 16rpx rgba(14,129,119,.18); }
@@ -1911,8 +1914,7 @@ const mediaUrl = resolveAssetUrl;
 }
 .rent-summary { display:flex;align-items:baseline;gap:12rpx;margin-top:18rpx;padding:20rpx 22rpx;border-radius:16rpx;background:#f8f3ea; }
 .rent-summary text { color:#8a7b62;font-size:20rpx; }
-.rent-summary strong { color:#d95c38;font-size:38rpx;line-height:1; }
-.rent-summary strong small { margin-left:4rpx;font-size:21rpx;font-weight:600; }
+.rent-summary strong { color:#d95c38;font-size:32rpx;line-height:1;white-space:nowrap; }
 .rent-summary span { color:#667d76;font-size:21rpx; }
 .picker-grid {
   display: grid;
@@ -1940,6 +1942,8 @@ const mediaUrl = resolveAssetUrl;
   color: #86a19c;
   font-size: 20rpx;
 }
+.shared-checkbox-item checkbox-group { margin-top:16rpx; }
+.shared-checkbox-item label { display:flex;align-items:center;gap:8rpx;color:#315f5a;font-size:25rpx;font-weight:700; }
 .layout-preview {
   margin-top: 22rpx;
   padding: 22rpx;
