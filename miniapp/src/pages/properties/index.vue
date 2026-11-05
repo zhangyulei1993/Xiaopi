@@ -667,4 +667,13 @@ const subscribeArea = () => {
 .admin-inline-actions button:active { opacity:.78; transform:scale(.985); }
 .listing-skeletons{margin-top:30rpx}.listing-skeleton{display:flex;height:224rpx;gap:18rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx;background:#fffdf9;box-sizing:border-box}.skeleton-cover,.skeleton-copy>view{background:linear-gradient(100deg,#ebece6 25%,#f6f5f0 42%,#ebece6 58%);background-size:200% 100%;animation:listing-skeleton-shift 1.2s linear infinite}.skeleton-cover{width:244rpx;height:200rpx;flex:none;border-radius:14rpx}.skeleton-copy{min-width:0;flex:1;padding-top:12rpx}.skeleton-copy>view{height:28rpx;margin-bottom:18rpx;border-radius:8rpx}.skeleton-copy>view:nth-child(2){width:72%;height:20rpx}.skeleton-copy>view:nth-child(3){width:48%;height:34rpx;margin-top:52rpx}@keyframes listing-skeleton-shift{to{background-position:-200% 0}}
 .property:active{opacity:.92}.chips text:active,.favorite-filter:active{transform:scale(.98)}
+/* Listing card acceptance: match home while preserving admin controls. */
+.property{height:232rpx;min-height:232rpx;gap:18rpx;padding:12rpx;border-color:#e7e5dd;border-radius:22rpx;background:#fffdf9;box-shadow:0 7rpx 20rpx rgba(55,65,50,.045)}
+.cover{width:248rpx;height:208rpx;border-radius:16rpx}
+.property-copy{height:208rpx;padding:5rpx 5rpx 4rpx 0;box-sizing:border-box}
+.property-listing-title{max-height:80rpx;font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
+.property-listing-address{max-height:32rpx;margin-top:10rpx;color:#7c8479;font-size:22rpx;line-height:1.45}
+.service-tags{height:34rpx;gap:8rpx;margin-top:10rpx}.service-tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
+.property>.property-copy>.price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.property>.property-copy>.price .price-unit{font-size:19rpx}
+.admin-property{height:auto;min-height:0;padding:14rpx;border-radius:22rpx}.admin-property .property-main{height:208rpx;min-height:208rpx}.admin-property .property-copy{height:208rpx}.admin-card-actions{margin-top:14rpx;padding-top:14rpx}.admin-inline-actions{gap:9rpx}.admin-inline-actions button{min-width:98rpx;min-height:54rpx;border-radius:10rpx;font-size:21rpx;line-height:52rpx}
 </style>

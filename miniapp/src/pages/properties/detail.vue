@@ -170,7 +170,7 @@ const previewImage = (url: string) => {
   if (urls.length) uni.previewImage({ current: mediaUrl(url), urls });
 };
 const amenities = computed(() => {
-  const match = item.value?.description?.match(/^配套设施：([^\n]*)\n?/);
+  const match = String(item.value?.description || "").match(/配套设施[ \t]*[：:][ \t]*([^\n]*)/);
   if (!match?.[1]) return [];
   return match[1]
     .split(/[、,，]/)
@@ -181,9 +181,20 @@ const amenities = computed(() => {
       icon: amenityIcon(name),
     }));
 });
+const environmentHighlights = computed(() => {
+  const current = item.value;
+  if (!current) return [];
+  return [
+    current.utilitiesText && { label: "水电", value: current.utilitiesText },
+    current.elevator && { label: "楼内", value: current.elevator },
+    Number(current.metroMinutes) > 0 && { label: "通勤", value: `步行至地铁 ${current.metroMinutes} 分钟` },
+    current.orientation && { label: "采光", value: `${current.orientation}向` },
+    current.rulesText && { label: "入住", value: current.rulesText },
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+});
 const propertyDescription = computed(() =>
   String(item.value?.description || "")
-    .replace(/^配套设施：[^\n]*\n?/, "")
+    .replace(/配套设施[ \t]*[：:][ \t]*[^\n]*\n?/, "")
     .trim(),
 );
 const hasLocation = computed(() =>
@@ -446,9 +457,9 @@ const contact = () => {
       /><button v-if="mapExpanded" class="navigate-button" @click="openPropertyLocation">
         ⌁ 导航去这里
       </button></view
-    ><view v-if="amenities.length" class="card amenity-card"
-      ><view class="title small">配套设施</view
-      ><view class="amenity-grid"
+    ><view v-if="amenities.length || environmentHighlights.length" class="card amenity-card"
+      ><view class="detail-section-heading"><view><view class="title small">居住配套</view><small>家具家电与日常居住条件</small></view><text>{{ amenities.length + environmentHighlights.length }} 项</text></view
+      ><view v-if="amenities.length" class="amenity-grid"
         ><view
           v-for="amenity in amenities"
           :key="amenity.name"
@@ -457,6 +468,7 @@ const contact = () => {
             ><image :src="amenity.icon" mode="aspectFit" /></view
           ><text class="amenity-name">{{ amenity.name }}</text></view
         ></view
+      ><view v-if="environmentHighlights.length" class="environment-list"><view v-for="feature in environmentHighlights" :key="`${feature.label}-${feature.value}`"><small>{{ feature.label }}</small><strong>{{ feature.value }}</strong></view></view
       ></view
     ><view class="card"
       ><view class="title small">房源描述</view
@@ -796,4 +808,6 @@ const contact = () => {
 .transfer-tag { display:inline-block; margin-top:12rpx; padding:7rpx 12rpx; border-radius:8rpx; background:#edf0dc; color:#536a45; font-size:20rpx; font-weight:700; }
 /* Final palette and rhythm pass: remove legacy teal without changing detail flow. */
 .state{color:#7e887d}.detail-cover,.media-image,.media-video{background:#e4e7de}.location-heading strong,.nearby-item strong{color:#29382d}.location-heading small,.nearby-heading small,.nearby-item small{color:#7e887d}.nearby-heading>text,.nearby-price strong{color:#d76440}.navigate-button{background:#edf1e8;color:#536a45}.tags{gap:10rpx}.tags text{padding:8rpx 13rpx;background:#edf0dc;color:#536a45;font-size:21rpx}.row{color:#7e887d}.row text:last-child{color:#29382d}.amenity-icon{border-color:#dfe7d8;background:#edf1e8;box-shadow:none}.amenity-name{color:#40543f}.desc{color:#64705f}.heart{color:#657162}.heart.active{color:#d76440}
+/* Delivery-level detail hierarchy. */
+.detail-page{padding:24rpx 24rpx 250rpx;background:#f6f4ee}.detail-page-head{margin:4rpx 6rpx 22rpx}.detail-page-head view{font-size:38rpx;letter-spacing:-1rpx}.detail-page-head text{margin-top:7rpx;font-size:22rpx}.media-gallery{border-radius:22rpx;box-shadow:0 10rpx 28rpx rgba(52,62,48,.08)}.media-swiper{height:460rpx}.media-strip{margin:16rpx 2rpx 6rpx}.detail-page .card{margin-bottom:20rpx;padding:26rpx;border:1rpx solid #e9e6df;border-radius:22rpx;background:#fffdf9}.overview{margin-top:20rpx}.overview .price{font-size:48rpx;letter-spacing:-1rpx}.overview .price .price-unit{margin-left:2rpx;font-size:22rpx}.overview .title{margin-top:18rpx;font-size:37rpx;line-height:1.34;letter-spacing:-.8rpx}.overview .muted{margin-top:10rpx;color:#7a8378;font-size:23rpx;line-height:1.5}.key-facts{gap:10rpx;margin-top:22rpx}.key-facts>view,.detail-info-grid>view{padding:16rpx 15rpx;border-radius:13rpx;background:#f0eee8}.key-facts small,.detail-info-grid small{font-size:19rpx}.key-facts strong,.detail-info-grid strong{margin-top:6rpx;font-size:23rpx}.detail-page .title.small{margin:0;font-size:31rpx;letter-spacing:-.4rpx}.detail-info .title{margin-bottom:18rpx}.detail-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;margin-bottom:22rpx}.detail-section-heading small{display:block;margin-top:6rpx;color:#8a9287;font-size:20rpx;line-height:1.4}.detail-section-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}.amenity-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:20rpx 12rpx}.amenity-icon{width:64rpx;height:64rpx;border-radius:18rpx}.amenity-icon image{width:38rpx;height:38rpx}.amenity-name{font-size:21rpx}.environment-list{display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:22rpx}.environment-list>view{min-width:0;padding:15rpx 16rpx;border-radius:13rpx;background:#f0f2e9}.environment-list small,.environment-list strong{display:block}.environment-list small{color:#8a9287;font-size:18rpx}.environment-list strong{overflow:hidden;margin-top:5rpx;color:#40543f;font-size:22rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.location-heading strong{font-size:30rpx}.location-heading small{font-size:22rpx}.map-summary{padding-top:18rpx}.desc{margin-top:16rpx;font-size:25rpx;line-height:1.75}.service-card{padding:20rpx 22rpx!important}.nearby-item strong{font-size:25rpx}
 </style>

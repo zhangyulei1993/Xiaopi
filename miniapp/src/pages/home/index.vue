@@ -193,4 +193,14 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing-info .tags{height:32rpx;gap:10rpx;margin-top:10rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:18rpx}
 .listing-price{min-height:34rpx;margin-top:auto;font-size:34rpx}
+/* Listing card acceptance: fixed rhythm, stronger title, quieter address. */
+.listing{height:232rpx;gap:18rpx;padding:12rpx;border-color:#e9e1d7;border-radius:22rpx;background:#fffdf9;box-shadow:0 8rpx 22rpx rgba(91,69,44,.055)}
+.listing-image{width:248rpx;height:208rpx;border-radius:16rpx}
+.listing-info{height:208rpx;padding:5rpx 5rpx 4rpx 0}
+.home-listing-title{max-height:80rpx;font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
+.home-listing-address{max-height:32rpx;margin-top:10rpx;color:#7c8479;font-size:22rpx;line-height:1.45}
+.listing-info .tags{height:34rpx;gap:8rpx;margin-top:10rpx}
+.listing-info .tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
+.listing-price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.listing-price .price-unit{font-size:19rpx}
+.listing:active{opacity:.9;transform:scale(.995)}
 </style>
