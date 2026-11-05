@@ -86,6 +86,14 @@ const roomCount = ref("一室"),
   bayWindow = ref("带飘窗");
 const buildingNo = ref("");
 const roomNo = ref("");
+const titleParts = ref(["community", "unit", "layout", "rentType"]);
+const titlePartOptions = [
+  { key: "community", label: "小区" },
+  { key: "unit", label: "栋室" },
+  { key: "layout", label: "户型" },
+  { key: "rentType", label: "整租/合租" },
+  { key: "area", label: "面积" },
+];
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
   amenityOptions = [
     "冰箱",
@@ -339,14 +347,23 @@ const completionCount = computed(
 );
 const generatedTitle = computed(() => {
   const community = String(form.community || "").trim();
-  return community ? `${community} · ${roomCount.value}${hallCount.value}` : "等待选择小区";
+  if (!community) return "选择小区后自动生成";
+  const values: Record<string, string> = {
+    community,
+    unit: [buildingNo.value.trim(), roomNo.value.trim()].filter(Boolean).join(""),
+    layout: `${roomCount.value}${hallCount.value}`,
+    rentType: rentType.value,
+    area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
+  };
+  const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
+  return parts.join(" · ") || community;
 });
 const locationWithUnit = computed(() => {
   const location = String(form.location || "").trim();
   const unit = [buildingNo.value.trim(), roomNo.value.trim()].filter(Boolean).join(" ");
   return [location, unit].filter(Boolean).join(" · ");
 });
-watch([() => form.community, roomCount, hallCount], () => {
+watch([() => form.community, roomCount, hallCount, rentType, buildingNo, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
     : "";
@@ -785,34 +802,15 @@ const mediaUrl = resolveAssetUrl;
           ><view
             ><strong>基础信息</strong></view
           ></view
-        ><view class="field auto-title"
-          ><text>房源标题</text
-          ><strong>{{ generatedTitle }}</strong><small>由小区名称和房型自动生成</small></view
-        ><view class="field"
-          ><text>小区名称 *</text
-          ><input
-            v-model.trim="form.community"
-            maxlength="40"
-            placeholder="请输入真实小区名称" /></view
-        ><view class="unit-row"
-          ><view class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋" /></view
-          ><view class="field"><text>房号</text><input v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /></view></view
-        ><view class="field"
-          ><text>位置描述 *</text
-          ><input
-            v-model.trim="form.location"
-            maxlength="60"
-            placeholder="区域 / 地铁站 / 商圈" /></view
-        ><view class="map-section-heading"
-          ><view
-            ><strong>位置</strong></view
-          ><text @click="choosePropertyLocation">搜索地址</text></view
-        ><view class="location-search"
+        ><view class="map-section-heading community-heading"
+          ><view><strong>小区名称 *</strong><small>搜索并选择小区，自动获取地图坐标</small></view
+          ><text @click="choosePropertyLocation">地图选点</text></view
+        ><view class="location-search community-search"
           ><view class="location-search-box"
             ><text>⌕</text
             ><input
               v-model.trim="locationQuery"
-              placeholder="输入小区、街道或写字楼名称"
+              placeholder="输入小区名称、街道或写字楼"
               confirm-type="search"
               @input="scheduleLocationSearch"
               @confirm="runLocationSearch"
@@ -829,11 +827,24 @@ const mediaUrl = resolveAssetUrl;
                 >{{ (item.distance / 1000).toFixed(1) }}km</text
               ></view
             ></view
-          ><view
-            v-else-if="locationQuery.length >= 2 && !locationSearching"
-            class="location-search-tip"
+          ><view v-else-if="locationQuery.length >= 2 && !locationSearching" class="location-search-tip"
             >继续输入名称，系统会显示武汉范围内的匹配地点</view
-          ></view
+          ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
+        ><view class="unit-row"
+          ><view class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋" /></view
+          ><view class="field"><text>房号</text><input v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /></view></view
+        ><view class="field"
+          ><text>详细地址补充</text
+          ><input
+            v-model.trim="form.location"
+            maxlength="60"
+            placeholder="选择小区后自动回填，可补充门牌信息" /></view
+        ><view class="title-composer"
+          ><view><strong>标题组合</strong><small>勾选要展示在房源标题里的信息</small></view
+          ><checkbox-group @change="titleParts = $event.detail.value"><label v-for="option in titlePartOptions" :key="option.key" :class="{ active: titleParts.includes(option.key) }"><checkbox :value="option.key" :checked="titleParts.includes(option.key)" color="#0e8177" />{{ option.label }}</label></checkbox-group></view
+        ><view class="field auto-title"
+          ><text>房源标题预览</text
+          ><strong>{{ generatedTitle }}</strong><small>保存时按以上组合生成，后续户型信息变化会同步更新</small></view
         ><view class="channel-scope"
           ><text>关联范围</text
           ><picker
@@ -1349,6 +1360,40 @@ const mediaUrl = resolveAssetUrl;
   font-size: 23rpx;
   font-weight: 700;
 }
+.community-heading { margin-top: 4rpx; }
+.community-search { margin-top: 14rpx; }
+.selected-community {
+  margin-top: 10rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 12rpx;
+  background: #edf6f3;
+  color: #0e8177;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+.title-composer {
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: #f7faf8;
+}
+.title-composer > view strong,
+.title-composer > view small { display: block; }
+.title-composer > view strong { color: #173f3c; font-size: 24rpx; }
+.title-composer > view small { margin-top: 6rpx; color: #78938e; font-size: 19rpx; }
+.title-composer checkbox-group { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
+.title-composer label {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 8rpx 12rpx;
+  border-radius: 10rpx;
+  background: #fff;
+  color: #637b76;
+  font-size: 20rpx;
+}
+.title-composer label.active { background: #e0f0eb; color: #0b766d; font-weight: 700; }
+.title-composer checkbox { transform: scale(.78); margin-right: -4rpx; }
 .location-search {
   position: relative;
   z-index: 3;
