@@ -88,8 +88,10 @@ const roomCount = ref("一室"),
   hallCount = ref("一厅"),
   rentType = ref("整租"),
   roomType = ref("主卧"),
+  bathroomCount = ref("一卫"),
+  balcony = ref("有阳台"),
   toiletType = ref("独卫"),
-  bayWindow = ref("带飘窗");
+  bayWindow = ref("有飘窗");
 const buildingNo = ref("");
 const unitNo = ref("");
 const roomNo = ref("");
@@ -128,8 +130,10 @@ const rooms = ["一室", "两室", "三室", "四室", "五室及以上"],
   halls = ["一厅", "两厅", "三厅", "无厅"],
   rentTypes = ["整租", "合租"],
   roomTypes = ["主卧", "次卧", "单间", "床位"],
+  bathroomCounts = ["一卫", "两卫", "三卫及以上"],
+  balconies = ["有阳台", "无阳台"],
   toilets = ["独卫", "非独卫"],
-  windows = ["带飘窗", "不带飘窗"];
+  windows = ["有飘窗", "无飘窗"];
 type FeaturedChannel = {
   title: string;
   keyword: string;
@@ -404,7 +408,7 @@ const generatedTitle = computed(() => {
     community,
     unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(" · "),
     floor: selectedFloor.value ? `${selectedFloor.value}层` : "",
-    layout: `${roomCount.value}${hallCount.value}`,
+    layout: rentType.value === "合租" ? roomType.value : `${roomCount.value}${hallCount.value}`,
     rentType: rentType.value,
     area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
   };
@@ -534,7 +538,7 @@ const openStructurePicker = () => {
 const structureSummary = computed(() =>
   [buildingNo.value, unitNo.value && `${unitNo.value}单元`, roomNo.value && `${roomNo.value}室`]
     .filter(Boolean)
-    .join(" · ") || "未选择",
+    .join("") || "未选择",
 );
 const saveCurrentBuildingRule = async () => {
   const community = String(form.community || "").trim();
@@ -558,35 +562,41 @@ const saveCurrentBuildingRule = async () => {
   }
 };
 const syncLayout = () => {
-  const availableRoom = rentType.value === "合租" ? roomType.value : "整套";
-  form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${availableRoom} · ${toiletType.value} · ${bayWindow.value}`;
+  form.layout = rentType.value === "整租"
+    ? `${roomCount.value}${hallCount.value} · 整租 · ${bathroomCount.value} · ${balcony.value}`
+    : `合租 · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
   form.rentType = rentType.value;
 };
 const pickLayoutValue = (values: string[], index: string | number) =>
   values[Number(index)] || values[0];
-const setRentType = (index: string | number) => {
-  rentType.value = pickLayoutValue(rentTypes, index);
-  if (rentType.value === "合租" && roomType.value === "整套") roomType.value = "主卧";
+const setRentType = (value: string | number) => {
+  rentType.value = typeof value === "number" || /^\d+$/.test(String(value))
+    ? pickLayoutValue(rentTypes, value)
+    : String(value) as "整租" | "合租";
+  if (rentType.value === "合租" && (!roomType.value || roomType.value === "整套")) roomType.value = "主卧";
   syncLayout();
 };
 const parseLayout = (value = "") => {
   const parts = value.split(" · ");
-  if (parts.length === 5) {
+  if (parts[1] === "整租") {
     const roomHall = parts[0];
     const hall = roomHall.match(/(一厅|两厅|三厅|无厅)$/)?.[0] || "一厅";
     roomCount.value = roomHall.slice(0, -hall.length) || "一室";
     hallCount.value = hall;
-    rentType.value = parts[1];
-    roomType.value = parts[2];
-    toiletType.value = parts[3];
-    bayWindow.value = parts[4];
-  } else if (parts.length >= 6) {
-    roomCount.value = parts[0];
-    hallCount.value = parts[1];
-    rentType.value = parts[2];
-    roomType.value = parts[3];
-    toiletType.value = parts[4];
-    bayWindow.value = parts[5];
+    rentType.value = "整租";
+    // 兼容旧版：户型 · 整租 · 整套 · 独卫 · 带飘窗。
+    bathroomCount.value = parts[2] === "整套" ? (parts[3] || "一卫") : (parts[2] || "一卫");
+    balcony.value = parts[2] === "整套" ? "有阳台" : (parts[3] || "有阳台");
+  } else if (parts[0] === "合租") {
+    rentType.value = "合租";
+    roomType.value = parts[1] || "主卧";
+    toiletType.value = parts[2] || "独卫";
+    bayWindow.value = parts[3] || "有飘窗";
+  } else if (parts[1] === "合租") {
+    rentType.value = "合租";
+    roomType.value = parts[2] || "主卧";
+    toiletType.value = parts[3] || "独卫";
+    bayWindow.value = parts[4] || "有飘窗";
   }
 };
 const loadProperty = async () => {
@@ -1033,7 +1043,7 @@ const mediaUrl = resolveAssetUrl;
             >继续输入名称，系统会显示武汉范围内的匹配地点</view
           ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
         ><view v-if="form.community" class="unit-selector-card" :class="{ selected: Boolean(roomNo) }" @click="openStructurePicker"
-          ><view><strong>{{ roomNo ? "已选门牌" : "门牌信息" }} <small>{{ roomNo ? automaticFloorInfo : "选填" }}</small></strong><text>{{ structureSummary }}</text></view><b>{{ roomNo ? "重选 ›" : "选择 ›" }}</b></view
+          ><view><strong>{{ roomNo ? "已选门牌" : "门牌信息" }}</strong><text>{{ structureSummary }}</text></view><b>{{ roomNo ? "重选 ›" : "选择 ›" }}</b></view
         ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>{{ showStructureSetup ? "门牌规则设置" : `默认门牌规则：${selectedBuildingRule?.unitCount || 3} 单元 · ${selectedBuildingRule?.floorCount || 33} 层` }}</text><b>{{ showStructureSetup ? "收起" : "调整 ›" }}</b></view
         ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
               ><view class="rule-setup-head"><text>门牌规则</text><small>保存后，同一小区下次录入将直接使用</small></view
@@ -1095,12 +1105,10 @@ const mediaUrl = resolveAssetUrl;
           ><view
             ><strong>出租方式与户型</strong></view
           ></view
-        ><view class="rent-mode-card"
-          ><view><strong>出租方式</strong><small>先确定发布整套还是单个房间</small></view
-          ><picker :range="rentTypes" @change="setRentType($event.detail.value)"><view class="rent-mode-choice">{{ rentType }}<text>切换 ›</text></view></picker></view
-        ><view class="layout-guidance">{{ rentType === "整租" ? "整租：填写整套房源的户型信息。" : "合租：先填写整套户型，再选择本次出租的房间。" }}</view
+        ><view class="rent-type-tabs"><view :class="{ active: rentType === '整租' }" @click="setRentType('整租')"><strong>整租</strong><small>发布整套房源</small></view><view :class="{ active: rentType === '合租' }" @click="setRentType('合租')"><strong>合租</strong><small>发布单个房间</small></view></view
+        ><view class="layout-guidance">{{ rentType === "整租" ? "填写整套户型、卫生间与阳台信息。" : "填写本次出租的房间配置，不再重复填写整套户型。" }}</view
         ><view class="picker-grid"
-          ><picker
+          ><template v-if="rentType === '整租'"><picker
             :range="rooms"
             @change="roomCount = pickLayoutValue(rooms, $event.detail.value); syncLayout()"
             ><view class="picker-item"
@@ -1114,7 +1122,21 @@ const mediaUrl = resolveAssetUrl;
               ><strong>{{ hallCount }}</strong
               ><small>客厅</small></view
             ></picker
-          ><picker v-if="rentType === '合租'"
+          ><picker
+            :range="bathroomCounts"
+            @change="bathroomCount = pickLayoutValue(bathroomCounts, $event.detail.value); syncLayout()"
+            ><view class="picker-item"
+              ><strong>{{ bathroomCount }}</strong
+              ><small>卫生间</small></view
+            ></picker
+          ><picker
+            :range="balconies"
+            @change="balcony = pickLayoutValue(balconies, $event.detail.value); syncLayout()"
+            ><view class="picker-item"
+              ><strong>{{ balcony }}</strong
+              ><small>阳台</small></view
+            ></picker></template
+          ><template v-else><picker
             :range="roomTypes"
             @change="roomType = pickLayoutValue(roomTypes, $event.detail.value); syncLayout()"
             ><view class="picker-item"
@@ -1133,8 +1155,8 @@ const mediaUrl = resolveAssetUrl;
             @change="bayWindow = pickLayoutValue(windows, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ bayWindow }}</strong
-              ><small>窗型</small></view
-            ></picker
+              ><small>飘窗</small></view
+            ></picker></template
           ></view
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
@@ -1537,12 +1559,12 @@ const mediaUrl = resolveAssetUrl;
 .final-title-composer { margin-top:18rpx; }
 .final-title-composer .auto-title { margin-top:18rpx;padding:18rpx;border-radius:14rpx; }
 .final-title-composer .auto-title text { display:block;margin-bottom:8rpx;color:#6d8e89;font-size:20rpx;font-weight:600; }
-.rent-mode-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;padding:22rpx;border:1rpx solid #cce4dc;border-radius:16rpx;background:#eff8f4; }
-.rent-mode-card strong,.rent-mode-card small { display:block; }
-.rent-mode-card strong { color:#173f3c;font-size:25rpx; }
-.rent-mode-card small { margin-top:6rpx;color:#78938e;font-size:19rpx; }
-.rent-mode-choice { display:flex;align-items:center;gap:10rpx;padding:12rpx 14rpx;border-radius:12rpx;background:#0e8177;color:#fff;font-size:24rpx;font-weight:700; }
-.rent-mode-choice text { color:#d8f3ec;font-size:19rpx; }
+.rent-type-tabs { display:grid;grid-template-columns:1fr 1fr;gap:12rpx;padding:8rpx;border-radius:18rpx;background:#eef5f2; }
+.rent-type-tabs>view { padding:18rpx 20rpx;border-radius:13rpx;background:transparent;color:#6f8983; }
+.rent-type-tabs>view.active { background:#0e8177;color:#fff;box-shadow:0 8rpx 16rpx rgba(14,129,119,.18); }
+.rent-type-tabs strong,.rent-type-tabs small { display:block; }
+.rent-type-tabs strong { font-size:27rpx;line-height:1.25; }
+.rent-type-tabs small { margin-top:5rpx;font-size:19rpx;opacity:.78; }
 .layout-guidance { margin:14rpx 2rpx 18rpx;color:#76918b;font-size:20rpx;line-height:1.5; }
 .auto-floor strong { display:block;color:#315f5a;font-size:26rpx;line-height:1.4; }
 .rent-row {
