@@ -44,6 +44,10 @@ func (f *fakeStore) CreateProperty(_ context.Context, property domain.Property) 
 }
 func (*fakeStore) UpdateProperty(context.Context, domain.Property) error { return nil }
 func (*fakeStore) DeleteProperty(context.Context, string) error          { return nil }
+func (*fakeStore) ListBuildingRules(context.Context, string) ([]domain.BuildingRule, error) {
+	return nil, nil
+}
+func (*fakeStore) UpsertBuildingRule(context.Context, domain.BuildingRule) error { return nil }
 func (f *fakeStore) ListPropertyLeads(context.Context) ([]domain.PropertyLead, error) {
 	return f.leads, nil
 }

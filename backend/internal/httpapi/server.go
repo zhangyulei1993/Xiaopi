@@ -25,6 +25,8 @@ type Store interface {
 	CreateProperty(context.Context, domain.Property) error
 	UpdateProperty(context.Context, domain.Property) error
 	DeleteProperty(context.Context, string) error
+	ListBuildingRules(context.Context, string) ([]domain.BuildingRule, error)
+	UpsertBuildingRule(context.Context, domain.BuildingRule) error
 	ListPropertyLeads(context.Context) ([]domain.PropertyLead, error)
 	CreatePropertyLead(context.Context, domain.PropertyLead) error
 	UpdatePropertyLeadFollowUp(context.Context, string, string, string) error
@@ -106,6 +108,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/config/public", s.publicConfig)
 	mux.HandleFunc("PUT /api/v1/admin/config/public", s.requireRoles(s.updatePublicConfig, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/location/search", s.requireRoles(s.searchLocations, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/building-rules", s.requireRoles(s.listBuildingRules, roleAdmin))
+	mux.HandleFunc("PUT /api/v1/admin/building-rules", s.requireRoles(s.upsertBuildingRule, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/location/static", s.requireRoles(s.staticLocationMap, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleAdmin))

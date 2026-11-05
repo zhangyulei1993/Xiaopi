@@ -6,11 +6,14 @@ import {
   createProperty,
   deleteProperty,
   getPublicConfig,
+  listBuildingRules,
   listProperties,
   replacePropertyMedia,
+  saveBuildingRule,
   searchLocations,
   updateProperty,
   type LocationSearchItem,
+  type BuildingRule,
   type Property,
   type PropertyMedia,
 } from "../../api/properties";
@@ -60,6 +63,7 @@ const form = reactive<Partial<Property>>({
   community: "",
   location: "",
   buildingNo: "",
+  unitNo: "",
   roomNo: "",
   latitude: 0,
   longitude: 0,
@@ -87,7 +91,12 @@ const roomCount = ref("一室"),
   toiletType = ref("独卫"),
   bayWindow = ref("带飘窗");
 const buildingNo = ref("");
+const unitNo = ref("");
 const roomNo = ref("");
+const selectedFloor = ref("");
+const buildingRules = ref<BuildingRule[]>([]);
+const ruleSaving = ref(false);
+const ruleDraft = reactive({ unitCount: 1, floorStart: 1, floorCount: 6, householdsPerFloor: 2 });
 const titleParts = ref(["community", "unit", "layout", "rentType"]);
 const titlePartOptions = [
   { key: "community", label: "小区" },
@@ -295,6 +304,7 @@ const applyLocationResult = (item: LocationSearchItem) => {
   form.longitude = Number(item.longitude.toFixed(7));
   locationQuery.value = item.title;
   locationResults.value = [];
+  void loadBuildingRules();
 };
 const choosePropertyLocation = () => {
   uni.chooseLocation({
@@ -305,6 +315,7 @@ const choosePropertyLocation = () => {
       form.longitude = Number(result.longitude.toFixed(7));
       form.location = result.address || result.name || form.location;
       if (!form.community?.trim() && result.name) form.community = result.name;
+      void loadBuildingRules();
     },
     fail: (error) => {
       if (!String(error.errMsg || "").includes("cancel")) {
@@ -352,7 +363,7 @@ const generatedTitle = computed(() => {
   if (!community) return "选择小区后自动生成";
   const values: Record<string, string> = {
     community,
-    unit: [buildingNo.value.trim(), roomNo.value.trim()].filter(Boolean).join(""),
+    unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(" · "),
     layout: `${roomCount.value}${hallCount.value}`,
     rentType: rentType.value,
     area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
@@ -360,11 +371,82 @@ const generatedTitle = computed(() => {
   const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
   return parts.join(" · ") || community;
 });
-watch([() => form.community, roomCount, hallCount, rentType, buildingNo, roomNo, () => form.areaSqm, titleParts], () => {
+watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
     : "";
 }, { immediate: true });
+const selectedBuildingRule = computed(() =>
+  buildingRules.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
+);
+const unitOptions = computed(() => {
+  const total = selectedBuildingRule.value?.unitCount || 0;
+  return Array.from({ length: total }, (_, index) => String(index + 1));
+});
+const floorOptions = computed(() => {
+  const rule = selectedBuildingRule.value;
+  return rule
+    ? Array.from({ length: rule.floorCount }, (_, index) => String(rule.floorStart + index))
+    : [];
+});
+const householdOptions = computed(() => {
+  const total = selectedBuildingRule.value?.householdsPerFloor || 0;
+  return Array.from({ length: total }, (_, index) => String(index + 1).padStart(2, "0"));
+});
+const generatedRoomNo = computed(() => {
+  if (!selectedFloor.value || !roomNo.value) return "";
+  return `${selectedFloor.value}${roomNo.value}`;
+});
+const loadBuildingRules = async () => {
+  const community = String(form.community || "").trim();
+  if (!community) {
+    buildingRules.value = [];
+    return;
+  }
+  buildingRules.value = await listBuildingRules(community).catch(() => []);
+};
+const selectBuildingRule = (event: { detail: { value: string | number } }) => {
+  const rule = buildingRules.value[Number(event.detail.value)];
+  if (!rule) return;
+  buildingNo.value = rule.buildingNo;
+  unitNo.value = "";
+  selectedFloor.value = "";
+  roomNo.value = "";
+};
+const chooseUnit = (event: { detail: { value: string | number } }) => {
+  unitNo.value = unitOptions.value[Number(event.detail.value)] || "";
+  selectedFloor.value = "";
+  roomNo.value = "";
+};
+const chooseFloor = (event: { detail: { value: string | number } }) => {
+  selectedFloor.value = floorOptions.value[Number(event.detail.value)] || "";
+  roomNo.value = "";
+};
+const chooseHousehold = (event: { detail: { value: string | number } }) => {
+  const household = householdOptions.value[Number(event.detail.value)] || "";
+  roomNo.value = selectedFloor.value && household ? `${selectedFloor.value}${household}` : "";
+};
+const saveCurrentBuildingRule = async () => {
+  const community = String(form.community || "").trim();
+  const building = buildingNo.value.trim();
+  if (!community || !building) {
+    uni.showToast({ title: "请先选择小区并填写楼栋", icon: "none" });
+    return;
+  }
+  ruleSaving.value = true;
+  try {
+    const saved = await saveBuildingRule({ community, buildingNo: building, ...ruleDraft });
+    const index = buildingRules.value.findIndex((rule) => rule.buildingNo === saved.buildingNo);
+    if (index >= 0) buildingRules.value.splice(index, 1, saved);
+    else buildingRules.value.push(saved);
+    buildingRules.value = [...buildingRules.value];
+    uni.showToast({ title: "楼栋规则已保存" });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "保存失败", icon: "none" });
+  } finally {
+    ruleSaving.value = false;
+  }
+};
 const syncLayout = () => {
   form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
   form.rentType = rentType.value;
@@ -401,6 +483,7 @@ const loadProperty = async () => {
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
     buildingNo.value = property.buildingNo || "";
+    unitNo.value = property.unitNo || "";
     roomNo.value = property.roomNo || "";
     locationQuery.value = property.community || property.location || "";
     currentStatus.value = property.status;
@@ -409,6 +492,7 @@ const loadProperty = async () => {
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
     form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
+    await loadBuildingRules();
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : "加载失败",
@@ -691,6 +775,7 @@ const save = async (openPreview = false) => {
       community: form.community?.trim(),
       location: form.location?.trim(),
       buildingNo: buildingNo.value.trim(),
+      unitNo: unitNo.value.trim(),
       roomNo: roomNo.value.trim(),
       description: `配套设施：${amenities.value.join("、")}\n${details}`.trim(),
     };
@@ -831,9 +916,21 @@ const mediaUrl = resolveAssetUrl;
           ><view v-else-if="locationQuery.length >= 2 && !locationSearching" class="location-search-tip"
             >继续输入名称，系统会显示武汉范围内的匹配地点</view
           ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
-        ><view class="unit-row"
-          ><view class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋" /></view
-          ><view class="field"><text>房号</text><input v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /></view></view
+        ><view class="address-structure"
+          ><view class="structure-heading"><view><strong>楼栋与房号</strong><small>已有规则可逐级选择；没有时先配置一次</small></view></view
+          ><view class="unit-row"
+            ><picker v-if="buildingRules.length" :range="buildingRules" range-key="buildingNo" @change="selectBuildingRule"><view class="field picker-field"><text>楼栋</text><strong>{{ buildingNo || "选择楼栋" }}</strong></view></picker
+            ><view v-else class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋" /></view
+            ><view class="field"><text>房号</text><input v-if="!selectedBuildingRule" v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /><strong v-else>{{ generatedRoomNo || roomNo || "请选择" }}</strong></view></view
+          ><view v-if="selectedBuildingRule" class="structure-picker-grid"
+            ><picker :range="unitOptions" @change="chooseUnit"><view><small>单元</small><strong>{{ unitNo ? `${unitNo}单元` : "选择" }}</strong></view></picker
+            ><picker :range="floorOptions" :disabled="!unitNo" @change="chooseFloor"><view><small>楼层</small><strong>{{ selectedFloor ? `${selectedFloor}层` : "选择" }}</strong></view></picker
+            ><picker :range="householdOptions" :disabled="!selectedFloor" @change="chooseHousehold"><view><small>户号</small><strong>{{ roomNo ? `${roomNo}室` : "选择" }}</strong></view></picker></view
+          ><view v-else class="rule-setup"
+            ><view class="rule-setup-head"><text>还没有楼栋规则</text><small>配置后即可自动选择单元、楼层和房号</small></view
+            ><view class="rule-inputs"><view><small>单元数</small><input v-model.number="ruleDraft.unitCount" type="number" /></view><view><small>起始层</small><input v-model.number="ruleDraft.floorStart" type="number" /></view><view><small>总层数</small><input v-model.number="ruleDraft.floorCount" type="number" /></view><view><small>每层户数</small><input v-model.number="ruleDraft.householdsPerFloor" type="number" /></view></view
+            ><button :loading="ruleSaving" :disabled="!buildingNo || ruleSaving" @click="saveCurrentBuildingRule">保存该栋规则</button></view
+          ></view
         ><view class="field"
           ><text>详细地址补充</text
           ><input
@@ -1330,6 +1427,26 @@ const mediaUrl = resolveAssetUrl;
 }
 .unit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; }
 .unit-row .field { margin-top: 14rpx; }
+.address-structure { margin-top: 18rpx; padding: 20rpx; border-radius: 16rpx; background: #f7faf8; }
+.structure-heading strong,.structure-heading small { display:block; }
+.structure-heading strong { color:#173f3c;font-size:24rpx; }
+.structure-heading small { margin-top:6rpx;color:#78938e;font-size:19rpx; }
+.picker-field { min-height: 102rpx; box-sizing: border-box; }
+.picker-field strong,.unit-row .field>strong { display:block;color:#173f3c;font-size:27rpx;line-height:1.35; }
+.structure-picker-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12rpx;margin-top:14rpx; }
+.structure-picker-grid>picker>view { padding:16rpx 12rpx;border-radius:12rpx;background:#eaf4f0; }
+.structure-picker-grid small,.structure-picker-grid strong { display:block; }
+.structure-picker-grid small { color:#6e8c86;font-size:18rpx; }
+.structure-picker-grid strong { margin-top:7rpx;color:#173f3c;font-size:22rpx; }
+.rule-setup { margin-top:14rpx;padding:16rpx;border-radius:12rpx;background:#eef5f2; }
+.rule-setup-head text,.rule-setup-head small { display:block; }
+.rule-setup-head text { color:#315b54;font-size:21rpx;font-weight:700; }
+.rule-setup-head small { margin-top:5rpx;color:#78938e;font-size:18rpx; }
+.rule-inputs { display:grid;grid-template-columns:repeat(4,1fr);gap:8rpx;margin-top:14rpx; }
+.rule-inputs>view { padding:10rpx;border-radius:10rpx;background:#fff; }
+.rule-inputs small { display:block;color:#78938e;font-size:17rpx; }
+.rule-inputs input { height:38rpx;margin-top:4rpx;color:#173f3c;font-size:22rpx; }
+.rule-setup button { margin:14rpx 0 0;border:0;border-radius:10rpx;background:#0e8177;color:#fff;font-size:21rpx;line-height:62rpx; }
 .detail-row{margin-top:14rpx}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx;margin-top:16rpx}.detail-grid .field{margin-top:0}.detail-grid .metro-field{grid-column:span 2}
 .channel-scope {
   margin-top: 16rpx;

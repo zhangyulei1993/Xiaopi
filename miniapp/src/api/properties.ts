@@ -6,6 +6,7 @@ export interface Property {
   community: string;
   location: string;
   buildingNo?: string;
+  unitNo?: string;
   roomNo?: string;
   latitude?: number;
   longitude?: number;
@@ -67,6 +68,19 @@ export const searchLocations = (
   request<LocationSearchItem[]>(
     `/v1/admin/location/search?keyword=${encodeURIComponent(keyword)}&latitude=${latitude}&longitude=${longitude}`,
   );
+export interface BuildingRule {
+  id?: string;
+  community: string;
+  buildingNo: string;
+  unitCount: number;
+  floorStart: number;
+  floorCount: number;
+  householdsPerFloor: number;
+}
+export const listBuildingRules = (community: string) =>
+  request<BuildingRule[]>(`/v1/admin/building-rules?community=${encodeURIComponent(community)}`);
+export const saveBuildingRule = (rule: BuildingRule) =>
+  request<BuildingRule>("/v1/admin/building-rules", { method: "PUT", data: rule });
 export interface PropertyLead {
   id: string;
   sourceName: string;
