@@ -26,6 +26,10 @@ func (s *Server) recordFootprint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid footprint")
 		return
 	}
+	if !s.isAvailableProperty(r.Context(), propertyID) {
+		writeError(w, http.StatusNotFound, "可租房源不存在或已下架")
+		return
+	}
 	if err := store.RecordPropertyFootprint(r.Context(), claimsFromContext(r.Context()).Subject, propertyID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save footprint")
 		return

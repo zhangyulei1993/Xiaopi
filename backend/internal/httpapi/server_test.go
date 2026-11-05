@@ -26,6 +26,7 @@ type fakeStore struct {
 	temporaryHashes map[string]string
 	rentalRequests  []domain.RentalRequest
 	favorites       map[string][]string
+	footprints      map[string][]domain.Footprint
 	statusErr       error
 	deletedProperty string
 }
@@ -107,6 +108,27 @@ func (f *fakeStore) SetPropertyFavorite(_ context.Context, userID, propertyID st
 }
 func (f *fakeStore) ListFavoriteContacts(context.Context) ([]domain.FavoriteContact, error) {
 	return nil, nil
+}
+func (f *fakeStore) RecordPropertyFootprint(_ context.Context, userID, propertyID string) error {
+	if f.footprints == nil {
+		f.footprints = map[string][]domain.Footprint{}
+	}
+	for index := range f.footprints[userID] {
+		if f.footprints[userID][index].PropertyID == propertyID {
+			f.footprints[userID][index].ViewCount++
+			f.footprints[userID][index].ViewedAt = time.Now()
+			return nil
+		}
+	}
+	f.footprints[userID] = append(f.footprints[userID], domain.Footprint{PropertyID: propertyID, ViewCount: 1, ViewedAt: time.Now()})
+	return nil
+}
+func (f *fakeStore) ListPropertyFootprints(_ context.Context, userID string) ([]domain.Footprint, error) {
+	return f.footprints[userID], nil
+}
+func (f *fakeStore) ClearPropertyFootprints(_ context.Context, userID string) error {
+	delete(f.footprints, userID)
+	return nil
 }
 func (f *fakeStore) ListUsers(context.Context) ([]domain.User, error) { return f.users, nil }
 func (f *fakeStore) GetUser(_ context.Context, userID string) (domain.User, error) {
@@ -394,7 +416,10 @@ func TestTemporaryAccessAuthenticatesExistingBoundWechatUser(t *testing.T) {
 }
 
 func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
-	dataStore := &fakeStore{users: []domain.User{{ID: "user-1", Phone: "13800138000"}}}
+	dataStore := &fakeStore{
+		users:      []domain.User{{ID: "user-1", Phone: "13800138000"}},
+		properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}},
+	}
 	server := testServer(dataStore)
 	userToken, err := server.tokens.issue("user-1", roleUser)
 	if err != nil {
@@ -421,7 +446,7 @@ func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 }
 
 func TestAppointmentRequiresBoundPhone(t *testing.T) {
-	server := testServer(&fakeStore{})
+	server := testServer(&fakeStore{properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}}})
 	userToken, err := server.tokens.issue("user-without-phone", roleUser)
 	if err != nil {
 		t.Fatal(err)
@@ -431,6 +456,41 @@ func TestAppointmentRequiresBoundPhone(t *testing.T) {
 	}, userToken)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "绑定手机号") {
 		t.Fatalf("expected phone-binding rejection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestUserActionsRejectUnavailablePropertyAndUseBoundPhone(t *testing.T) {
+	dataStore := &fakeStore{
+		users: []domain.User{{ID: "user-1", Phone: "13800138000", Status: domain.UserActive}},
+		properties: []domain.Property{
+			{ID: "draft", Status: domain.PropertyDraft},
+			{ID: "offline", Status: domain.PropertyOffline},
+			{ID: "available", Status: domain.PropertyAvailable},
+		},
+	}
+	server := testServer(dataStore)
+	token, err := server.tokens.issue("user-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"draft", "offline"} {
+		for _, request := range []struct{ method, path string }{
+			{http.MethodPut, "/api/v1/favorites/" + target},
+			{http.MethodPost, "/api/v1/footprints/" + target},
+		} {
+			response := performRequest(t, server.Handler(), request.method, request.path, nil, token)
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("%s %s expected 404, got %d: %s", request.method, request.path, response.Code, response.Body.String())
+			}
+		}
+		response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": target, "phone": "13900000000"}, token)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("appointment for %s expected 404, got %d: %s", target, response.Code, response.Body.String())
+		}
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "available", "phone": "13900000000"}, token)
+	if response.Code != http.StatusCreated || len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].Phone != "13800138000" {
+		t.Fatalf("appointment must use the verified bound phone: %d %#v", response.Code, dataStore.rentalRequests)
 	}
 }
 
@@ -448,6 +508,11 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	if len(publicItems) != 1 || publicItems[0].ID != "available" {
 		t.Fatalf("public response leaked unpublished properties: %#v", publicItems)
 	}
+	for _, privateField := range []string{"ownerId", "buildingNo", "unitNo", "roomNo"} {
+		if strings.Contains(publicResponse.Body.String(), `"`+privateField+`"`) {
+			t.Fatalf("public response leaked private field %q: %s", privateField, publicResponse.Body.String())
+		}
+	}
 
 	adminToken, err := server.tokens.issue("operator", roleAdmin)
 	if err != nil {
@@ -457,6 +522,22 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	adminItems := responseData[[]domain.Property](t, adminResponse)
 	if len(adminItems) != 3 {
 		t.Fatalf("admin expected all properties, got %#v", adminItems)
+	}
+}
+
+func TestDisabledWechatAdminCannotKeepManagementAccess(t *testing.T) {
+	dataStore := &fakeStore{
+		users:  []domain.User{{ID: "wx-admin-1", Status: domain.UserActive}},
+		admins: []domain.AdminUser{{UserID: "wx-admin-1", Status: "disabled"}},
+	}
+	server := testServer(dataStore)
+	token, err := server.tokens.issue("wx-admin-1", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/admin/users", nil, token)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("disabled admin token must be rejected immediately, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

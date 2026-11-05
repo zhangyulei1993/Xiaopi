@@ -226,18 +226,12 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid rental request")
 		return
 	}
+	item.RequestType = strings.TrimSpace(item.RequestType)
 	item.Phone = normalizePhone(item.Phone)
 	item.Location = strings.TrimSpace(item.Location)
 	item.Layout = strings.TrimSpace(item.Layout)
 	item.Note = strings.TrimSpace(item.Note)
 	userID := claimsFromContext(r.Context()).Subject
-	if item.Phone == "" {
-		if store, ok := s.userAdminStore(); ok {
-			if user, err := store.GetUser(r.Context(), userID); err == nil {
-				item.Phone = normalizePhone(user.Phone)
-			}
-		}
-	}
 	if item.BudgetMin < 0 || item.BudgetMax < item.BudgetMin || (item.RequestType != "general" && item.RequestType != "appointment" && item.RequestType != "area_subscription") {
 		writeError(w, http.StatusBadRequest, "请填写有效的找房需求")
 		return
@@ -250,9 +244,21 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "订阅片区不能为空")
 		return
 	}
-	if (item.RequestType == "appointment" || item.RequestType == "area_subscription") && item.Phone == "" {
-		writeError(w, http.StatusBadRequest, "预约服务需要先绑定手机号")
-		return
+	if item.RequestType == "appointment" {
+		if !s.isAvailableProperty(r.Context(), item.PropertyID) {
+			writeError(w, http.StatusNotFound, "可租房源不存在或已下架")
+			return
+		}
+	}
+	if item.RequestType == "appointment" || item.RequestType == "area_subscription" {
+		phone, ok := s.boundUserPhone(r.Context(), userID)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "预约服务需要先绑定手机号")
+			return
+		}
+		// Never accept an arbitrary number from the client for a high-intent
+		// request: the verified WeChat-bound number is the contact of record.
+		item.Phone = phone
 	}
 	item.ID, _ = newID()
 	item.UserID = userID
@@ -292,6 +298,10 @@ func (s *Server) setFavorite(w http.ResponseWriter, r *http.Request, favorite bo
 	propertyID := strings.TrimSpace(r.PathValue("propertyID"))
 	if propertyID == "" {
 		writeError(w, http.StatusBadRequest, "propertyId is required")
+		return
+	}
+	if favorite && !s.isAvailableProperty(r.Context(), propertyID) {
+		writeError(w, http.StatusNotFound, "可租房源不存在或已下架")
 		return
 	}
 	if err := s.store.SetPropertyFavorite(r.Context(), claimsFromContext(r.Context()).Subject, propertyID, favorite); err != nil {
@@ -481,6 +491,19 @@ func (s *Server) wechatUserRole(ctx context.Context, userID string) string {
 	return roleUser
 }
 
+func (s *Server) boundUserPhone(ctx context.Context, userID string) (string, bool) {
+	store, ok := s.userAdminStore()
+	if !ok {
+		return "", false
+	}
+	user, err := store.GetUser(ctx, userID)
+	if err != nil {
+		return "", false
+	}
+	phone := normalizePhone(user.Phone)
+	return phone, phone != ""
+}
+
 func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromContext(r.Context())
 	role := roleUser
@@ -511,7 +534,7 @@ func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 	showAll := false
-	if claims, ok := s.optionalClaims(r); ok && claims.Role == roleAdmin {
+	if claims, ok := s.optionalClaims(r); ok && s.effectiveRole(r.Context(), claims) == roleAdmin {
 		showAll = true
 	}
 	if s.store != nil {
@@ -520,23 +543,86 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": visibleProperties(items, showAll)})
+		if showAll {
+			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(items)})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": visibleProperties(s.properties, showAll)})
+	if showAll {
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": s.properties})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(s.properties)})
 }
 
-func visibleProperties(items []domain.Property, showAll bool) []domain.Property {
-	result := make([]domain.Property, 0, len(items))
+type publicProperty struct {
+	ID               string                 `json:"id"`
+	Title            string                 `json:"title"`
+	Community        string                 `json:"community"`
+	Location         string                 `json:"location"`
+	Latitude         float64                `json:"latitude"`
+	Longitude        float64                `json:"longitude"`
+	Layout           string                 `json:"layout"`
+	RentMonthly      int64                  `json:"rentMonthly"`
+	FeeText          string                 `json:"feeText"`
+	RentType         string                 `json:"rentType"`
+	AvailableDate    string                 `json:"availableDate"`
+	DepositPayment   string                 `json:"depositPayment"`
+	UtilitiesText    string                 `json:"utilitiesText"`
+	AreaSqm          int                    `json:"areaSqm"`
+	FloorInfo        string                 `json:"floorInfo"`
+	Orientation      string                 `json:"orientation"`
+	Elevator         string                 `json:"elevator"`
+	MetroMinutes     int                    `json:"metroMinutes"`
+	VerificationDate string                 `json:"verificationDate"`
+	RulesText        string                 `json:"rulesText"`
+	Description      string                 `json:"description"`
+	Status           domain.PropertyStatus  `json:"status"`
+	Media            []domain.PropertyMedia `json:"media"`
+	CreatedAt        time.Time              `json:"createdAt"`
+	UpdatedAt        time.Time              `json:"updatedAt"`
+}
+
+func publicProperties(items []domain.Property) []publicProperty {
+	result := make([]publicProperty, 0, len(items))
 	for _, item := range items {
-		// "已发布" is an internal workflow state. Only listings explicitly
-		// marked as 可租 may leave the management boundary and be returned to
-		// ordinary visitors.
-		if showAll || item.Status == domain.PropertyAvailable {
-			result = append(result, item)
+		if item.Status != domain.PropertyAvailable {
+			continue
 		}
+		result = append(result, publicProperty{
+			ID: item.ID, Title: item.Title, Community: item.Community, Location: item.Location,
+			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout,
+			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType,
+			AvailableDate: item.AvailableDate, DepositPayment: item.DepositPayment,
+			UtilitiesText: item.UtilitiesText, AreaSqm: item.AreaSqm, FloorInfo: item.FloorInfo,
+			Orientation: item.Orientation, Elevator: item.Elevator, MetroMinutes: item.MetroMinutes,
+			VerificationDate: item.VerificationDate, RulesText: item.RulesText,
+			Description: item.Description, Status: item.Status, Media: item.Media,
+			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+		})
 	}
 	return result
+}
+
+func (s *Server) isAvailableProperty(ctx context.Context, propertyID string) bool {
+	var items []domain.Property
+	if s.store != nil {
+		loaded, err := s.store.ListProperties(ctx)
+		if err != nil {
+			return false
+		}
+		items = loaded
+	} else {
+		items = s.properties
+	}
+	for _, item := range items {
+		if item.ID == propertyID {
+			return item.Status == domain.PropertyAvailable
+		}
+	}
+	return false
 }
 
 func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
@@ -641,7 +727,7 @@ func (s *Server) listPropertyLeads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createPropertyLead(w http.ResponseWriter, r *http.Request) {
-	if claims, ok := s.optionalClaims(r); ok && (claims.Role == roleAdmin || s.wechatUserRole(r.Context(), claims.Subject) == roleAdmin) {
+	if claims, ok := s.optionalClaims(r); ok && s.effectiveRole(r.Context(), claims) == roleAdmin {
 		writeError(w, http.StatusForbidden, "管理员无需提交房源线索")
 		return
 	}

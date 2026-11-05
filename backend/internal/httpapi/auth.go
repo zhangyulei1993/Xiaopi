@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -139,6 +140,20 @@ func (s *Server) optionalClaims(r *http.Request) (tokenClaims, bool) {
 	return claims, err == nil
 }
 
+// effectiveRole prevents a WeChat administrator from keeping management
+// privileges solely because an old, signed token has not expired yet. The
+// password-based bootstrap administrator remains valid from configuration;
+// WeChat administrators are checked against the current admin assignment.
+func (s *Server) effectiveRole(ctx context.Context, claims tokenClaims) string {
+	if claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin {
+		return roleAdmin
+	}
+	if s.wechatUserRole(ctx, claims.Subject) == roleAdmin {
+		return roleAdmin
+	}
+	return roleUser
+}
+
 func (s *Server) requireRoles(next http.HandlerFunc, roles ...string) http.HandlerFunc {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, role := range roles {
@@ -150,7 +165,7 @@ func (s *Server) requireRoles(next http.HandlerFunc, roles ...string) http.Handl
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		if _, ok := allowed[claims.Role]; !ok {
+		if _, ok := allowed[s.effectiveRole(r.Context(), claims)]; !ok {
 			writeError(w, http.StatusForbidden, "insufficient permissions")
 			return
 		}
