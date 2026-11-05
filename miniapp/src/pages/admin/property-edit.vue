@@ -338,10 +338,8 @@ const syncLayout = () => {
   form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
   form.rentType = rentType.value;
 };
-const select = (values: string[], target: { value: string }, index: number) => {
-  target.value = values[index];
-  syncLayout();
-};
+const pickLayoutValue = (values: string[], index: string | number) =>
+  values[Number(index)] || values[0];
 const parseLayout = (value = "") => {
   const parts = value.split(" · ");
   if (parts.length === 5) {
@@ -643,6 +641,13 @@ const save = async (openPreview = false) => {
     });
     return;
   }
+  if (openPreview && mediaCount.value === 0) {
+    uni.showToast({
+      title: "发布前请至少上传一张实拍图片",
+      icon: "none",
+    });
+    return;
+  }
   saving.value = true;
   uploadProgress.value = "保存房源信息";
   try {
@@ -868,42 +873,42 @@ const mediaUrl = resolveAssetUrl;
         ><view class="picker-grid"
           ><picker
             :range="rooms"
-            @change="select(rooms, roomCount, $event.detail.value)"
+            @change="roomCount = pickLayoutValue(rooms, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ roomCount }}</strong
               ><small>卧室</small></view
             ></picker
           ><picker
             :range="halls"
-            @change="select(halls, hallCount, $event.detail.value)"
+            @change="hallCount = pickLayoutValue(halls, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ hallCount }}</strong
               ><small>客厅</small></view
             ></picker
           ><picker
             :range="rentTypes"
-            @change="select(rentTypes, rentType, $event.detail.value)"
+            @change="rentType = pickLayoutValue(rentTypes, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ rentType }}</strong
               ><small>方式</small></view
             ></picker
           ><picker
             :range="roomTypes"
-            @change="select(roomTypes, roomType, $event.detail.value)"
+            @change="roomType = pickLayoutValue(roomTypes, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ roomType }}</strong
               ><small>房间</small></view
             ></picker
           ><picker
             :range="toilets"
-            @change="select(toilets, toiletType, $event.detail.value)"
+            @change="toiletType = pickLayoutValue(toilets, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ toiletType }}</strong
               ><small>卫生间</small></view
             ></picker
           ><picker
             :range="windows"
-            @change="select(windows, bayWindow, $event.detail.value)"
+            @change="bayWindow = pickLayoutValue(windows, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ bayWindow }}</strong
               ><small>窗型</small></view

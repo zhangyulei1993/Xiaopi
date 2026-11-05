@@ -7,7 +7,9 @@ import pinIcon from "../../static/icons/pin.svg";
 import searchIcon from "../../static/icons/search.svg";
 import heartIcon from "../../static/icons/heart.svg";
 import editIcon from "../../static/icons/edit.svg";
-import heroFallback from "../../static/home-lifestyle-hero.png";
+// Keep the first-screen asset small: the source PNG was 1.7 MB and delayed
+// first render on mobile networks. This 1440px JPEG is visually equivalent.
+import heroFallback from "../../static/home-lifestyle-hero.jpg";
 import { getSession } from "../../auth/session";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", heroSubtitle: "在武汉，住得更省心", heroDescription: "真实房源 · 可靠服务", notice: "", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 3 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 3 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 3 }] };

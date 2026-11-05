@@ -613,15 +613,42 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.OperatorID = claimsFromContext(r.Context()).Subject
-	if s.store != nil {
-		if err := s.store.UpdatePropertyStatus(r.Context(), input.PropertyID, input.Status, input.OperatorID, input.Note); err != nil {
-			if errors.Is(err, domain.ErrInvalidPropertyStatusTransition) {
-				writeError(w, http.StatusConflict, err.Error())
-				return
-			}
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
+	if s.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
+		return
+	}
+	// A public rental listing without a cover image is not usable: it renders as
+	// a placeholder in the discovery feed and undermines the verification claim.
+	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
+		items, err := s.store.ListProperties(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to verify property media")
 			return
 		}
+		for _, item := range items {
+			if item.ID == input.PropertyID {
+				hasImage := false
+				for _, media := range item.Media {
+					if media.Type == "image" {
+						hasImage = true
+						break
+					}
+				}
+				if !hasImage {
+					writeError(w, http.StatusBadRequest, "发布房源前请至少上传一张实拍图片")
+					return
+				}
+				break
+			}
+		}
+	}
+	if err := s.store.UpdatePropertyStatus(r.Context(), input.PropertyID, input.Status, input.OperatorID, input.Note); err != nil {
+		if errors.Is(err, domain.ErrInvalidPropertyStatusTransition) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
+		return
 	}
 	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
 		if items, err := s.store.ListProperties(r.Context()); err == nil {

@@ -451,7 +451,13 @@ func TestCreatePropertyRequiresAdmin(t *testing.T) {
 }
 
 func TestInvalidStatusTransitionReturnsConflict(t *testing.T) {
-	dataStore := &fakeStore{statusErr: domain.ErrInvalidPropertyStatusTransition}
+	dataStore := &fakeStore{
+		statusErr: domain.ErrInvalidPropertyStatusTransition,
+		properties: []domain.Property{{
+			ID:    "property-1",
+			Media: []domain.PropertyMedia{{Type: "image"}},
+		}},
+	}
 	server := testServer(dataStore)
 	adminToken, err := server.tokens.issue("operator", roleAdmin)
 	if err != nil {
@@ -462,6 +468,24 @@ func TestInvalidStatusTransitionReturnsConflict(t *testing.T) {
 	}, adminToken)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPublishPropertyRequiresImage(t *testing.T) {
+	dataStore := &fakeStore{properties: []domain.Property{{
+		ID:    "property-1",
+		Media: []domain.PropertyMedia{{Type: "video"}},
+	}}}
+	server := testServer(dataStore)
+	adminToken, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/properties/status", map[string]string{
+		"propertyId": "property-1", "status": string(domain.PropertyPublished),
+	}, adminToken)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "至少上传一张实拍图片") {
+		t.Fatalf("expected missing-image rejection, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

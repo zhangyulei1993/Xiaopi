@@ -71,7 +71,7 @@ const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.strin
 const applyConfig = (value: PublicConfig, markSaved = false) => {
   const next = cloneConfig(value)
   next.relatedPropertyRadiusKm = next.relatedPropertyRadiusKm || 3
-  next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ latitude: 0, longitude: 0, ...item, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
+  next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ ...item, latitude: item.latitude || 0, longitude: item.longitude || 0, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
   next.pagePresentations = { ...defaultPagePresentations(), ...(next.pagePresentations || {}) }
   Object.assign(publicConfig, next)
   // Keep a map visible as soon as the configuration view is opened. Existing
