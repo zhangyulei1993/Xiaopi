@@ -20,7 +20,7 @@ const properties = ref<Property[]>([]),
   keyword = ref(""),
   selectedArea = ref("全部"),
   selectedKind = ref(""),
-  selectedStatus = ref("todo"),
+  selectedStatus = ref("all"),
   currentRole = ref("");
 const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
@@ -50,6 +50,7 @@ const areas = computed(() =>
 );
 const isAdmin = computed(() => currentRole.value === "admin");
 const adminStatusOptions = [
+  { value: "all", label: "全部" },
   { value: "todo", label: "待处理" },
   { value: "online", label: "在租" },
   { value: "rented", label: "已租" },
@@ -57,7 +58,9 @@ const adminStatusOptions = [
 ];
 const statusLabel = (status: string) => ({ draft: "草稿", pending_review: "待审核", published: "已发布", available: "可租", rented: "已租", offline: "已下架" }[status] || status);
 const adminStatusMatched = (status: string) =>
-  selectedStatus.value === "todo"
+  selectedStatus.value === "all"
+    ? true
+    : selectedStatus.value === "todo"
     ? ["draft", "pending_review"].includes(status)
     : selectedStatus.value === "online"
       ? ["published", "available"].includes(status)
@@ -326,7 +329,7 @@ const subscribeArea = () => {
         ><text v-for="kind in kindOptions" :key="kind" :class="{ active: selectedKind === kind }" @click="selectedKind = selectedKind === kind ? '' : kind">{{ kind }}</text
         ></scroll-view
       ></view
-    ><view v-if="loading" class="state card">正在加载房源...</view
+    ><view v-if="loading" class="listing-skeletons"><view v-for="index in 2" :key="index" class="listing-skeleton"><view class="skeleton-cover" /><view class="skeleton-copy"><view /><view /><view /></view></view></view
     ><view v-else-if="loadFailed" class="state card"
       ><view>房源加载失败</view
       ><button size="mini" @click="load">重新加载</button></view
@@ -357,7 +360,7 @@ const subscribeArea = () => {
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view
           ><view class="price"
-            >{{ item.rentMonthly }} <text class="price-unit">元/月</text></view
+            >¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view
           ></view
         ></view
         ><view v-if="isAdmin" class="admin-card-actions" @click.stop
@@ -635,7 +638,7 @@ const subscribeArea = () => {
 .source-badge.transfer { background:#f8eadf; color:#b7644b; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:9rpx 4rpx 3rpx 0; }
 .property-listing-title { display:-webkit-box; overflow:hidden; max-height:80rpx; margin:0; color:#2d3d30; font-size:30rpx; font-weight:800; line-height:1.32; letter-spacing:-.5rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-.property-listing-address { overflow:hidden; max-height:26rpx; margin:8rpx 0 0; color:#7f897e; font-size:18rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
+.property-listing-address { overflow:hidden; max-height:28rpx; margin:8rpx 0 0; color:#7f897e; font-size:20rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .service-tags { display:flex; gap:7rpx; overflow:hidden; margin-top:9rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
 .property > .property-copy > .price { display:inline-flex; width:max-content; align-items:baseline; gap:3rpx; margin:auto 0 0; padding-top:10rpx; color:#d76440; font-size:34rpx; font-weight:800; line-height:1.1; white-space:nowrap; }
@@ -648,14 +651,14 @@ const subscribeArea = () => {
 .property-main { display:flex; align-items:stretch; gap:18rpx; min-width:0; }
 .property-main .cover { flex:none; }
 .property-main .property-copy { min-width:0; flex:1; }
-.admin-property { display:block; padding:14rpx; border-color:#e5e9df; border-radius:22rpx; background:#fffefa; }
-.admin-property .property-main { min-height:192rpx; }
+.admin-property { display:block; height:auto; min-height:0; padding:14rpx; overflow:visible; border-color:#e5e9df; border-radius:22rpx; background:#fffefa; }
+.admin-property .property-main { height:192rpx; min-height:192rpx; }
 .badge.status-draft,.badge.status-pending_review { background:#a4773f; }
 .badge.status-rented { background:#69737d; }
 .badge.status-offline { background:#8a7566; }
 .admin-card-actions { min-height:70rpx; margin-top:14rpx; padding:13rpx 0 0; border-top:1rpx solid #eceee8; }
-.admin-inline-actions { display:flex; min-width:0; align-items:center; gap:8rpx; }
-.admin-inline-actions button { min-width:0; flex:1; margin:0; padding:0 8rpx; border:1rpx solid transparent; border-radius:9rpx; font-size:20rpx; font-weight:650; line-height:50rpx; white-space:nowrap; }
+.admin-inline-actions { display:flex; min-width:0; flex-wrap:wrap; align-items:center; gap:8rpx; }
+.admin-inline-actions button { min-width:96rpx; flex:1 1 96rpx; margin:0; padding:0 8rpx; border:1rpx solid transparent; border-radius:9rpx; font-size:20rpx; font-weight:650; line-height:50rpx; white-space:nowrap; }
 .admin-inline-actions button::after { border:0; }
 .action-edit { border-color:#dfe5da!important; background:#fff!important; color:#5d6b58!important; }
 .action-primary { border-color:#40543f!important; background:#40543f!important; color:#fff!important; }
@@ -663,4 +666,6 @@ const subscribeArea = () => {
 .action-offline { border-color:#eadbd0!important; background:#fff8f3!important; color:#9b694d!important; }
 .action-delete-inline { border-color:#efdcd4!important; background:#fff8f5!important; color:#b76c57!important; }
 .admin-inline-actions button:active { opacity:.78; transform:scale(.985); }
+.listing-skeletons{margin-top:30rpx}.listing-skeleton{display:flex;height:216rpx;gap:18rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx;background:#fffdf9;box-sizing:border-box}.skeleton-cover,.skeleton-copy>view{background:linear-gradient(100deg,#ebece6 25%,#f6f5f0 42%,#ebece6 58%);background-size:200% 100%;animation:listing-skeleton-shift 1.2s linear infinite}.skeleton-cover{width:244rpx;height:192rpx;flex:none;border-radius:14rpx}.skeleton-copy{min-width:0;flex:1;padding-top:12rpx}.skeleton-copy>view{height:28rpx;margin-bottom:18rpx;border-radius:8rpx}.skeleton-copy>view:nth-child(2){width:72%;height:20rpx}.skeleton-copy>view:nth-child(3){width:48%;height:34rpx;margin-top:52rpx}@keyframes listing-skeleton-shift{to{background-position:-200% 0}}
+.property:active{opacity:.92}.chips text:active,.favorite-filter:active{transform:scale(.98)}
 </style>
