@@ -353,9 +353,8 @@ const subscribeArea = () => {
               ><image :src="heartIcon" mode="aspectFit" /></view
             ></view
           ><view class="property-copy"
-          ><view class="title small">{{ listingTitle(item) }}</view
-          ><view class="muted summary"
-            >{{ listingSubtitle(item) }}</view
+          ><view class="property-listing-title">{{ listingTitle(item) }}</view
+          ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view
           ><view class="price"
             >{{ item.rentMonthly }} <text class="price-unit">元/月</text></view
@@ -635,8 +634,8 @@ const subscribeArea = () => {
 .source-badge.tenant { top:60rpx; }
 .source-badge.transfer { background:#f8eadf; color:#b7644b; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:9rpx 4rpx 3rpx 0; }
-.property .small { display:-webkit-box; overflow:hidden; max-height:80rpx; margin:0; color:#2d3d30; font-size:30rpx; font-weight:800; line-height:1.32; letter-spacing:-.5rpx; text-overflow:ellipsis; white-space:normal; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-.property .summary { display:-webkit-box; overflow:hidden; min-height:0; max-height:26rpx; margin:8rpx 0 0; color:#7f897e; font-size:18rpx; font-weight:400; line-height:1.4; -webkit-box-orient:vertical; -webkit-line-clamp:1; }
+.property-listing-title { display:-webkit-box; overflow:hidden; max-height:80rpx; margin:0; color:#2d3d30; font-size:30rpx; font-weight:800; line-height:1.32; letter-spacing:-.5rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.property-listing-address { overflow:hidden; max-height:26rpx; margin:8rpx 0 0; color:#7f897e; font-size:18rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .service-tags { display:flex; gap:7rpx; overflow:hidden; margin-top:9rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
 .property > .property-copy > .price { display:inline-flex; width:max-content; align-items:baseline; gap:3rpx; margin:auto 0 0; padding-top:10rpx; color:#d76440; font-size:34rpx; font-weight:800; line-height:1.1; white-space:nowrap; }

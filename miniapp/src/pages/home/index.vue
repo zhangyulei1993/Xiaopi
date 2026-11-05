@@ -133,7 +133,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ listingTitle(item) }}</strong><small>{{ listingSubtitle(item) }}</small><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -186,8 +186,8 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing{height:204rpx;box-sizing:border-box}
 .listing-image{width:240rpx;height:180rpx}
 .listing-info{display:flex;height:180rpx;flex-direction:column;box-sizing:border-box}
-.listing-info strong{max-height:80rpx;color:#2d3d30;font-size:30rpx;font-weight:800;line-height:1.32;letter-spacing:-.5rpx}
-.listing-info small{display:-webkit-box;overflow:hidden;max-height:26rpx;margin-top:7rpx;color:#7f897e;font-size:18rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:1}
+.home-listing-title{display:-webkit-box;overflow:hidden;max-height:80rpx;color:#2d3d30;font-size:30rpx;font-weight:800;line-height:1.32;letter-spacing:-.5rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.home-listing-address{overflow:hidden;max-height:26rpx;margin-top:7rpx;color:#7f897e;font-size:18rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .listing-info .tags{height:27rpx;margin-top:7rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:17rpx}
 .listing-price{min-height:34rpx;margin-top:auto;font-size:34rpx}
