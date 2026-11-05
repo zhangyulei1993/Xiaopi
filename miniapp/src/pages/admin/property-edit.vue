@@ -708,7 +708,8 @@ const loadProperty = async () => {
     existingMedia.value = property.media || [];
     parseLayout(property.layout);
     if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
-    titleParts.value = ["community", "unit", "rentType"];
+    // 默认只放小区与门牌；户型、出租方式在卡片副标题展示，避免标题重复堆叠。
+    titleParts.value = ["community", "unit"];
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
     form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
@@ -1431,14 +1432,14 @@ const mediaUrl = resolveAssetUrl;
         ><text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
-        ><view v-if="activeSection < 4" class="step-actions"
+        ><view v-if="activeSection < 4" class="step-actions" :class="{ 'three-actions': activeSection > 0 }"
           ><button
             v-if="activeSection > 0"
             class="back-button"
             @click="goToSection(activeSection - 1)"
           >
             上一步</button
-          ><view v-else class="draft-link" @click="save()">保存草稿</view
+          ><button class="step-save-button" :disabled="saving" @click="save()">{{ isLiveEditing ? "保存修改" : "保存草稿" }}</button
           ><button
             class="primary next-button"
             @click="goToSection(activeSection + 1)"
@@ -2308,9 +2309,12 @@ const mediaUrl = resolveAssetUrl;
 }
 .step-actions {
   display: grid;
-  grid-template-columns: minmax(150rpx, 0.7fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
   align-items: center;
   gap: 14rpx;
+}
+.step-actions.three-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .step-actions button,
 .save-actions button {
@@ -2330,6 +2334,15 @@ const mediaUrl = resolveAssetUrl;
   background: #edf4f1;
   color: #315f5a;
   font-size: 25rpx;
+}
+.step-save-button {
+  margin: 0;
+  border: 1rpx solid #bad5cf;
+  border-radius: 16rpx;
+  background: #f1f8f5;
+  color: #287a70;
+  font-size: 24rpx;
+  font-weight: 700;
 }
 .next-button {
   margin: 0;

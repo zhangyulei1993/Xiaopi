@@ -196,6 +196,15 @@ const serviceLabels = (item: Property) => {
     .filter((label, index) => index === 0 || source.includes(label))
     .slice(0, 2);
 };
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const listingTitle = (item: Property) => {
+  let title = String(item.title || item.community || "").trim();
+  const layout = String(item.layout || "").split(" · ")[0].trim();
+  [layout, "整租", "合租"].filter(Boolean).forEach((part) => {
+    title = title.replace(new RegExp(`\\s*[·・]\\s*${escapeRegExp(part)}`, "g"), "");
+  });
+  return title.replace(/[·・\\s]+$/g, "").trim() || String(item.community || "房源");
+};
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
     uni.navigateTo({ url: "/pages/auth/login" });
@@ -322,7 +331,7 @@ const subscribeArea = () => {
               :src="coverUrl(item)"
               mode="aspectFill"
             /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view><view class="source-badge" :class="{ transfer: item.listingSource === '转租', tenant: !isAdmin }">{{ item.listingSource === '转租' ? '转租' : '直租' }}</view
-            ><view v-if="serviceLabels(item)[0]" class="cover-benefit">{{ serviceLabels(item)[0] }}</view
+            ><view v-if="serviceLabels(item)[1]" class="cover-benefit">{{ serviceLabels(item)[1] }}</view
             ><view
               v-if="!isAdmin"
               class="favorite"
@@ -331,10 +340,10 @@ const subscribeArea = () => {
               ><image :src="heartIcon" mode="aspectFit" /></view
             ></view
           ><view class="property-copy"
-          ><view class="title small">{{ item.title || item.community }}</view
+          ><view class="title small">{{ listingTitle(item) }}</view
           ><view class="muted summary"
             >{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</view
-          ><view v-if="serviceLabels(item).length" class="service-tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view
+          ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view
           ><view class="price"
             >{{ item.rentMonthly }} <text class="price-unit">元/月</text></view
           ></view
