@@ -69,9 +69,9 @@ const form = reactive<Partial<Property>>({
   longitude: 0,
   layout: "",
   rentMonthly: 0,
-  feeText: "直租无中介费",
+  feeText: "无中介费",
   rentType: "整租",
-  availableDate: "",
+  availableDate: "拎包入住",
   depositPayment: "押一付一",
   utilitiesText: "民水民电",
   areaSqm: 0,
@@ -133,7 +133,11 @@ const rooms = ["一室", "两室", "三室", "四室", "五室及以上"],
   bathroomCounts = ["一卫", "两卫", "三卫及以上"],
   balconies = ["有阳台", "无阳台"],
   toilets = ["独卫", "非独卫"],
-  windows = ["有飘窗", "无飘窗"];
+  windows = ["有飘窗", "无飘窗"],
+  paymentCycles = ["付一", "付二", "付三", "付六"],
+  utilityOptions = ["民水民电", "民水民电 · 物业另计", "水电物业全包", "商水商电"];
+const paymentCycle = ref("付一");
+const noAgentFee = ref(true);
 type FeaturedChannel = {
   title: string;
   keyword: string;
@@ -446,8 +450,7 @@ const selectedBuildingRule = computed(() =>
   buildingOptions.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
 );
 const automaticFloorInfo = computed(() => {
-  const rule = selectedBuildingRule.value;
-  return selectedFloor.value && rule ? `${selectedFloor.value}/${rule.floorCount}层` : "";
+  return selectedFloor.value ? `${selectedFloor.value}楼` : "";
 });
 const hasStructureRule = computed(() => Boolean(selectedBuildingRule.value));
 const unitOptions = computed(() => {
@@ -576,6 +579,20 @@ const setRentType = (value: string | number) => {
   if (rentType.value === "合租" && (!roomType.value || roomType.value === "整套")) roomType.value = "主卧";
   syncLayout();
 };
+const setPaymentCycle = (cycle: string) => {
+  paymentCycle.value = cycle;
+  form.depositPayment = `押一${cycle}`;
+};
+const setUtilities = (index: string | number) => {
+  form.utilitiesText = pickLayoutValue(utilityOptions, index);
+};
+const toggleNoAgentFee = (event: { detail?: { value?: string[] } }) => {
+  noAgentFee.value = Boolean(event.detail?.value?.length);
+  form.feeText = noAgentFee.value ? "无中介费" : "有中介费";
+};
+const toggleElevator = (event: { detail?: { value?: string[] } }) => {
+  form.elevator = event.detail?.value?.length ? "有电梯" : "";
+};
 const parseLayout = (value = "") => {
   const parts = value.split(" · ");
   if (parts[1] === "整租") {
@@ -608,9 +625,12 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
+    paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
+    noAgentFee.value = !String(property.feeText || "").includes("有中介费") || String(property.feeText || "").includes("无中介费");
     buildingNo.value = property.buildingNo || "";
     unitNo.value = property.unitNo || "";
     roomNo.value = property.roomNo || "";
+    selectedFloor.value = /^\d{3,}$/.test(roomNo.value) ? roomNo.value.slice(0, -2) : "";
     locationQuery.value = property.community || property.location || "";
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
@@ -1164,7 +1184,7 @@ const mediaUrl = resolveAssetUrl;
           ><view class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
           ><view class="field auto-floor"><text>楼层</text><strong>{{ automaticFloorInfo || form.floorInfo || "选择门牌后自动生成" }}</strong></view
           ><view class="field"><text>朝向</text><input v-model.trim="form.orientation" maxlength="32" placeholder="如：南" /></view
-          ><view class="field"><text>电梯</text><input v-model.trim="form.elevator" maxlength="32" placeholder="如：有电梯" /></view
+          ><view class="field option-field"><text>楼内配置</text><checkbox-group @change="toggleElevator"><label><checkbox value="elevator" :checked="form.elevator === '有电梯'" color="#0e8177" />有电梯</label></checkbox-group></view
           ><view class="field metro-field"><text>步行至地铁（分钟）</text><input v-model.number="form.metroMinutes" type="number" placeholder="如：8" /></view></view
         ></view
       ><view v-show="activeSection === 2" class="section-card"
@@ -1200,9 +1220,6 @@ const mediaUrl = resolveAssetUrl;
         ><view class="field"
           ><text>入住规则</text
           ><input v-model.trim="form.rulesText" maxlength="200" placeholder="如：可做饭，宠物需沟通，女生优先" /></view
-        ><view class="field"
-          ><text>核验日期</text
-          ><input v-model.trim="form.verificationDate" maxlength="32" placeholder="如：2026-11-04" /></view
         ></view
       ><view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
@@ -1213,19 +1230,15 @@ const mediaUrl = resolveAssetUrl;
           ><view class="field"
             ><text>月租 *</text
             ><view class="rent-input"><input v-model.number="form.rentMonthly" type="number" placeholder="如：2600" /><small>元/月</small></view></view
-          ><view class="field"
-            ><text>押付方式 *</text
-            ><input v-model.trim="form.depositPayment" maxlength="64" placeholder="如：押一付一" /></view></view
+          ><view class="field option-field"
+            ><text>中介费</text><checkbox-group @change="toggleNoAgentFee"><label><checkbox value="no-agent-fee" :checked="noAgentFee" color="#0e8177" />无中介费</label></checkbox-group></view></view
+        ><view class="term-block"><text>押付方式 *</text><view class="payment-options"><view class="payment-fixed">押一</view><view v-for="cycle in paymentCycles" :key="cycle" :class="{ active: paymentCycle === cycle }" @click="setPaymentCycle(cycle)">{{ cycle }}</view></view></view
         ><view class="rent-row detail-row"
           ><view class="field"
             ><text>可入住日期</text
-            ><input v-model.trim="form.availableDate" maxlength="32" placeholder="如：随时 / 12月10日" /></view
-          ><view class="field"
-            ><text>费用说明</text
-            ><input v-model.trim="form.feeText" maxlength="30" placeholder="如：直租无中介费" /></view></view
-        ><view class="field"
-          ><text>水电与杂费</text
-          ><input v-model.trim="form.utilitiesText" maxlength="64" placeholder="如：民水民电，物业费另计" /></view
+            ><input v-model.trim="form.availableDate" maxlength="32" placeholder="默认拎包入住，可填写具体日期" /></view
+          ><view class="field utility-summary"><text>水电与杂费</text><strong>{{ form.utilitiesText || "请选择" }}</strong></view></view
+        ><view class="term-block"><text>水电与杂费</text><radio-group class="utility-options" @change="setUtilities($event.detail.value)"><label v-for="option in utilityOptions" :key="option" :class="{ active: form.utilitiesText === option }"><radio :value="String(utilityOptions.indexOf(option))" :checked="form.utilitiesText === option" color="#0e8177" />{{ option }}</label></radio-group></view>
         ><view class="rent-summary"><text>对外展示</text><strong>¥ {{ Number(form.rentMonthly) || 0 }} <small>/月</small></strong><span>{{ form.depositPayment || "待填写押付方式" }}</span></view>
         ></view
       ><view v-show="activeSection === 4" class="section-card"
@@ -1567,6 +1580,20 @@ const mediaUrl = resolveAssetUrl;
 .rent-type-tabs small { margin-top:5rpx;font-size:19rpx;opacity:.78; }
 .layout-guidance { margin:14rpx 2rpx 18rpx;color:#76918b;font-size:20rpx;line-height:1.5; }
 .auto-floor strong { display:block;color:#315f5a;font-size:26rpx;line-height:1.4; }
+.option-field checkbox-group { display:block; }
+.option-field label { display:flex;align-items:center;gap:8rpx;color:#315f5a;font-size:25rpx;font-weight:700; }
+.option-field checkbox { transform:scale(.88);margin-right:2rpx; }
+.utility-summary strong { display:block;color:#315f5a;font-size:25rpx;line-height:1.4; }
+.term-block { margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #e3eeea;border-radius:16rpx;background:#fbfdfc; }
+.term-block>text { display:block;margin-bottom:14rpx;color:#6d8e89;font-size:21rpx;font-weight:600; }
+.payment-options { display:grid;grid-template-columns:repeat(5,1fr);gap:10rpx; }
+.payment-options>view { display:flex;min-height:58rpx;align-items:center;justify-content:center;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#5d7973;font-size:21rpx;font-weight:700; }
+.payment-options .payment-fixed { border-color:#cfe6df;background:#edf8f4;color:#0e8177; }
+.payment-options>view.active { border-color:#0e8177;background:#0e8177;color:#fff; }
+.utility-options { display:grid;grid-template-columns:1fr 1fr;gap:10rpx; }
+.utility-options label { display:flex;align-items:center;min-height:64rpx;box-sizing:border-box;padding:0 12rpx;border:1rpx solid #dce9e4;border-radius:11rpx;background:#fff;color:#5d7973;font-size:20rpx;line-height:1.25; }
+.utility-options label.active { border-color:#0e8177;background:#edf8f4;color:#0e8177;font-weight:700; }
+.utility-options radio { transform:scale(.78);margin-right:0; }
 .rent-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
