@@ -196,15 +196,6 @@ const serviceLabels = (item: Property) => {
     .filter((label, index) => index === 0 || source.includes(label))
     .slice(0, 2);
 };
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const listingTitle = (item: Property) => {
-  let title = String(item.title || item.community || "").trim();
-  const layout = String(item.layout || "").split(" · ")[0].trim();
-  [layout, "整租", "合租"].filter(Boolean).forEach((part) => {
-    title = title.replace(new RegExp(`\\s*[·・]\\s*${escapeRegExp(part)}`, "g"), "");
-  });
-  return title.replace(/[·・\\s]+$/g, "").trim() || String(item.community || "房源");
-};
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
     uni.navigateTo({ url: "/pages/auth/login" });
@@ -340,7 +331,7 @@ const subscribeArea = () => {
               ><image :src="heartIcon" mode="aspectFit" /></view
             ></view
           ><view class="property-copy"
-          ><view class="title small">{{ listingTitle(item) }}</view
+          ><view class="title small">{{ item.title || item.community }}</view
           ><view class="muted summary"
             >{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</view
           ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view

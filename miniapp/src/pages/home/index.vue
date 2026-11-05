@@ -62,16 +62,6 @@ const serviceLabels = (item: Property) => {
     .slice(0, 2);
 };
 const listingSourceLabel = (item: Property) => item.listingSource === "转租" ? "转租" : "直租";
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const listingTitle = (item: Property) => {
-  let title = String(item.title || item.community || "").trim();
-  const layout = String(item.layout || "").split(" · ")[0].trim();
-  // 旧数据曾把户型、整租/合租重复写进标题；列表只保留小区与门牌，户型放在下一行。
-  [layout, "整租", "合租"].filter(Boolean).forEach((part) => {
-    title = title.replace(new RegExp(`\\s*[·・]\\s*${escapeRegExp(part)}`, "g"), "");
-  });
-  return title.replace(/[·・\\s]+$/g, "").trim() || String(item.community || "房源");
-};
 onShow(async () => {
   isAdmin.value = getSession()?.role === "admin";
   const [propertyResult, configResult] = await Promise.allSettled([listProperties(), getPublicConfig()]);
@@ -118,7 +108,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ listingTitle(item) }}</strong><small>{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</small><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ item.title || item.community }}</strong><small>{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</small><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
