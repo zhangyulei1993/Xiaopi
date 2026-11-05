@@ -294,6 +294,24 @@ func TestAdminLoginAndProtectedEndpoint(t *testing.T) {
 	}
 }
 
+func TestAdminLoginThrottleBlocksRepeatedFailures(t *testing.T) {
+	server := testServer(&fakeStore{})
+	for attempt := 0; attempt < 5; attempt++ {
+		response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/admin/login", map[string]string{
+			"username": "operator", "password": "wrong",
+		}, "")
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d expected 401, got %d", attempt+1, response.Code)
+		}
+	}
+	blocked := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/admin/login", map[string]string{
+		"username": "operator", "password": "correct horse battery staple",
+	}, "")
+	if blocked.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected throttling after repeated failures, got %d: %s", blocked.Code, blocked.Body.String())
+	}
+}
+
 func TestAdminCanListUsersAndAssignAdminByPhone(t *testing.T) {
 	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", Nickname: "租客甲", Phone: "13800138000", Status: domain.UserActive}}}
 	server := testServer(dataStore)
@@ -367,7 +385,7 @@ func TestTemporaryAccessAuthenticatesExistingBoundWechatUser(t *testing.T) {
 }
 
 func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
-	dataStore := &fakeStore{}
+	dataStore := &fakeStore{users: []domain.User{{ID: "user-1", Phone: "13800138000"}}}
 	server := testServer(dataStore)
 	userToken, err := server.tokens.issue("user-1", roleUser)
 	if err != nil {
@@ -388,8 +406,22 @@ func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 	if created.Code != http.StatusCreated {
 		t.Fatalf("rental request failed: %d %s", created.Code, created.Body.String())
 	}
-	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" || dataStore.rentalRequests[0].Phone != "" {
+	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" || dataStore.rentalRequests[0].Phone != "13800138000" {
 		t.Fatalf("unexpected request: %#v", dataStore.rentalRequests)
+	}
+}
+
+func TestAppointmentRequiresBoundPhone(t *testing.T) {
+	server := testServer(&fakeStore{})
+	userToken, err := server.tokens.issue("user-without-phone", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{
+		"requestType": "appointment", "propertyId": "property-1", "budgetMin": 1500, "budgetMax": 2500,
+	}, userToken)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "绑定手机号") {
+		t.Fatalf("expected phone-binding rejection, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

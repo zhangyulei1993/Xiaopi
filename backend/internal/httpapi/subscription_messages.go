@@ -113,9 +113,12 @@ func (s *Server) notifyAdminsOfRequest(ctx context.Context, item domain.RentalRe
 	}
 	data := map[string]any{"thing11": messageValue(shortText(location, 20)), "thing12": messageValue(typeName), "phone_number14": messageValue(item.Phone), "date5": messageValue(time.Now().Format("2006-01-02")), "thing6": messageValue(note)}
 	for _, recipient := range recipients {
-		if s.sendSubscribeMessage(ctx, recipient.OpenID, appointmentTemplateID(), "pages/admin/index", data) == nil {
+		if err := s.sendSubscribeMessage(ctx, recipient.OpenID, appointmentTemplateID(), "pages/admin/index", data); err == nil {
 			_ = store.ConsumeMessageSubscriptionGrant(ctx, recipient.GrantID)
 			_ = store.MarkRentalRequestAdminNotified(ctx, item.ID)
+			s.logOperation(ctx, recipient.UserID, "subscription", item.ID, "预约提醒已发送", typeName)
+		} else {
+			s.logOperation(ctx, recipient.UserID, "subscription", item.ID, "预约提醒发送失败", shortText(err.Error(), 100))
 		}
 	}
 }
@@ -139,8 +142,11 @@ func (s *Server) notifyAreaSubscribers(ctx context.Context, property domain.Prop
 			layout = "户型详见房源"
 		}
 		data := map[string]any{"thing2": messageValue(shortText(property.Community, 20)), "thing1": messageValue(shortText(recipient.Area, 20)), "amount4": messageValue(fmt.Sprintf("%d元", property.RentMonthly)), "thing5": messageValue(shortText(payment, 20)), "thing11": messageValue(layout)}
-		if s.sendSubscribeMessage(ctx, recipient.OpenID, areaTemplateID(), "pages/properties/detail?id="+url.QueryEscape(property.ID), data) == nil {
+		if err := s.sendSubscribeMessage(ctx, recipient.OpenID, areaTemplateID(), "pages/properties/detail?id="+url.QueryEscape(property.ID), data); err == nil {
 			_ = store.ConsumeMessageSubscriptionGrant(ctx, recipient.GrantID)
+			s.logOperation(ctx, recipient.UserID, "subscription", property.ID, "片区上新提醒已发送", recipient.Area)
+		} else {
+			s.logOperation(ctx, recipient.UserID, "subscription", property.ID, "片区上新提醒发送失败", shortText(err.Error(), 100))
 		}
 	}
 }

@@ -129,6 +129,11 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请输入手机号和 6 位数字访问码")
 		return
 	}
+	key := s.loginAttemptKey(r, "temporary:"+phone)
+	if wait, blocked := s.loginBlocked(key); blocked {
+		blockedLoginResponse(w, wait)
+		return
+	}
 	store, ok := s.temporaryAuthStore()
 	if !ok {
 		writeError(w, http.StatusServiceUnavailable, "temporary authentication unavailable")
@@ -136,12 +141,14 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	authenticatedUser, err := store.LoginTemporaryUser(r.Context(), phone, s.temporaryCodeHash(phone, code), time.Now())
 	if errors.Is(err, sql.ErrNoRows) {
+		s.recordLoginFailure(key)
 		writeError(w, http.StatusUnauthorized, "手机号或访问码错误，或访问码已过期")
 		return
 	} else if err != nil {
 		writeError(w, http.StatusInternalServerError, "temporary login failed")
 		return
 	}
+	s.clearLoginFailures(key)
 	role := s.wechatUserRole(r.Context(), authenticatedUser.ID)
 	token, err := s.tokens.issue(authenticatedUser.ID, role)
 	if err != nil {

@@ -50,13 +50,15 @@ type appConfigStore interface {
 const publicConfigKey = "miniapp_public"
 
 type Server struct {
-	properties  []domain.Property
-	store       Store
-	config      Config
-	tokens      tokenManager
-	httpClient  *http.Client
-	staticMapMu sync.Mutex
-	staticMaps  map[string]staticMapCacheEntry
+	properties    []domain.Property
+	store         Store
+	config        Config
+	tokens        tokenManager
+	httpClient    *http.Client
+	staticMapMu   sync.Mutex
+	staticMaps    map[string]staticMapCacheEntry
+	loginMu       sync.Mutex
+	loginAttempts map[string]loginAttempt
 }
 
 type staticMapCacheEntry struct {
@@ -69,11 +71,12 @@ func NewServer(dataStore Store) *Server { return NewServerWithConfig(dataStore, 
 
 func NewServerWithConfig(dataStore Store, config Config) *Server {
 	return &Server{
-		store:      dataStore,
-		config:     config,
-		tokens:     newTokenManager(config),
-		httpClient: &http.Client{Timeout: 5 * time.Second},
-		staticMaps: map[string]staticMapCacheEntry{},
+		store:         dataStore,
+		config:        config,
+		tokens:        newTokenManager(config),
+		httpClient:    &http.Client{Timeout: 5 * time.Second},
+		staticMaps:    map[string]staticMapCacheEntry{},
+		loginAttempts: map[string]loginAttempt{},
 	}
 }
 
@@ -230,6 +233,10 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "订阅片区不能为空")
 		return
 	}
+	if (item.RequestType == "appointment" || item.RequestType == "area_subscription") && item.Phone == "" {
+		writeError(w, http.StatusBadRequest, "预约服务需要先绑定手机号")
+		return
+	}
 	item.ID, _ = newID()
 	item.UserID = userID
 	item.Status = "new"
@@ -346,10 +353,17 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "admin authentication is not configured")
 		return
 	}
+	key := s.loginAttemptKey(r, input.Username)
+	if wait, blocked := s.loginBlocked(key); blocked {
+		blockedLoginResponse(w, wait)
+		return
+	}
 	if !secureEqual(input.Username, s.config.AdminUsername) || !secureEqual(input.Password, s.config.AdminPassword) {
+		s.recordLoginFailure(key)
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"code": 401, "message": "账号或密码错误"})
 		return
 	}
+	s.clearLoginFailures(key)
 	token, err := s.tokens.issue(s.config.AdminUsername, roleAdmin)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue access token")
@@ -676,11 +690,49 @@ func (s *Server) replacePropertyMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
 		return
 	}
+	var previous []domain.PropertyMedia
+	if properties, err := s.store.ListProperties(r.Context()); err == nil {
+		for _, property := range properties {
+			if property.ID == input.PropertyID {
+				previous = property.Media
+				break
+			}
+		}
+	}
 	if err := s.store.ReplacePropertyMedia(r.Context(), input.PropertyID, input.MediaIDs); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": err.Error()})
 		return
 	}
+	kept := make(map[string]struct{}, len(input.MediaIDs))
+	for _, id := range input.MediaIDs {
+		kept[id] = struct{}{}
+	}
+	for _, media := range previous {
+		if _, ok := kept[media.ID]; !ok {
+			s.removeStoredUpload(media.URL)
+		}
+	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", input.PropertyID, "更新房源素材", fmt.Sprintf("保留 %d 个素材", len(input.MediaIDs)))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+}
+
+func mediaStorageDir() string {
+	if dir := strings.TrimSpace(os.Getenv("FILE_STORAGE_LOCAL_PATH")); dir != "" {
+		return dir
+	}
+	return "uploads"
+}
+
+func (s *Server) removeStoredUpload(url string) {
+	const prefix = "/uploads/"
+	if !strings.HasPrefix(url, prefix) {
+		return
+	}
+	name := filepath.Base(strings.TrimPrefix(url, prefix))
+	if name == "." || name == string(filepath.Separator) {
+		return
+	}
+	_ = os.Remove(filepath.Join(mediaStorageDir(), name))
 }
 
 func (s *Server) convertPropertyLead(w http.ResponseWriter, r *http.Request) {
@@ -749,10 +801,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to process file")
 		return
 	}
-	dir := os.Getenv("FILE_STORAGE_LOCAL_PATH")
-	if dir == "" {
-		dir = "uploads"
-	}
+	dir := mediaStorageDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 		return

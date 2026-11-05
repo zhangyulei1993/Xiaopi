@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onLoad } from "@dcloudio/uni-app";
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
 import { bindWechatPhone, createRentalRequest, getPublicConfig, getSubscriptionTemplates, getWechatUserProfile, refreshAuth, registerMessageSubscription } from "../../api/properties";
 import { getSession, saveSession } from "../../auth/session";
@@ -14,6 +14,7 @@ const propertyID = ref(""),
   pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
 const areaTemplateID = ref("");
+const requiresPhoneBinding = computed(() => Boolean(propertyID.value || areaMode.value));
 const form = reactive({
   phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
   location: "",
@@ -57,6 +58,10 @@ const ensureLogin = () => {
 };
 const submit = async () => {
   if (!ensureLogin() || submitting.value) return;
+	if (requiresPhoneBinding.value && !form.phone) {
+		appointmentCreated.value = true;
+		return;
+	}
   if (
     (!propertyID.value && !form.location.trim()) ||
     form.budgetMax < form.budgetMin
@@ -105,7 +110,8 @@ const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) =
 		form.phone = result.phone;
 		uni.setStorageSync("xiaopi_bound_phone", result.phone);
 		const refreshed = await refreshAuth(); saveSession(refreshed.accessToken, refreshed.role);
-		appointmentCreated.value = false; finishAppointment();
+		appointmentCreated.value = false;
+		if (requiresPhoneBinding.value) await submit(); else finishAppointment();
 	} catch (error) { uni.showToast({ title: error instanceof Error ? error.message : "绑定失败", icon: "none" }); }
 	finally { bindingPhone.value = false; }
 };
@@ -175,7 +181,7 @@ const call = () => callPhone(contactPhone.value);
       submitting ? "提交中..." : propertyID ? "登记看房时间" : areaMode ? "预约该片区新房" : "提交找房需求"
     }}</view
     ><view class="contact" @click="call">想马上确认房源？联系小皮 ›</view></view
-    ><view v-if="appointmentCreated" class="phone-bind-mask"><view class="phone-bind-sheet"><view class="phone-bind-mark">✓</view><strong>{{ propertyID ? '预约已登记' : areaMode ? '片区预约已登记' : '找房需求已提交' }}</strong><text>{{ areaMode ? '绑定手机号后，管理员也可以在有合适新房时主动联系你。' : '绑定手机号后，小皮可以主动联系你确认需求。' }}</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAppointment">绑定手机号</button><view @click="appointmentCreated = false; finishAppointment()">暂不绑定</view></view></view
+    ><view v-if="appointmentCreated" class="phone-bind-mask"><view class="phone-bind-sheet"><view class="phone-bind-mark">✓</view><strong>{{ requiresPhoneBinding ? '先绑定手机号' : propertyID ? '预约已登记' : areaMode ? '片区预约已登记' : '找房需求已提交' }}</strong><text>{{ requiresPhoneBinding ? '预约看房和片区上新提醒需要绑定手机号，方便小皮与您确认。' : '绑定手机号后，小皮可以主动联系你确认需求。' }}</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAppointment">绑定手机号并继续</button><view v-if="!requiresPhoneBinding" @click="appointmentCreated = false; finishAppointment()">暂不绑定</view></view></view
   >
 </template>
 <style scoped>
