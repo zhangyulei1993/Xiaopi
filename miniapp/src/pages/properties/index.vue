@@ -197,12 +197,19 @@ const serviceLabels = (item: Property) => {
     .slice(0, 2);
 };
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
+const cardLocation = (value: unknown) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "位置待补充";
+  const district = raw.split(/[·・]/).map((part) => part.trim()).find((part) => /区$/.test(part));
+  const landmark = raw.match(/[^省市区\s·・]*(?:大道|一路|二路|三路|路|街道|街|商圈)/)?.[0];
+  return [district, landmark].filter(Boolean).join(" · ") || raw.split(/[·・]/)[0].trim();
+};
 const listingSubtitle = (item: Property) => {
   const title = compact(item.title || item.community);
   const layout = String(item.layout || "户型待补充").trim();
   const layoutCore = layout.split(" · ")[0].trim();
   const hasLayoutInTitle = Boolean(layoutCore && title.includes(compact(layoutCore)));
-  return [hasLayoutInTitle ? "" : layout, item.location || "位置待补充"].filter(Boolean).join(" · ");
+  return [hasLayoutInTitle ? "" : layout, cardLocation(item.location)].filter(Boolean).join(" · ");
 };
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {

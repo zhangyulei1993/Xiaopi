@@ -63,13 +63,20 @@ const serviceLabels = (item: Property) => {
 };
 const listingSourceLabel = (item: Property) => item.listingSource === "转租" ? "转租" : "直租";
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
+const cardLocation = (value: unknown) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "位置待补充";
+  const district = raw.split(/[·・]/).map((part) => part.trim()).find((part) => /区$/.test(part));
+  const landmark = raw.match(/[^省市区\s·・]*(?:大道|一路|二路|三路|路|街道|街|商圈)/)?.[0];
+  return [district, landmark].filter(Boolean).join(" · ") || raw.split(/[·・]/)[0].trim();
+};
 const listingSubtitle = (item: Property) => {
   const title = compact(item.title || item.community);
   const layout = String(item.layout || "户型待补充").trim();
   const layoutCore = layout.split(" · ")[0].trim();
   // 标题由发布者决定；若已经包含户型，只在副标题补充位置，杜绝同一信息连写两遍。
   const hasLayoutInTitle = Boolean(layoutCore && title.includes(compact(layoutCore)));
-  return [hasLayoutInTitle ? "" : layout, item.location || "位置待补充"].filter(Boolean).join(" · ");
+  return [hasLayoutInTitle ? "" : layout, cardLocation(item.location)].filter(Boolean).join(" · ");
 };
 onShow(async () => {
   isAdmin.value = getSession()?.role === "admin";
@@ -166,7 +173,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .property-list{padding:0 32rpx}
 .listing{gap:16rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx}
 .listing-image{width:278rpx;height:196rpx}
-.listing-info strong{font-size:28rpx;line-height:1.35}
+.listing-info strong{display:-webkit-box;overflow:hidden;font-size:28rpx;line-height:1.35;text-overflow:ellipsis;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .listing-info small{margin-top:7rpx;font-size:20rpx}
 .listing-price{margin-top:10rpx;font-size:34rpx}
 </style>
