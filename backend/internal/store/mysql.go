@@ -100,7 +100,7 @@ func (s *MySQL) UpdateProperty(ctx context.Context, p domain.Property) error {
 }
 
 func (s *MySQL) ListBuildingRules(ctx context.Context, community string) ([]domain.BuildingRule, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,community,building_no,unit_count,floor_start,floor_count,households_per_floor FROM building_rules WHERE community=? ORDER BY building_no`, community)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,community,building_no,unit_count,floor_start,floor_count,households_per_floor FROM building_rules WHERE community=? ORDER BY CAST(building_no AS UNSIGNED), building_no`, community)
 	if err != nil {
 		return nil, err
 	}
