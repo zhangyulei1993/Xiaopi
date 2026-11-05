@@ -87,12 +87,14 @@ const form = reactive<Partial<Property>>({
   description: "",
   ownerId: "xiaopi-admin",
 });
-const roomCount = ref("一室"),
-  hallCount = ref("一厅"),
+const roomCount = ref("1"),
+  customRoomCount = ref(""),
+  hallCount = ref("1"),
   rentType = ref("整租"),
   roomType = ref("主卧"),
-  bathroomCount = ref("一卫"),
-  balcony = ref("有阳台"),
+  kitchenCount = ref("1"),
+  bathroomCount = ref("1"),
+  balcony = ref("0"),
   toiletType = ref("独卫"),
   bayWindow = ref("有飘窗"),
   privateBathroom = ref(true),
@@ -141,12 +143,8 @@ const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
     "书桌",
     "床",
   ];
-const rooms = ["一室", "两室", "三室", "四室", "五室及以上"],
-  halls = ["一厅", "两厅", "三厅", "无厅"],
-  rentTypes = ["整租", "合租"],
+const rentTypes = ["整租", "合租"],
   roomTypes = ["主卧", "次卧", "单间", "床位"],
-  bathroomCounts = ["一卫", "两卫", "三卫及以上"],
-  balconies = ["有阳台", "无阳台"],
   toilets = ["独卫", "非独卫"],
   windows = ["有飘窗", "无飘窗"],
   paymentCycles = ["付一", "付二", "付三", "付六"],
@@ -158,6 +156,14 @@ const transferDepositMultiplier = ref(1);
 const transferDepositAmount = computed(() =>
   Math.max(0, Number(form.rentMonthly) || 0) * transferDepositMultiplier.value,
 );
+const effectiveRoomCount = computed(() => roomCount.value === "custom" ? Math.max(1, Number(customRoomCount.value) || 1) : Number(roomCount.value));
+const wholeLayoutText = computed(() => [
+  `${effectiveRoomCount.value}室`,
+  hallCount.value !== "0" ? `${hallCount.value}厅` : "",
+  kitchenCount.value === "1" ? "1厨" : "",
+  bathroomCount.value !== "0" ? `${bathroomCount.value}卫` : "",
+  balcony.value !== "0" ? `${balcony.value}阳台` : "",
+].filter(Boolean).join(""));
 type FeaturedChannel = {
   title: string;
   keyword: string;
@@ -430,14 +436,14 @@ const generatedTitle = computed(() => {
     community,
     unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(""),
     floor: selectedFloor.value ? `${selectedFloor.value}层` : "",
-    layout: rentType.value === "合租" ? roomType.value : `${roomCount.value}${hallCount.value}`,
+    layout: rentType.value === "合租" ? roomType.value : wholeLayoutText.value,
     rentType: rentType.value,
     area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
   };
   const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
   return parts.join("");
 });
-watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
+watch([() => form.community, roomCount, customRoomCount, hallCount, kitchenCount, bathroomCount, balcony, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
     : "";
@@ -586,7 +592,7 @@ const syncLayout = () => {
   toiletType.value = privateBathroom.value ? "独卫" : "非独卫";
   bayWindow.value = hasBayWindow.value ? "有飘窗" : "无飘窗";
   form.layout = rentType.value === "整租"
-    ? `${roomCount.value}${hallCount.value} · 整租 · ${bathroomCount.value} · ${balcony.value}`
+    ? `${wholeLayoutText.value} · 整租`
     : `合租 · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
   form.rentType = rentType.value;
 };
@@ -609,8 +615,9 @@ const setListingSource = (source: "直租" | "转租") => {
   }
 };
 const setTransferMonths = (months: number) => {
-  form.remainingLeaseMonths = months;
+  form.remainingLeaseMonths = Math.min(36, Math.max(1, Math.round(months || 1)));
 };
+const adjustTransferMonths = (delta: number) => setTransferMonths(Number(form.remainingLeaseMonths || 1) + delta);
 const setTransferDeposit = (multiplier: number) => {
   transferDepositMultiplier.value = multiplier;
   form.transferDeposit = (Number(form.rentMonthly) || 0) * multiplier;
@@ -644,14 +651,16 @@ const toggleBayWindow = (event: { detail?: { value?: string[] } }) => {
 const parseLayout = (value = "") => {
   const parts = value.split(" · ");
   if (parts[1] === "整租") {
-    const roomHall = parts[0];
-    const hall = roomHall.match(/(一厅|两厅|三厅|无厅)$/)?.[0] || "一厅";
-    roomCount.value = roomHall.slice(0, -hall.length) || "一室";
-    hallCount.value = hall;
+    const roomHall = parts[0] || "";
+    const numberOf = (suffix: string, fallback: number) => Number(roomHall.match(new RegExp(`(\\d+)${suffix}`))?.[1] || fallback);
+    const legacyNumber = (value: string, fallback: number) => ({ 一: 1, 两: 2, 三: 3, 四: 4, 五: 5 }[value[0]] || fallback);
+    const roomMatch = roomHall.match(/(\d+|[一二三四五])室/);
+    roomCount.value = String(roomMatch ? (/\d/.test(roomMatch[1]) ? Number(roomMatch[1]) : legacyNumber(roomMatch[1], 1)) : 1);
+    hallCount.value = String(numberOf("厅", roomHall.includes("无厅") ? 0 : 1));
+    kitchenCount.value = roomHall.includes("厨") || parts.some((part) => part.includes("厨房")) ? "1" : "0";
+    bathroomCount.value = String(numberOf("卫", parts[2]?.includes("卫") ? legacyNumber(parts[2], 1) : 1));
+    balcony.value = String(numberOf("阳台", roomHall.includes("阳台") || parts.some((part) => part.includes("阳台")) ? 1 : 0));
     rentType.value = "整租";
-    // 兼容旧版：户型 · 整租 · 整套 · 独卫 · 带飘窗。
-    bathroomCount.value = parts[2] === "整套" ? (parts[3] || "一卫") : (parts[2] || "一卫");
-    balcony.value = parts[2] === "整套" ? "有阳台" : (parts[3] || "有阳台");
   } else if (parts[0] === "合租") {
     rentType.value = "合租";
     roomType.value = parts[1] || "主卧";
@@ -1216,34 +1225,7 @@ const mediaUrl = resolveAssetUrl;
         ><view class="listing-source"><text>出租来源</text><view class="listing-source-options"><view :class="{ active: form.listingSource === '直租' }" @click="setListingSource('直租')"><text>{{ form.listingSource === '直租' ? '✓' : '' }}</text>直租</view><view :class="{ active: form.listingSource === '转租' }" @click="setListingSource('转租')"><text>{{ form.listingSource === '转租' ? '✓' : '' }}</text>转租</view></view></view
         ><view class="layout-guidance">{{ rentType === "整租" ? "填写整套户型、卫生间与阳台信息。" : "填写本次出租的房间配置，不再重复填写整套户型。" }}</view
         ><view class="picker-grid"
-          ><template v-if="rentType === '整租'"><picker
-            :range="rooms"
-            @change="roomCount = pickLayoutValue(rooms, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><small>户型 · 卧室</small
-              ><strong>{{ roomCount }}</strong></view
-            ></picker
-          ><picker
-            :range="halls"
-            @change="hallCount = pickLayoutValue(halls, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><small>户型 · 客厅</small
-              ><strong>{{ hallCount }}</strong></view
-            ></picker
-          ><picker
-            :range="bathroomCounts"
-            @change="bathroomCount = pickLayoutValue(bathroomCounts, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><small>卫生间</small
-              ><strong>{{ bathroomCount }}</strong></view
-            ></picker
-          ><picker
-            :range="balconies"
-            @change="balcony = pickLayoutValue(balconies, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><small>阳台</small
-              ><strong>{{ balcony }}</strong></view
-            ></picker></template
+          ><template v-if="rentType === '整租'"><view class="whole-rental-options"><view class="whole-option-row"><text>房间</text><view><button v-for="count in [1, 2, 3]" :key="count" :class="{ active: roomCount === String(count) }" @click="roomCount = String(count); syncLayout()">{{ count }}</button><button :class="{ active: roomCount === 'custom' }" @click="roomCount = 'custom'; syncLayout()">手动</button><input v-if="roomCount === 'custom'" v-model.number="customRoomCount" type="number" maxlength="2" placeholder="数" @input="syncLayout" /></view></view><view class="whole-option-row"><text>客厅</text><view><button v-for="count in [0, 1, 2, 3]" :key="count" :class="{ active: hallCount === String(count) }" @click="hallCount = String(count); syncLayout()">{{ count === 0 ? '-' : count }}</button></view></view><view class="whole-option-row"><text>厨房</text><view><button v-for="item in [{ value: '1', label: '有' }, { value: '0', label: '无' }]" :key="item.value" :class="{ active: kitchenCount === item.value }" @click="kitchenCount = item.value; syncLayout()">{{ item.label }}</button></view></view><view class="whole-option-row"><text>卫生间</text><view><button v-for="count in [0, 1, 2, 3]" :key="count" :class="{ active: bathroomCount === String(count) }" @click="bathroomCount = String(count); syncLayout()">{{ count === 0 ? '-' : count }}</button></view></view><view class="whole-option-row"><text>阳台</text><view><button v-for="count in [0, 1, 2]" :key="count" :class="{ active: balcony === String(count) }" @click="balcony = String(count); syncLayout()">{{ count === 0 ? '无' : count }}</button></view></view></view></template
           ><template v-else><view class="shared-rental-options"
             ><view class="shared-room-type"
               ><small>本次出租 · 房型</small
@@ -1319,7 +1301,7 @@ const mediaUrl = resolveAssetUrl;
           ><view class="field option-field"
             ><text>中介费</text><checkbox-group @change="toggleNoAgentFee"><label><checkbox value="no-agent-fee" :checked="noAgentFee" color="#0e8177" />无中介费</label></checkbox-group></view></view
         ><view class="term-block"><text>押付方式 *</text><view class="payment-options"><view class="payment-fixed">押一</view><view v-for="cycle in paymentCycles" :key="cycle" :class="{ active: paymentCycle === cycle }" @click="setPaymentCycle(cycle)">{{ cycle }}</view></view></view
-        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>只记录剩余月数与押金，具体费用线下沟通</small></view><text>转租</text></view><view class="transfer-choice"><text>剩余租期</text><view><button v-for="months in transferMonthOptions" :key="months" :class="{ active: form.remainingLeaseMonths === months }" @click="setTransferMonths(months)">{{ months }}个月</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><small>当前选择</small><strong>剩余 {{ form.remainingLeaseMonths || 0 }} 个月 · {{ transferDepositMultiplier ? `承接押金 ¥${transferDepositAmount}` : '无需承接押金' }}</strong></view></view
+        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>只记录剩余月数与押金，具体费用线下沟通</small></view><text>转租</text></view><view class="transfer-choice transfer-stepper"><text>剩余租期</text><view><button @click="adjustTransferMonths(-1)">−</button><input :value="form.remainingLeaseMonths || ''" type="number" maxlength="2" placeholder="月" @input="setTransferMonths(Number($event.detail.value))" /><text>个月</text><button @click="adjustTransferMonths(1)">＋</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><small>当前选择</small><strong>剩余 {{ form.remainingLeaseMonths || 0 }} 个月 · {{ transferDepositMultiplier ? `承接押金 ¥${transferDepositAmount}` : '无需承接押金' }}</strong></view></view
         ><view class="rent-row detail-row"
           ><view class="field"
             ><text>可入住日期</text
@@ -1719,6 +1701,10 @@ const mediaUrl = resolveAssetUrl;
 .transfer-choice button { min-width:0;height:54rpx;line-height:54rpx;margin:0;padding:0 12rpx;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#607d76;font-size:19rpx;font-weight:700; }
 .transfer-choice button::after { border:0; }
 .transfer-choice button.active { border-color:#0e8177;background:#0e8177;color:#fff; }
+.transfer-stepper>view { align-items:center; }
+.transfer-stepper button { flex:none;min-width:54rpx;padding:0;font-size:25rpx; }
+.transfer-stepper input { width:74rpx;height:54rpx;box-sizing:border-box;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#173f3c;font-size:21rpx;font-weight:700;text-align:center; }
+.transfer-stepper>view>text { color:#607d76;font-size:20rpx;font-weight:700; }
 .transfer-summary { margin-top:18rpx;padding:14rpx 16rpx;border-radius:12rpx;background:#fff; }
 .transfer-summary small,.transfer-summary strong { display:block; }
 .transfer-summary small { color:#78938e;font-size:19rpx; }
@@ -2029,6 +2015,15 @@ const mediaUrl = resolveAssetUrl;
   grid-template-columns: repeat(2, 1fr);
   gap: 14rpx;
 }
+.whole-rental-options { grid-column:1 / -1;overflow:hidden;border:1rpx solid #e1ece8;border-radius:16rpx;background:#fbfdfc; }
+.whole-option-row { display:flex;align-items:center;justify-content:space-between;gap:18rpx;min-height:78rpx;padding:0 20rpx;border-bottom:1rpx solid #e8f0ed; }
+.whole-option-row:last-child { border-bottom:0; }
+.whole-option-row>text { flex:none;color:#66827b;font-size:22rpx;font-weight:700; }
+.whole-option-row>view { display:flex;align-items:center;justify-content:flex-end;gap:9rpx; }
+.whole-option-row button { min-width:58rpx;height:48rpx;line-height:48rpx;margin:0;padding:0 12rpx;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#607d76;font-size:21rpx;font-weight:700; }
+.whole-option-row button::after { border:0; }
+.whole-option-row button.active { border-color:#0e8177;background:#0e8177;color:#fff; }
+.whole-option-row input { width:64rpx;height:48rpx;box-sizing:border-box;padding:0 8rpx;border:1rpx solid #0e8177;border-radius:10rpx;background:#fff;color:#173f3c;font-size:21rpx;text-align:center; }
 .picker-item {
   position: relative;
   padding: 24rpx 22rpx;
