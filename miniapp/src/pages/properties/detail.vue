@@ -86,8 +86,13 @@ const adminPrimaryActions = computed(() => {
   switch (item.value?.status) {
     case "draft":
     case "pending_review":
-      return [{ status: "published", label: "发布房源", tone: "primary" }];
+      return [{ status: "available", label: "发布房源", tone: "primary" }];
     case "published":
+      return [
+        { status: "available", label: "设为可租", tone: "primary" },
+        { status: "rented", label: "标记已租", tone: "secondary" },
+        { status: "offline", label: "下架", tone: "secondary" },
+      ];
     case "available":
       return [
         { status: "rented", label: "标记已租", tone: "primary" },

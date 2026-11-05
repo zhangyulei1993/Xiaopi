@@ -89,5 +89,23 @@ func IsPropertyStatus(value string) bool {
 }
 
 func CanTransitionPropertyStatus(from, to string) bool {
-	return IsPropertyStatus(from) && IsPropertyStatus(to) && from != to
+	if !IsPropertyStatus(from) || !IsPropertyStatus(to) || from == to {
+		return false
+	}
+	switch PropertyStatus(from) {
+	case PropertyDraft, PropertyPending:
+		// A single operator may publish directly after previewing the draft.
+		return PropertyStatus(to) == PropertyPublished || PropertyStatus(to) == PropertyAvailable
+	case PropertyPublished:
+		// Kept for listings created before the simplified workflow.
+		return PropertyStatus(to) == PropertyAvailable || PropertyStatus(to) == PropertyRented || PropertyStatus(to) == PropertyOffline
+	case PropertyAvailable:
+		return PropertyStatus(to) == PropertyRented || PropertyStatus(to) == PropertyOffline
+	case PropertyRented:
+		return PropertyStatus(to) == PropertyAvailable
+	case PropertyOffline:
+		return PropertyStatus(to) == PropertyAvailable || PropertyStatus(to) == PropertyRented
+	default:
+		return false
+	}
 }
