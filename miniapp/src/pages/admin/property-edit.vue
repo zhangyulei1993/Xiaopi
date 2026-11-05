@@ -593,6 +593,10 @@ const setRentType = (value: string | number) => {
   if (rentType.value === "合租" && (!roomType.value || roomType.value === "整套")) roomType.value = "主卧";
   syncLayout();
 };
+const setSharedRoomType = (value: string) => {
+  roomType.value = value;
+  syncLayout();
+};
 const setPaymentCycle = (cycle: string) => {
   paymentCycle.value = cycle;
   form.depositPayment = `押一${cycle}`;
@@ -1183,23 +1187,25 @@ const mediaUrl = resolveAssetUrl;
               ><small>阳台</small
               ><strong>{{ balcony }}</strong></view
             ></picker></template
-          ><template v-else><picker
-            :range="roomTypes"
-            @change="roomType = pickLayoutValue(roomTypes, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
+          ><template v-else><view class="shared-rental-options"
+            ><view class="shared-room-type"
               ><small>本次出租 · 房型</small
-              ><strong>{{ roomType }}</strong></view
-            ></picker
-          ><view class="picker-item shared-checkbox-item"
-            ><small>卫生间</small
-            ><checkbox-group @change="togglePrivateBathroom"
-              ><label><checkbox value="private" :checked="privateBathroom" color="#0e8177" />独立卫生间</label
-            ></checkbox-group></view
-          ><view class="picker-item shared-checkbox-item"
-            ><small>飘窗（凸出窗台）</small
-            ><checkbox-group @change="toggleBayWindow"
-              ><label><checkbox value="bay-window" :checked="hasBayWindow" color="#0e8177" />有飘窗</label
-            ></checkbox-group></view></template
+              ><view class="shared-room-type-options"
+                ><label v-for="option in roomTypes" :key="option" :class="{ active: roomType === option }" @click.stop="setSharedRoomType(option)"
+                  ><checkbox :checked="roomType === option" color="#0e8177" />{{ option }}</label
+                ></view></view
+            ><view class="shared-feature-grid"
+              ><view class="picker-item shared-checkbox-item"
+                ><small>卫生间</small
+                ><checkbox-group @change="togglePrivateBathroom"
+                  ><label><checkbox value="private" :checked="privateBathroom" color="#0e8177" />独立卫生间</label
+                ></checkbox-group></view
+              ><view class="picker-item shared-checkbox-item"
+                ><small>飘窗（凸出窗台）</small
+                ><checkbox-group @change="toggleBayWindow"
+                  ><label><checkbox value="bay-window" :checked="hasBayWindow" color="#0e8177" />有飘窗</label
+                ></checkbox-group></view
+            ></view></view></template
           ></view
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
@@ -1944,6 +1950,13 @@ const mediaUrl = resolveAssetUrl;
 }
 .shared-checkbox-item checkbox-group { margin-top:16rpx; }
 .shared-checkbox-item label { display:flex;align-items:center;gap:8rpx;color:#315f5a;font-size:25rpx;font-weight:700; }
+.shared-rental-options { grid-column:1 / -1; }
+.shared-room-type { padding:22rpx;border:1rpx solid #e1ece8;border-radius:16rpx;background:#fbfdfc; }
+.shared-room-type > small { display:block;color:#6d8e89;font-size:20rpx;font-weight:600; }
+.shared-room-type-options { display:grid;grid-template-columns:repeat(4,1fr);gap:10rpx;margin-top:16rpx; }
+.shared-room-type-options label { display:flex;align-items:center;justify-content:center;gap:4rpx;min-height:56rpx;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#587771;font-size:21rpx; }
+.shared-room-type-options label.active { border-color:#9dd8cc;background:#edfaf6;color:#0e8177;font-weight:700; }
+.shared-feature-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:14rpx;margin-top:14rpx; }
 .layout-preview {
   margin-top: 22rpx;
   padding: 22rpx;
