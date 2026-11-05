@@ -142,10 +142,12 @@ const financialHarbor = {
   keyword: "金融港",
   latitude: 30.45604,
   longitude: 114.425337,
-  radiusKm: 10,
+  radiusKm: 3,
 };
 const channels = ref<FeaturedChannel[]>([financialHarbor]);
 const selectedChannelIndex = ref(0);
+const associationRadiusKm = ref(3);
+const mapExpanded = ref(false);
 const selectedChannel = computed(
   () => channels.value[selectedChannelIndex.value] || financialHarbor,
 );
@@ -156,12 +158,10 @@ const channelLongitude = computed(
   () => Number(selectedChannel.value.longitude) || financialHarbor.longitude,
 );
 const channelRadiusKm = computed(
-  () => Number(selectedChannel.value.radiusKm) || financialHarbor.radiusKm,
+  () => associationRadiusKm.value || 3,
 );
 const channelTitles = computed(() =>
-  channels.value.map(
-    (channel) => `${channel.title} · ${Number(channel.radiusKm) || 5}公里`,
-  ),
+  channels.value.map((channel) => channel.title),
 );
 const requiredReady = computed(() =>
   Boolean(
@@ -249,18 +249,37 @@ const propertyDistance = computed(() =>
       )
     : 0,
 );
+const selectNearestChannel = (latitude: number, longitude: number) => {
+  if (!latitude || !longitude || !channels.value.length) return;
+  const nearestIndex = channels.value.reduce((bestIndex, channel, index) => {
+    const best = channels.value[bestIndex];
+    const bestDistance = Number(best?.latitude) && Number(best?.longitude)
+      ? distanceKm(latitude, longitude, Number(best.latitude), Number(best.longitude))
+      : Number.POSITIVE_INFINITY;
+    const candidateDistance = Number(channel.latitude) && Number(channel.longitude)
+      ? distanceKm(latitude, longitude, Number(channel.latitude), Number(channel.longitude))
+      : Number.POSITIVE_INFINITY;
+    return candidateDistance < bestDistance ? index : bestIndex;
+  }, 0);
+  if (Number.isFinite(Number(channels.value[nearestIndex]?.latitude)) && Number(channels.value[nearestIndex]?.latitude)) {
+    selectedChannelIndex.value = nearestIndex;
+  }
+};
+const selectedChannelDistance = computed(() =>
+  geoReady.value
+    ? distanceKm(channelLatitude.value, channelLongitude.value, Number(form.latitude), Number(form.longitude))
+    : 0,
+);
 const propertyInChannel = computed(
   () => geoReady.value && propertyDistance.value <= channelRadiusKm.value,
 );
 const loadChannels = async () => {
   try {
     const config = await getPublicConfig();
+    associationRadiusKm.value = Number(config.relatedPropertyRadiusKm) || 3;
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
-      const index = channels.value.findIndex((channel) =>
-        channel.title.includes("金融港"),
-      );
-      selectedChannelIndex.value = Math.max(0, index);
+      if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
     }
   } catch {
     channels.value = [financialHarbor];
@@ -274,6 +293,7 @@ const selectPointOnMap = (event: {
   if (!latitude || !longitude) return;
   form.latitude = Number(latitude.toFixed(7));
   form.longitude = Number(longitude.toFixed(7));
+  selectNearestChannel(form.latitude, form.longitude);
 };
 const runLocationSearch = async () => {
   const keyword = locationQuery.value.trim();
@@ -310,6 +330,7 @@ const applyLocationResult = (item: LocationSearchItem) => {
   form.location = [item.district, item.address].filter(Boolean).join(" · ");
   form.latitude = Number(item.latitude.toFixed(7));
   form.longitude = Number(item.longitude.toFixed(7));
+  selectNearestChannel(form.latitude, form.longitude);
   locationQuery.value = item.title;
   locationResults.value = [];
 	if (changedCommunity) {
@@ -330,6 +351,7 @@ const choosePropertyLocation = () => {
     success: (result) => {
       form.latitude = Number(result.latitude.toFixed(7));
       form.longitude = Number(result.longitude.toFixed(7));
+      selectNearestChannel(form.latitude, form.longitude);
       form.location = result.address || result.name || form.location;
 		if (!form.community?.trim() && result.name) form.community = result.name;
       void loadBuildingRules();
@@ -1010,11 +1032,11 @@ const mediaUrl = resolveAssetUrl;
           ><view v-else-if="locationQuery.length >= 2 && !locationSearching" class="location-search-tip"
             >继续输入名称，系统会显示武汉范围内的匹配地点</view
           ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
-        ><view v-if="form.community" class="unit-selector-card" @click="openStructurePicker"
-          ><view><strong>门牌信息 <small>选填</small></strong><text>{{ structureSummary }}</text></view><b>选择 ›</b></view
-        ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>有该小区的真实楼栋资料？</text><b>{{ showStructureSetup ? "收起" : "覆盖默认规则" }}</b></view
+        ><view v-if="form.community" class="unit-selector-card" :class="{ selected: Boolean(roomNo) }" @click="openStructurePicker"
+          ><view><strong>{{ roomNo ? "已选门牌" : "门牌信息" }} <small>{{ roomNo ? automaticFloorInfo : "选填" }}</small></strong><text>{{ structureSummary }}</text></view><b>{{ roomNo ? "重选 ›" : "选择 ›" }}</b></view
+        ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>{{ showStructureSetup ? "门牌规则设置" : `默认门牌规则：${selectedBuildingRule?.unitCount || 3} 单元 · ${selectedBuildingRule?.floorCount || 33} 层` }}</text><b>{{ showStructureSetup ? "收起" : "调整 ›" }}</b></view
         ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
-              ><view class="rule-setup-head"><text>楼栋结构规则</text><small>保存后，下次录入同一小区可直接选择</small></view
+              ><view class="rule-setup-head"><text>门牌规则</text><small>保存后，同一小区下次录入将直接使用</small></view
               ><view class="rule-inputs"><view><small>单元数</small><input v-model.number="ruleDraft.unitCount" type="number" /></view><view><small>起始层</small><input v-model.number="ruleDraft.floorStart" type="number" /></view><view><small>总层数</small><input v-model.number="ruleDraft.floorCount" type="number" /></view><view><small>每层户数</small><input v-model.number="ruleDraft.householdsPerFloor" type="number" /></view></view
               ><button :loading="ruleSaving" :disabled="!buildingNo || ruleSaving" @click="saveCurrentBuildingRule">保存楼栋规则</button></view
 		><view class="field"
@@ -1024,21 +1046,21 @@ const mediaUrl = resolveAssetUrl;
             maxlength="60"
             placeholder="选择小区后自动回填，可补充门牌信息" /></view
         ><view class="channel-scope"
-          ><text>关联范围</text
+          ><view class="scope-heading"><text>自动关联</text><small>按小区位置匹配最近精选地区</small></view
           ><picker
             :range="channelTitles"
             :value="selectedChannelIndex"
             @change="selectedChannelIndex = Number($event.detail.value)"
-            ><view class="channel-picker"
+            ><view class="channel-picker auto-channel-picker"
               ><view
                 ><strong>{{ selectedChannel.title }}</strong
                 ><small
-                  >以频道中心为圆心，半径 {{ channelRadiusKm }} 公里</small
+                  >{{ geoReady ? `距该地区 ${selectedChannelDistance.toFixed(1)} 公里` : "选择小区后自动匹配" }} · 关联 {{ channelRadiusKm }} 公里</small
                 ></view
-              ><text>切换 ›</text></view
+              ><text>调整 ›</text></view
             ></picker
-          ></view
-        ><view class="map-picker"
+          ><view v-if="geoReady" class="map-toggle" @click="mapExpanded = !mapExpanded"><text>{{ mapExpanded ? "收起地图" : "地图调整位置" }}</text><small>{{ propertyInChannel ? "已在自动关联范围内" : "当前地点超出关联范围" }}</small></view></view
+        ><view v-if="!geoReady || mapExpanded" class="map-picker"
           ><map
             class="property-map"
             :latitude="mapLatitude"
@@ -1528,7 +1550,8 @@ const mediaUrl = resolveAssetUrl;
   grid-template-columns: 1fr 1fr;
   gap: 14rpx;
 }
-.unit-selector-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:18rpx;padding:22rpx;border:1rpx solid #dce9e4;border-radius:18rpx;background:#fbfdfc; }
+.unit-selector-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #dce9e4;border-radius:18rpx;background:#fbfdfc; }
+.unit-selector-card.selected { border-color:#b8dfd4;background:#edf8f4;box-shadow:0 8rpx 18rpx rgba(14,129,119,.08); }
 .unit-selector-card strong,.unit-selector-card text { display:block; }
 .unit-selector-card strong { color:#173f3c;font-size:25rpx; }
 .unit-selector-card strong small { margin-left:8rpx;color:#8aa39d;font-size:19rpx;font-weight:500; }
@@ -1570,6 +1593,12 @@ const mediaUrl = resolveAssetUrl;
 .channel-scope {
   margin-top: 16rpx;
 }
+.scope-heading { display:flex;align-items:baseline;justify-content:space-between;gap:14rpx;margin-bottom:12rpx; }
+.scope-heading text { color:#315f5a;font-size:24rpx;font-weight:700; }
+.scope-heading small { color:#819b95;font-size:19rpx; }
+.auto-channel-picker { border-color:#cfe6df;background:#edf8f4; }
+.map-toggle { display:flex;align-items:center;justify-content:space-between;gap:14rpx;margin-top:12rpx;padding:0 6rpx;color:#0e8177;font-size:21rpx;font-weight:700; }
+.map-toggle small { color:#72918a;font-size:19rpx;font-weight:500; }
 .map-section-heading {
   display: flex;
   align-items: flex-start;
