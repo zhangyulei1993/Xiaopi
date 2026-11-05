@@ -918,7 +918,8 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
       fail: (error) => reject(new Error(error.errMsg || "素材上传失败")),
     }),
   );
-const save = async (openPreview = false) => {
+type SaveMode = "draft" | "preview" | "publish";
+const save = async (mode: SaveMode = "draft") => {
   if (saving.value) return;
   const minimumDraftReady = Boolean(form.title?.trim() && form.community?.trim());
   if (!minimumDraftReady) {
@@ -928,14 +929,14 @@ const save = async (openPreview = false) => {
     });
     return;
   }
-  if (openPreview && !requiredReady.value) {
+  if (mode !== "draft" && !requiredReady.value) {
     uni.showToast({
       title: "请完成标题、小区、位置、地图定位、户型和月租",
       icon: "none",
     });
     return;
   }
-  if (openPreview && mediaCount.value === 0) {
+  if (mode !== "draft" && mediaCount.value === 0) {
     uni.showToast({
       title: "发布前请至少上传一张实拍图片",
       icon: "none",
@@ -988,13 +989,22 @@ const save = async (openPreview = false) => {
     coverImageIndex.value = 0;
     pendingCoverSelected.value = false;
     videos.value = [];
-    currentStatus.value = property.status;
+    if (mode === "publish") {
+      uploadProgress.value = "正在发布房源";
+      await request("/v1/properties/status", {
+        method: "PATCH",
+        data: { propertyId: property.id, status: "available", note: "房源编辑页直接发布" },
+      });
+      currentStatus.value = "available";
+    } else {
+      currentStatus.value = property.status;
+    }
     uni.showModal({
-      title: openPreview ? "房源已保存" : "草稿已保存",
-      content: openPreview ? "确认无误后即可发布。" : "可继续编辑。",
+      title: mode === "publish" ? "房源已发布" : mode === "preview" ? "草稿已保存" : "草稿已保存",
+      content: mode === "publish" ? "该房源已上架为可租状态。" : mode === "preview" ? "现在以用户视角核对房源详情。" : "可随时返回继续编辑。",
       showCancel: false,
       success: () => {
-        if (openPreview) {
+        if (mode === "preview" || mode === "publish") {
           uni.navigateTo({ url: `/pages/properties/detail?id=${property.id}` });
         }
       },
@@ -1008,6 +1018,22 @@ const save = async (openPreview = false) => {
     saving.value = false;
     uploadProgress.value = "";
   }
+};
+const confirmPublish = () => {
+  if (saving.value) return;
+  if (!requiredReady.value || mediaCount.value === 0) {
+    uni.showToast({ title: "请先完成必填信息并上传至少一张实拍图", icon: "none" });
+    return;
+  }
+  uni.showModal({
+    title: "确认直接发布",
+    content: "发布后将立即以“可租”状态展示给用户，仍可在房源管理中编辑或下架。",
+    confirmText: "确认发布",
+    confirmColor: "#0e8177",
+    success: (result) => {
+      if (result.confirm) save("publish");
+    },
+  });
 };
 const deleteDraft = () => {
   if (!id.value || currentStatus.value !== "draft") return;
@@ -1369,6 +1395,15 @@ const mediaUrl = resolveAssetUrl;
         ><view><strong>发布标题</strong><small>按点选先后自动拼接，不添加分隔符</small></view
         ><view class="title-part-list"><view v-for="option in orderedTitlePartOptions" :key="option.key" class="title-part" :class="{ active: titleParts.includes(option.key) }" @click="toggleTitlePart(option.key)"><view class="title-part-name"><text>{{ titleParts.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view></view></view>
         <view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle || "请至少选择一项" }}</strong></view></view
+      ><view v-if="activeSection === 4" class="final-review"
+        ><view class="final-review-head"><view><strong>发布前核对</strong><small>可点上方步骤返回修改</small></view><text>{{ completionCount }}/5</text></view
+        ><view class="final-review-grid"
+          ><view :class="{ ready: sectionReady[0] }"><text>位置门牌</text><small>{{ form.community || "待选择" }}</small></view
+          ><view :class="{ ready: sectionReady[1] }"><text>户型出租</text><small>{{ form.layout || "待填写" }}</small></view
+          ><view :class="{ ready: sectionReady[3] }"><text>租金入住</text><small>{{ Number(form.rentMonthly) || 0 }}/月 {{ form.depositPayment || "" }}</small></view
+          ><view :class="{ ready: sectionReady[4] }"><text>图片素材</text><small>{{ mediaCount }}/9 张图片 · {{ videoCount }} 个视频</small></view
+        ></view
+        ><text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
         ><view v-if="activeSection < 4" class="step-actions"
@@ -1378,25 +1413,25 @@ const mediaUrl = resolveAssetUrl;
             @click="goToSection(activeSection - 1)"
           >
             上一步</button
-          ><view v-else class="draft-link" @click="save(false)">保存草稿</view
+          ><view v-else class="draft-link" @click="save()">保存草稿</view
           ><button
             class="primary next-button"
             @click="goToSection(activeSection + 1)"
           >
             下一步 · {{ sectionSteps[activeSection + 1] }}
           </button></view
-        ><view v-else class="save-actions" :class="{ 'three-actions': id && currentStatus === 'draft' }"
-          ><button v-if="id && currentStatus === 'draft'" class="delete-draft" :disabled="saving" @click="deleteDraft">删除草稿</button
-          ><button :disabled="saving" @click="save(false)">保存草稿</button
+        ><view v-else class="save-actions three-actions"
+          ><button :disabled="saving" @click="save()">保存草稿</button
+          ><button :disabled="saving || !requiredReady" @click="save('preview')">预览房源</button
           ><button
             class="primary"
             :disabled="saving || !requiredReady"
-            @click="save(true)"
+            @click="confirmPublish"
           >
             {{
               saving
                 ? "处理中..."
-                : "保存并查看"
+                : "直接发布"
             }}
           </button></view
         ></view
@@ -1601,6 +1636,19 @@ const mediaUrl = resolveAssetUrl;
 .final-title-composer { margin-top:18rpx; }
 .final-title-composer .auto-title { margin-top:18rpx;padding:18rpx;border-radius:14rpx; }
 .final-title-composer .auto-title text { display:block;margin-bottom:8rpx;color:#6d8e89;font-size:20rpx;font-weight:600; }
+.final-review { margin:18rpx 30rpx 0;padding:22rpx;border-radius:18rpx;background:#f7faf8;border:1rpx solid #e1ece8; }
+.final-review-head { display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx; }
+.final-review-head strong,.final-review-head small { display:block; }
+.final-review-head strong { color:#173f3c;font-size:25rpx; }
+.final-review-head small { margin-top:5rpx;color:#7b9790;font-size:19rpx; }
+.final-review-head>text { padding:5rpx 12rpx;border-radius:20rpx;background:#e1f1eb;color:#0e8177;font-size:20rpx;font-weight:800; }
+.final-review-grid { display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:18rpx; }
+.final-review-grid>view { min-width:0;padding:14rpx;border-radius:12rpx;background:#fff;color:#8ba19b; }
+.final-review-grid>view.ready { background:#edf8f4;color:#315f5a; }
+.final-review-grid text,.final-review-grid small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.final-review-grid text { font-size:20rpx;font-weight:700; }
+.final-review-grid small { margin-top:5rpx;font-size:18rpx; }
+.draft-delete-link { display:block;margin-top:18rpx;color:#bd5a45;font-size:21rpx;text-align:center; }
 .title-part-list { display:flex;flex-wrap:wrap;gap:10rpx;margin-top:16rpx; }
 .title-part { display:flex;align-items:center;overflow:hidden;border:1rpx solid #dce9e4;border-radius:11rpx;background:#fff;color:#708a84;font-size:20rpx; }
 .title-part.active { border-color:#b8dfd4;background:#edf8f4;color:#0e8177;font-weight:700; }
