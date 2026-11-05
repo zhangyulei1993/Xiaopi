@@ -636,9 +636,9 @@ const subscribeArea = () => {
 .favorite image { width:28rpx; height:28rpx; }.favorite.active { background:#d66d50; }
 .cover-benefit { bottom:0; left:0; padding:8rpx 11rpx; border-radius:0 10rpx 0 0; background:#d66d50; color:#fff; font-size:18rpx; font-weight:700; line-height:1.1; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:9rpx 4rpx 3rpx 0; }
-.property-listing-title { display:-webkit-box; overflow:hidden; max-height:77rpx; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.32; letter-spacing:-.4rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.property-listing-title { display:-webkit-box; overflow:hidden; height:77rpx; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.32; letter-spacing:-.4rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
 .property-listing-address { overflow:hidden; max-height:31rpx; margin:10rpx 0 0; color:#778176; font-size:22rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
-.service-tags { display:flex; gap:7rpx; overflow:hidden; margin-top:9rpx; white-space:nowrap; }
+.service-tags { display:flex; height:32rpx; gap:10rpx; overflow:hidden; margin-top:10rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
 .property > .property-copy > .price { display:inline-flex; width:max-content; align-items:baseline; gap:3rpx; margin:auto 0 0; padding-top:10rpx; color:#d76440; font-size:34rpx; font-weight:800; line-height:1.1; white-space:nowrap; }
 .property > .property-copy > .price .price-unit { color:#8a8f85; font-size:20rpx; font-weight:400; }
