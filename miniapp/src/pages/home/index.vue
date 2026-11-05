@@ -174,6 +174,10 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing{gap:16rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx}
 .listing-image{width:278rpx;height:196rpx}
 .listing-info strong{display:-webkit-box;overflow:hidden;font-size:28rpx;line-height:1.35;text-overflow:ellipsis;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.listing-info small{margin-top:7rpx;font-size:20rpx}
-.listing-price{margin-top:10rpx;font-size:34rpx}
+.listing{height:220rpx;box-sizing:border-box}
+.listing-image{height:196rpx}
+.listing-info{display:flex;height:196rpx;flex-direction:column;box-sizing:border-box}
+.listing-info small{display:-webkit-box;overflow:hidden;margin-top:7rpx;color:#8b938b;font-size:18rpx;line-height:1.35;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:1}
+.listing-info .tags{margin-top:7rpx}
+.listing-price{margin-top:auto;font-size:34rpx}
 </style>

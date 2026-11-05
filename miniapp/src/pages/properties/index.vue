@@ -634,6 +634,8 @@ const subscribeArea = () => {
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
 .property > .property-copy > .price { display:inline-flex; width:max-content; align-items:baseline; gap:3rpx; margin:auto 0 0; padding-top:10rpx; color:#d76440; font-size:34rpx; font-weight:800; line-height:1.1; white-space:nowrap; }
 .property > .property-copy > .price .price-unit { color:#8a8f85; font-size:20rpx; font-weight:400; }
+.property { height:216rpx; min-height:216rpx; }
+.property .summary { margin-top:8rpx; color:#8b938b; font-size:18rpx; line-height:1.35; -webkit-line-clamp:1; }
 .area-subscribe { margin-top:26rpx; padding:24rpx; border:0; border-radius:18rpx; background:#e9eddc; }.area-subscribe strong { font-size:27rpx; }.area-subscribe text { font-size:21rpx; line-height:1.45; }.area-subscribe b { color:#526442; font-size:22rpx; }
 .empty-match { margin-top:24rpx; }.request-banner { margin:34rpx 0 12rpx; padding:25rpx 24rpx; border-radius:18rpx; background:#40543f; }.request-banner strong { font-size:29rpx; line-height:1.3; }.request-banner > view > text { margin-top:7rpx; line-height:1.45; }.request-banner > text { font-size:22rpx; }
 /* Admin listing layer: lifecycle controls remain inside the same property card. */
