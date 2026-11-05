@@ -60,6 +60,11 @@ onShow(async () => {
     uni.switchTab({ url: "/pages/me/index" });
     return;
   }
+  const requestedTab = String(uni.getStorageSync("xiaopi_admin_tab") || "");
+  if (["properties", "leads", "requests", "interests"].includes(requestedTab)) {
+    tab.value = requestedTab as typeof tab.value;
+    uni.removeStorageSync("xiaopi_admin_tab");
+  }
   load();
 });
 const edit = (id = "") =>

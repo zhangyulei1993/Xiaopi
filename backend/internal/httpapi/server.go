@@ -588,9 +588,9 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": p})
 }
 
-// deleteProperty deliberately permits deleting drafts only. Published and offline
-// listings may have appointments, favorites, or audit history and must be managed
-// through their status instead of being silently destroyed.
+// deleteProperty removes a listing after the administrator has confirmed it in
+// the client. The store keeps customer appointment records but detaches them
+// from the deleted listing, so operational follow-up is not lost.
 func (s *Server) deleteProperty(w http.ResponseWriter, r *http.Request) {
 	propertyID := strings.TrimSpace(r.PathValue("propertyID"))
 	if propertyID == "" || s.store == nil {
@@ -613,10 +613,6 @@ func (s *Server) deleteProperty(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "房源不存在")
 		return
 	}
-	if property.Status != domain.PropertyDraft {
-		writeError(w, http.StatusConflict, "仅草稿房源可删除，已发布房源请使用下架")
-		return
-	}
 	if err := s.store.DeleteProperty(r.Context(), propertyID); err != nil {
 		writeError(w, http.StatusInternalServerError, "删除房源失败")
 		return
@@ -624,7 +620,7 @@ func (s *Server) deleteProperty(w http.ResponseWriter, r *http.Request) {
 	for _, media := range property.Media {
 		s.removeStoredUpload(media.URL)
 	}
-	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", propertyID, "删除草稿房源", property.Title)
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", propertyID, "删除房源", fmt.Sprintf("%s（删除前状态：%s）", property.Title, property.Status))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
 }
 

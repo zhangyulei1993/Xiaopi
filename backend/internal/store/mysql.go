@@ -124,8 +124,10 @@ func (s *MySQL) UpsertBuildingRule(ctx context.Context, rule domain.BuildingRule
 	return err
 }
 
-// DeleteProperty is only called for drafts by the HTTP layer. Media rows are
-// removed in the same transaction so a future property cannot inherit them.
+// DeleteProperty removes a listing and its listing-specific traces in one
+// transaction. Appointment records are intentionally retained: their
+// property_id is cleared so an operator can still follow up with the customer
+// after a listing has been removed.
 func (s *MySQL) DeleteProperty(ctx context.Context, propertyID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -135,7 +137,19 @@ func (s *MySQL) DeleteProperty(ctx context.Context, propertyID string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM property_media WHERE property_id=?`, propertyID); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM properties WHERE id=? AND status='draft'`, propertyID)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM property_favorites WHERE property_id=?`, propertyID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_footprints WHERE property_id=?`, propertyID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM property_status_history WHERE property_id=?`, propertyID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE rental_requests SET property_id='' WHERE property_id=?`, propertyID); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM properties WHERE id=?`, propertyID)
 	if err != nil {
 		return err
 	}

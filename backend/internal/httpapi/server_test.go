@@ -27,6 +27,7 @@ type fakeStore struct {
 	rentalRequests  []domain.RentalRequest
 	favorites       map[string][]string
 	statusErr       error
+	deletedProperty string
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -43,7 +44,10 @@ func (f *fakeStore) CreateProperty(_ context.Context, property domain.Property) 
 	return nil
 }
 func (*fakeStore) UpdateProperty(context.Context, domain.Property) error { return nil }
-func (*fakeStore) DeleteProperty(context.Context, string) error          { return nil }
+func (f *fakeStore) DeleteProperty(_ context.Context, propertyID string) error {
+	f.deletedProperty = propertyID
+	return nil
+}
 func (*fakeStore) ListBuildingRules(context.Context, string) ([]domain.BuildingRule, error) {
 	return nil, nil
 }
@@ -523,6 +527,28 @@ func TestPublishPropertyRequiresImage(t *testing.T) {
 	}, adminToken)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "至少上传一张实拍图片") {
 		t.Fatalf("expected missing-image rejection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAdminCanDeleteAListingInAnyStatus(t *testing.T) {
+	dataStore := &fakeStore{properties: []domain.Property{
+		{ID: "property-available", Title: "可租房源", Status: domain.PropertyAvailable},
+		{ID: "property-rented", Title: "已租房源", Status: domain.PropertyRented},
+		{ID: "property-offline", Title: "下架房源", Status: domain.PropertyOffline},
+	}}
+	server := testServer(dataStore)
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, propertyID := range []string{"property-available", "property-rented", "property-offline"} {
+		response := performRequest(t, server.Handler(), http.MethodDelete, "/api/v1/properties/"+propertyID, nil, token)
+		if response.Code != http.StatusOK {
+			t.Fatalf("delete %s: expected 200, got %d: %s", propertyID, response.Code, response.Body.String())
+		}
+		if dataStore.deletedProperty != propertyID {
+			t.Fatalf("delete %s: store received %q", propertyID, dataStore.deletedProperty)
+		}
 	}
 }
 

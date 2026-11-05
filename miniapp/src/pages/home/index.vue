@@ -124,4 +124,35 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 /* Keep the primary CTA in the document flow: it should never cover a channel or heading. */
 .home-page{padding-bottom:42rpx}.request-fab{position:static;display:flex;align-items:center;justify-content:center;gap:8rpx;width:max-content;margin:28rpx 32rpx 0;padding:18rpx 22rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:999rpx;background:#5e6d2e;color:#fff;box-shadow:0 10rpx 22rpx rgba(58,65,26,.18);font-size:25rpx;font-weight:700;line-height:1.2}.request-fab image{width:30rpx;height:30rpx}.recommend-head{margin-top:46rpx}.channel{flex:none}.channel-title,.channel-subtitle{max-width:100%}
 .quick-kind-scroll{width:100%;white-space:nowrap}.quick-kind-row{display:inline-flex;align-items:center;gap:10rpx;padding:18rpx 30rpx 2rpx}.quick-kind-row text{padding:11rpx 18rpx;border:1rpx solid #e8e4db;border-radius:14rpx;background:#fffaf4;color:#697363;font-size:22rpx;line-height:1}.quick-kind-row .quick-kind-label{border:0;background:transparent;color:#4b583f;font-size:23rpx;font-weight:800}.quick-kind-row text.active{border-color:#5e6d2e;background:#e6ecd7;color:#40543f;font-weight:800}
+
+/* Final visual baseline: keep the first screen on a single 32rpx grid and
+   neutralise the legacy selector rules above while old data remains compatible. */
+.home-page{padding-bottom:48rpx}
+.hero{height:564rpx;padding:40rpx 32rpx 0}
+.city{margin-top:0}
+.hero-copy{margin-top:48rpx}
+.hero-title{font-size:52rpx;line-height:1.24;letter-spacing:-2rpx}
+.hero-accent{margin:16rpx 0 0 150rpx}
+.hero-search{min-height:94rpx;margin-top:42rpx;padding:14rpx 14rpx 14rpx 22rpx}
+.hero-search span{font-size:26rpx}
+.hero-search b{padding:16rpx 23rpx;font-size:24rpx}
+.area-row{padding:24rpx 32rpx 16rpx}
+.price-row{margin:0 32rpx;padding:16rpx 8rpx}
+.price-row b,.price-row text{padding:0 13rpx;font-size:21rpx}
+.quick-kind-row{padding:18rpx 32rpx 4rpx}
+.section-head{margin:54rpx 32rpx 24rpx}
+.section-head strong{font-size:38rpx;letter-spacing:-1rpx}
+.channels{gap:14rpx;padding:0 32rpx}
+.channel{width:220rpx;height:170rpx;padding:18rpx}
+.channel-title{margin-top:14rpx;font-size:27rpx}
+.channel-subtitle{margin-top:7rpx;font-size:20rpx}
+.request-fab{margin:28rpx 32rpx 0}
+.recommend-head{margin:50rpx 32rpx 24rpx}
+.recommend-head strong{font-size:38rpx}
+.property-list{padding:0 32rpx}
+.listing{gap:16rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx}
+.listing-image{width:278rpx;height:196rpx}
+.listing-info strong{font-size:28rpx;line-height:1.35}
+.listing-info small{margin-top:7rpx;font-size:20rpx}
+.listing-price{margin-top:10rpx;font-size:34rpx}
 </style>

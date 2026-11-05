@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { request, resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
+  deleteProperty,
   listFavorites,
   listProperties,
   recordFootprint,
@@ -259,6 +260,7 @@ const editProperty = () => {
 const publishFromPreview = () => {
   if (!item.value || !["draft", "offline", "pending_review"].includes(item.value.status))
     return;
+  const nextStatus = item.value.status === "offline" ? "available" : "published";
   uni.showModal({
     title: "确认发布房源",
     content: "该房源会立即在用户端显示。",
@@ -270,17 +272,36 @@ const publishFromPreview = () => {
           method: "PATCH",
           data: {
             propertyId: item.value.id,
-            status: "published",
+            status: nextStatus,
             note: "管理员预览确认后发布",
           },
         });
-        item.value.status = "published";
+        item.value.status = nextStatus;
         uni.showToast({ title: "房源已发布" });
       } catch (error) {
         uni.showToast({
           title: error instanceof Error ? error.message : "发布失败",
           icon: "none",
         });
+      }
+    },
+  });
+};
+const deleteDraftFromPreview = () => {
+  if (!item.value || item.value.status !== "draft") return;
+  uni.showModal({
+    title: "删除草稿",
+    content: "草稿及其图片、视频将永久删除，无法恢复。",
+    confirmText: "删除",
+    confirmColor: "#c45843",
+    success: async (result) => {
+      if (!result.confirm || !item.value) return;
+      try {
+        await deleteProperty(item.value.id);
+        uni.showToast({ title: "草稿已删除" });
+        setTimeout(() => uni.navigateBack(), 450);
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? error.message : "删除失败", icon: "none" });
       }
     },
   });
@@ -354,7 +375,7 @@ const contact = () => {
         ><view v-if="!isAdmin" class="heart" :class="{ active: favorite }" @click="toggle"
           >{{ favorite ? "♥" : "♡"
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
-        ><button class="share-button" open-type="share">分享</button></view
+        ></view
       ><view class="title">{{ item.title || item.community }}</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
@@ -421,9 +442,12 @@ const contact = () => {
         ><view><strong>{{ property.title || property.community }}</strong><small>{{ property.community }} · {{ property.layout }}</small></view
         ><view class="nearby-price"><strong>{{ property.rentMonthly }} 元/月</strong><small>{{ property.distance.toFixed(1) }}km</small></view
       ></view></view
-    ><view class="bottom-space" /><view v-if="isAdmin" class="action-bar admin-action-bar"
+    ><view class="bottom-space" /><view v-if="isAdmin" class="action-bar admin-action-bar" :class="{ 'has-delete': item.status === 'draft' }"
       ><view class="contact-action" @click="editProperty"
         ><text>✎</text><small>继续编辑</small></view
+      ><button v-if="item.status !== 'offline'" class="share-action" open-type="share"><text>↗</text><small>分享</small></button
+      ><view v-if="item.status === 'draft'" class="delete-action" @click="deleteDraftFromPreview"
+        ><text>⌫</text><small>删除草稿</small></view
       ><view
         v-if="['draft', 'offline', 'pending_review'].includes(item.status)"
         class="reserve"
@@ -432,6 +456,7 @@ const contact = () => {
       ><view v-else class="reserve disabled">已发布</view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="reserve reserve-secondary" @click="reserve">预约看房</view
+      ><button class="share-action" open-type="share"><text>↗</text><small>分享</small></button
       ><view class="reserve contact-primary" @click="contact"><text>☎</text> 联系小皮</view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
@@ -710,7 +735,7 @@ const contact = () => {
 .reserve.disabled {
   background: #b9cbc7;
 }
-.user-action-bar{grid-template-columns:210rpx 1fr}.reserve-secondary{border:1rpx solid #cbd3c5!important;background:#f2f4ed!important;color:#40543f!important;line-height:84rpx}.contact-primary{gap:12rpx}.contact-primary text{font-size:28rpx}
+.user-action-bar{grid-template-columns:180rpx 116rpx 1fr}.admin-action-bar{grid-template-columns:132rpx 112rpx 1fr}.admin-action-bar.has-delete{grid-template-columns:112rpx 96rpx 112rpx 1fr}.reserve-secondary{border:1rpx solid #cbd3c5!important;background:#f2f4ed!important;color:#40543f!important;line-height:84rpx}.contact-primary{gap:12rpx}.contact-primary text{font-size:28rpx}.share-action,.delete-action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3rpx;margin:0;padding:0;border:0;background:transparent;color:#596857;line-height:1}.share-action::after{border:0}.share-action text,.delete-action text{font-size:30rpx;line-height:1}.share-action small,.delete-action small{font-size:19rpx;line-height:1.2}.delete-action{color:#b76551}
 
 /* Keep detail information-first while matching the light community palette. */
 .detail-page { padding-bottom:164rpx; }.detail-cover,.media-image,.media-video { border-radius:24rpx; background:#dce4d5; }.detail-cover { height:440rpx; }.media-list { gap:14rpx; }.media-image,.media-video { height:440rpx; }.overview { margin-top:18rpx; border:0; border-radius:24rpx; }.overview .title { margin-top:18rpx; font-size:40rpx; }.overview .muted { margin-top:8rpx; font-size:25rpx; }.overview .price { color:#d76440; }.heart { color:#657162; }.heart.active { color:#d76440; }.tags text { border-radius:8rpx; background:#edf0e6; color:#5b6956; }.location-card,.nearby-card { border:0; border-radius:24rpx; }.location-heading strong { color:#29382d; }.location-heading > text,.navigate-button { color:#536a45; }.navigate-button { border-radius:12rpx; background:#e9eee0; }.detail-map { border-radius:16rpx; }.row { border-color:#eeece7; }.row text:first-child { color:#8a9389; }.desc { color:#64705f; }.amenity-icon { background:#edf0e6; }.nearby-heading > text,.nearby-price strong { color:#d76440; }.nearby-item { border-color:#eeece7; }.action-bar { background:rgba(255,255,255,.97); box-shadow:0 -6rpx 24rpx rgba(45,55,43,.07); }.contact-action { color:#5a6657; }.reserve { border-radius:16rpx; background:#40543f; }.reserve.disabled { background:#b5bdb0; }
