@@ -177,8 +177,8 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing{height:204rpx;box-sizing:border-box}
 .listing-image{width:240rpx;height:180rpx}
 .listing-info{display:flex;height:180rpx;flex-direction:column;box-sizing:border-box}
-.listing-info strong{max-height:72rpx;font-size:27rpx;line-height:1.32}
-.listing-info small{display:-webkit-box;overflow:hidden;max-height:23rpx;margin-top:7rpx;color:#91998f;font-size:16rpx;line-height:1.4;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:1}
+.listing-info strong{max-height:80rpx;color:#2d3d30;font-size:30rpx;font-weight:800;line-height:1.32;letter-spacing:-.5rpx}
+.listing-info small{display:-webkit-box;overflow:hidden;max-height:26rpx;margin-top:7rpx;color:#7f897e;font-size:18rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:1}
 .listing-info .tags{height:27rpx;margin-top:7rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:17rpx}
 .listing-price{min-height:34rpx;margin-top:auto;font-size:34rpx}
