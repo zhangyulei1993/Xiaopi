@@ -50,7 +50,11 @@ const kindOptions = ["整租", "合租", "一居", "两居", "三居+"];
 const kindMatched = (item: Property) => {
   if (!selectedKind.value) return true;
   const text = `${item.title || ""} ${item.layout || ""} ${item.rentType || ""}`;
-  return text.includes(selectedKind.value);
+  // 兼容历史房源：旧数据没有 rentType 时，按整租展示，不让新筛选把存量房源全部筛掉。
+  if (selectedKind.value === "整租" && !item.rentType) return true;
+  return selectedKind.value === "三居+"
+    ? /[三四五六七八九]居/.test(text)
+    : text.includes(selectedKind.value);
 };
 const activeAreaName = computed(() => selectedArea.value !== "全部" ? selectedArea.value : channelFilter.value?.title || keyword.value.trim());
 const filteredProperties = computed(() => {

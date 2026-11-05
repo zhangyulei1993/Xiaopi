@@ -25,8 +25,14 @@ const activeKind = ref("推荐");
 const selectedArea = ref("全部");
 const selectedPrice = ref<number | null>(null);
 const isAdmin = ref(false);
-const kindOptions = ["推荐", "整租", "合租", "一居", "两居", "三居+"];
 const quickKinds = ["整租", "合租", "一居", "两居", "三居+"];
+const matchesKind = (item: Property, kind: string) => {
+  if (kind === "推荐") return true;
+  const text = `${item.title || ""} ${item.layout || ""} ${item.rentType || ""}`;
+  // 兼容历史房源：旧数据没有 rentType 时，按整租展示，不让新筛选把存量房源全部筛掉。
+  if (kind === "整租" && !item.rentType) return true;
+  return kind === "三居+" ? /[三四五六七八九]居/.test(text) : text.includes(kind);
+};
 const channelStyle = (icon: string, index: number) => {
   const legacy: Record<string, string> = { "🏢": "work", "🌳": "campus", "🌆": "life" };
   return legacy[icon] || ["commute", "campus", "work", "life"].includes(icon) ? (legacy[icon] || icon) : ["commute", "campus", "work", "life"][index % 4];
@@ -34,7 +40,7 @@ const channelStyle = (icon: string, index: number) => {
 const homeProperties = computed(() => properties.value.filter((item) => {
   const subject = `${item.title || ""} ${item.layout || ""} ${item.location || ""}`;
   const range = selectedPrice.value === null ? null : priceRanges[selectedPrice.value];
-  const kindMatched = activeKind.value === "推荐" || subject.includes(activeKind.value);
+  const kindMatched = matchesKind(item, activeKind.value);
   const areaMatched = selectedArea.value === "全部" || subject.includes(selectedArea.value);
   const priceMatched = !range || (!range.min || item.rentMonthly >= range.min) && (!range.max || item.rentMonthly <= range.max);
   return kindMatched && areaMatched && priceMatched;
@@ -96,7 +102,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <scroll-view scroll-x class="channel-scroll" :show-scrollbar="false"><view class="channels"><view v-for="(channel, index) in config.featuredChannels" :key="channel.title" class="channel" :class="`tone-${channelStyle(channel.icon, index)}`" @click="openChannel(channel)"><view class="channel-mark" :class="`mark-${channelStyle(channel.icon, index)}`"><view class="channel-glyph"></view></view><view class="channel-title">{{ channel.title }}</view><view class="channel-subtitle">{{ channel.subtitle || "发现附近好房" }}</view></view></view></scroll-view>
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
-    <view class="recommend-head"><scroll-view scroll-x :show-scrollbar="false" class="kind-scroll"><view class="kind-row"><text v-for="kind in kindOptions" :key="kind" :class="{ active: activeKind === kind }" @click="activeKind = kind">{{ kind }}</text></view></scroll-view><b @click="browseFiltered">查看房源</b></view>
+    <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
     <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="serviceLabels(item)[0]" class="listing-benefit">{{ serviceLabels(item)[0] }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ item.title || item.community }}</strong><small>{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</small><view v-if="serviceLabels(item).length" class="tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
