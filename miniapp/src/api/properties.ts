@@ -14,6 +14,9 @@ export interface Property {
   rentMonthly: number;
   feeText: string;
   rentType?: string;
+  listingSource?: string;
+  remainingLeaseMonths?: number;
+  transferDeposit?: number;
   availableDate?: string;
   depositPayment?: string;
   utilitiesText?: string;

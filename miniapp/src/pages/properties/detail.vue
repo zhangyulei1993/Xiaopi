@@ -405,6 +405,7 @@ const contact = () => {
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
         ></view
       ><view class="title">{{ item.title || item.community }}</view
+      ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
         ><view><small>户型</small><strong>{{ item.layout || "待补充" }}</strong></view
@@ -414,10 +415,13 @@ const contact = () => {
         ><view><small>入住</small><strong>{{ item.availableDate || "待确认" }}</strong></view></view
       ></view
     ><view v-if="!isAdmin" class="card service-card"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>{{ item.feeText || "咨询房源、确认看房时间与费用明细" }}</text></view><view class="service-status">在线服务</view></view
-    ><view v-if="item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate" class="card detail-info"
+    ><view v-if="item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租'" class="card detail-info"
       ><view class="title small">入住与房屋信息</view
       ><view class="detail-info-grid"
         ><view v-if="item.depositPayment"><small>押付方式</small><strong>{{ item.depositPayment }}</strong></view
+        ><view v-if="item.listingSource === '转租'"><small>剩余租期</small><strong>{{ item.remainingLeaseMonths || 0 }} 个月</strong></view
+        ><view v-if="item.listingSource === '转租'"><small>剩余租金</small><strong>¥{{ (item.rentMonthly || 0) * (item.remainingLeaseMonths || 0) }}</strong></view
+        ><view v-if="item.listingSource === '转租'"><small>承接押金</small><strong>{{ item.transferDeposit ? `¥${item.transferDeposit}` : '无需承接' }}</strong></view
         ><view v-if="item.utilitiesText"><small>水电杂费</small><strong>{{ item.utilitiesText }}</strong></view
         ><view v-if="item.floorInfo"><small>楼层</small><strong>{{ item.floorInfo }}</strong></view
         ><view v-if="item.orientation"><small>朝向</small><strong>{{ item.orientation }}</strong></view
@@ -790,4 +794,5 @@ const contact = () => {
 .user-contact { background:#f1f4ed; color:#4b5e45; font-size:24rpx; font-weight:700; }.user-contact text { font-size:25rpx; line-height:1; }.user-contact small { overflow:hidden; font-size:22rpx; line-height:1.2; white-space:nowrap; }
 .user-reserve-primary { min-height:82rpx; border-radius:15rpx; background:#40543f; color:#fff; font-size:27rpx; letter-spacing:.3rpx; }
 .user-share:active,.user-contact:active,.user-reserve-primary:active { opacity:.8; transform:scale(.985); }
+.transfer-tag { display:inline-block; margin-top:12rpx; padding:7rpx 12rpx; border-radius:8rpx; background:#edf8f4; color:#0e8177; font-size:20rpx; font-weight:700; }
 </style>

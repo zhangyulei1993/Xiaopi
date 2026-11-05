@@ -71,6 +71,9 @@ const form = reactive<Partial<Property>>({
   rentMonthly: 0,
   feeText: "无中介费",
   rentType: "整租",
+  listingSource: "直租",
+  remainingLeaseMonths: 0,
+  transferDeposit: 0,
   availableDate: "拎包入住",
   depositPayment: "押一付一",
   utilitiesText: "民水民电",
@@ -150,6 +153,14 @@ const rooms = ["一室", "两室", "三室", "四室", "五室及以上"],
   utilityOptions = ["民水民电", "民水民电 · 物业另计", "水电物业全包", "商水商电"];
 const paymentCycle = ref("付一");
 const noAgentFee = ref(true);
+const transferMonthOptions = [1, 2, 3, 6, 12];
+const transferDepositMultiplier = ref(1);
+const transferRemainingRent = computed(() =>
+  Math.max(0, Number(form.rentMonthly) || 0) * Math.max(0, Number(form.remainingLeaseMonths) || 0),
+);
+const transferDepositAmount = computed(() =>
+  Math.max(0, Number(form.rentMonthly) || 0) * transferDepositMultiplier.value,
+);
 type FeaturedChannel = {
   title: string;
   keyword: string;
@@ -593,6 +604,22 @@ const setRentType = (value: string | number) => {
   if (rentType.value === "合租" && (!roomType.value || roomType.value === "整套")) roomType.value = "主卧";
   syncLayout();
 };
+const setListingSource = (source: "直租" | "转租") => {
+  form.listingSource = source;
+  if (source === "转租" && !form.remainingLeaseMonths) form.remainingLeaseMonths = 3;
+  if (source === "转租" && !transferDepositMultiplier.value) transferDepositMultiplier.value = 1;
+  if (source === "直租") {
+    form.remainingLeaseMonths = 0;
+    form.transferDeposit = 0;
+  }
+};
+const setTransferMonths = (months: number) => {
+  form.remainingLeaseMonths = months;
+};
+const setTransferDeposit = (multiplier: number) => {
+  transferDepositMultiplier.value = multiplier;
+  form.transferDeposit = (Number(form.rentMonthly) || 0) * multiplier;
+};
 const setSharedRoomType = (value: string) => {
   roomType.value = value;
   syncLayout();
@@ -656,6 +683,10 @@ const loadProperty = async () => {
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
     paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
+    form.listingSource = property.listingSource || "直租";
+    transferDepositMultiplier.value = Number(property.transferDeposit) && Number(property.rentMonthly)
+      ? Math.max(1, Math.round(Number(property.transferDeposit) / Number(property.rentMonthly)))
+      : 1;
     noAgentFee.value = !String(property.feeText || "").includes("有中介费") || String(property.feeText || "").includes("无中介费");
     buildingNo.value = property.buildingNo || "";
     unitNo.value = property.unitNo || "";
@@ -950,6 +981,9 @@ const save = async (mode: SaveMode = "draft") => {
     const payload = {
       ...form,
       title: generatedTitle.value,
+      listingSource: form.listingSource || "直租",
+      remainingLeaseMonths: form.listingSource === "转租" ? Number(form.remainingLeaseMonths) || 0 : 0,
+      transferDeposit: form.listingSource === "转租" ? transferDepositAmount.value : 0,
       community: form.community?.trim(),
       location: form.location?.trim(),
       buildingNo: buildingNo.value.trim(),
@@ -1183,6 +1217,7 @@ const mediaUrl = resolveAssetUrl;
             ><strong>出租方式与户型</strong></view
           ></view
         ><view class="rent-type-tabs"><view :class="{ active: rentType === '整租' }" @click="setRentType('整租')"><strong>整租</strong><small>发布整套房源</small></view><view :class="{ active: rentType === '合租' }" @click="setRentType('合租')"><strong>合租</strong><small>发布单个房间</small></view></view
+        ><view class="listing-source"><text>出租来源</text><view class="listing-source-options"><view :class="{ active: form.listingSource === '直租' }" @click="setListingSource('直租')"><text>{{ form.listingSource === '直租' ? '✓' : '' }}</text>直租</view><view :class="{ active: form.listingSource === '转租' }" @click="setListingSource('转租')"><text>{{ form.listingSource === '转租' ? '✓' : '' }}</text>转租</view></view></view
         ><view class="layout-guidance">{{ rentType === "整租" ? "填写整套户型、卫生间与阳台信息。" : "填写本次出租的房间配置，不再重复填写整套户型。" }}</view
         ><view class="picker-grid"
           ><template v-if="rentType === '整租'"><picker
@@ -1288,6 +1323,7 @@ const mediaUrl = resolveAssetUrl;
           ><view class="field option-field"
             ><text>中介费</text><checkbox-group @change="toggleNoAgentFee"><label><checkbox value="no-agent-fee" :checked="noAgentFee" color="#0e8177" />无中介费</label></checkbox-group></view></view
         ><view class="term-block"><text>押付方式 *</text><view class="payment-options"><view class="payment-fixed">押一</view><view v-for="cycle in paymentCycles" :key="cycle" :class="{ active: paymentCycle === cycle }" @click="setPaymentCycle(cycle)">{{ cycle }}</view></view></view
+        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>按月填写即可，线下再确认具体合同与交接</small></view><text>转租</text></view><view class="transfer-choice"><text>剩余租期</text><view><button v-for="months in transferMonthOptions" :key="months" :class="{ active: form.remainingLeaseMonths === months }" @click="setTransferMonths(months)">{{ months }}个月</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><view><small>剩余租金</small><strong>¥{{ transferRemainingRent }}</strong></view><view><small>承接押金</small><strong>{{ transferDepositMultiplier ? `¥${transferDepositAmount}` : '无需承接' }}</strong></view></view></view
         ><view class="rent-row detail-row"
           ><view class="field"
             ><text>可入住日期</text
@@ -1661,6 +1697,12 @@ const mediaUrl = resolveAssetUrl;
 .rent-type-tabs strong,.rent-type-tabs small { display:block; }
 .rent-type-tabs strong { font-size:27rpx;line-height:1.25; }
 .rent-type-tabs small { margin-top:5rpx;font-size:19rpx;opacity:.78; }
+.listing-source { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:16rpx;padding:16rpx 18rpx;border:1rpx solid #e1ece8;border-radius:16rpx;background:#fbfdfc; }
+.listing-source>text { flex:none;color:#6d8e89;font-size:21rpx;font-weight:700; }
+.listing-source-options { display:flex;gap:10rpx; }
+.listing-source-options>view { display:flex;align-items:center;justify-content:center;min-width:106rpx;height:54rpx;padding:0 12rpx;box-sizing:border-box;border:1rpx solid #dce9e4;border-radius:10rpx;color:#6c8881;font-size:22rpx;font-weight:700; }
+.listing-source-options>view.active { border-color:#0e8177;background:#0e8177;color:#fff; }
+.listing-source-options text { display:inline-block;min-width:22rpx;margin-right:4rpx; }
 .layout-guidance { margin:14rpx 2rpx 18rpx;color:#76918b;font-size:20rpx;line-height:1.5; }
 .auto-floor strong { display:block;color:#315f5a;font-size:26rpx;line-height:1.4; }
 .option-field checkbox-group { display:block; }
@@ -1669,6 +1711,23 @@ const mediaUrl = resolveAssetUrl;
 .utility-summary strong { display:block;color:#315f5a;font-size:25rpx;line-height:1.4; }
 .term-block { margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #e3eeea;border-radius:16rpx;background:#fbfdfc; }
 .term-block>text { display:block;margin-bottom:14rpx;color:#6d8e89;font-size:21rpx;font-weight:600; }
+.transfer-settlement { margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #cfe6df;border-radius:16rpx;background:#f4fbf8; }
+.transfer-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:16rpx; }
+.transfer-heading strong,.transfer-heading small { display:block; }
+.transfer-heading strong { color:#173f3c;font-size:25rpx; }
+.transfer-heading small { margin-top:5rpx;color:#78938e;font-size:19rpx;line-height:1.4; }
+.transfer-heading>text { padding:4rpx 12rpx;border-radius:20rpx;background:#dff2ea;color:#0e8177;font-size:19rpx;font-weight:800; }
+.transfer-choice { display:flex;align-items:center;justify-content:space-between;gap:12rpx;margin-top:18rpx; }
+.transfer-choice>text { flex:none;color:#6d8e89;font-size:21rpx;font-weight:700; }
+.transfer-choice>view { display:flex;flex:1;justify-content:flex-end;gap:8rpx; }
+.transfer-choice button { min-width:0;height:54rpx;line-height:54rpx;margin:0;padding:0 12rpx;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#607d76;font-size:19rpx;font-weight:700; }
+.transfer-choice button::after { border:0; }
+.transfer-choice button.active { border-color:#0e8177;background:#0e8177;color:#fff; }
+.transfer-summary { display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:18rpx; }
+.transfer-summary>view { padding:14rpx;border-radius:12rpx;background:#fff; }
+.transfer-summary small,.transfer-summary strong { display:block; }
+.transfer-summary small { color:#78938e;font-size:19rpx; }
+.transfer-summary strong { margin-top:5rpx;color:#315f5a;font-size:25rpx; }
 .payment-options { display:grid;grid-template-columns:repeat(5,1fr);gap:10rpx; }
 .payment-options>view { display:flex;min-height:58rpx;align-items:center;justify-content:center;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#5d7973;font-size:21rpx;font-weight:700; }
 .payment-options .payment-fixed { border-color:#cfe6df;background:#edf8f4;color:#0e8177; }

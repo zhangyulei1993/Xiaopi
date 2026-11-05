@@ -558,31 +558,34 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 }
 
 type publicProperty struct {
-	ID               string                 `json:"id"`
-	Title            string                 `json:"title"`
-	Community        string                 `json:"community"`
-	Location         string                 `json:"location"`
-	Latitude         float64                `json:"latitude"`
-	Longitude        float64                `json:"longitude"`
-	Layout           string                 `json:"layout"`
-	RentMonthly      int64                  `json:"rentMonthly"`
-	FeeText          string                 `json:"feeText"`
-	RentType         string                 `json:"rentType"`
-	AvailableDate    string                 `json:"availableDate"`
-	DepositPayment   string                 `json:"depositPayment"`
-	UtilitiesText    string                 `json:"utilitiesText"`
-	AreaSqm          int                    `json:"areaSqm"`
-	FloorInfo        string                 `json:"floorInfo"`
-	Orientation      string                 `json:"orientation"`
-	Elevator         string                 `json:"elevator"`
-	MetroMinutes     int                    `json:"metroMinutes"`
-	VerificationDate string                 `json:"verificationDate"`
-	RulesText        string                 `json:"rulesText"`
-	Description      string                 `json:"description"`
-	Status           domain.PropertyStatus  `json:"status"`
-	Media            []domain.PropertyMedia `json:"media"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
+	ID                   string                 `json:"id"`
+	Title                string                 `json:"title"`
+	Community            string                 `json:"community"`
+	Location             string                 `json:"location"`
+	Latitude             float64                `json:"latitude"`
+	Longitude            float64                `json:"longitude"`
+	Layout               string                 `json:"layout"`
+	RentMonthly          int64                  `json:"rentMonthly"`
+	FeeText              string                 `json:"feeText"`
+	RentType             string                 `json:"rentType"`
+	ListingSource        string                 `json:"listingSource"`
+	RemainingLeaseMonths int                    `json:"remainingLeaseMonths"`
+	TransferDeposit      int64                  `json:"transferDeposit"`
+	AvailableDate        string                 `json:"availableDate"`
+	DepositPayment       string                 `json:"depositPayment"`
+	UtilitiesText        string                 `json:"utilitiesText"`
+	AreaSqm              int                    `json:"areaSqm"`
+	FloorInfo            string                 `json:"floorInfo"`
+	Orientation          string                 `json:"orientation"`
+	Elevator             string                 `json:"elevator"`
+	MetroMinutes         int                    `json:"metroMinutes"`
+	VerificationDate     string                 `json:"verificationDate"`
+	RulesText            string                 `json:"rulesText"`
+	Description          string                 `json:"description"`
+	Status               domain.PropertyStatus  `json:"status"`
+	Media                []domain.PropertyMedia `json:"media"`
+	CreatedAt            time.Time              `json:"createdAt"`
+	UpdatedAt            time.Time              `json:"updatedAt"`
 }
 
 func publicProperties(items []domain.Property) []publicProperty {
@@ -594,7 +597,7 @@ func publicProperties(items []domain.Property) []publicProperty {
 		result = append(result, publicProperty{
 			ID: item.ID, Title: item.Title, Community: item.Community, Location: item.Location,
 			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout,
-			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType,
+			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType, ListingSource: item.ListingSource, RemainingLeaseMonths: item.RemainingLeaseMonths, TransferDeposit: item.TransferDeposit,
 			AvailableDate: item.AvailableDate, DepositPayment: item.DepositPayment,
 			UtilitiesText: item.UtilitiesText, AreaSqm: item.AreaSqm, FloorInfo: item.FloorInfo,
 			Orientation: item.Orientation, Elevator: item.Elevator, MetroMinutes: item.MetroMinutes,
