@@ -56,6 +56,14 @@ const adminStatusOptions = [
   { value: "offline", label: "已下架" },
 ];
 const statusLabel = (status: string) => ({ draft: "草稿", pending_review: "待审核", published: "已发布", available: "可租", rented: "已租", offline: "已下架" }[status] || status);
+const adminActionHint = (status: string) => ({
+  draft: "完善后即可发布到用户端",
+  pending_review: "核对无误后可直接发布",
+  published: "房源正在用户端展示",
+  available: "房源正在用户端展示",
+  rented: "可重新设为可租",
+  offline: "下架房源不会出现在用户端",
+}[status] || "") as string;
 const adminStatusMatched = (status: string) =>
   selectedStatus.value === "todo"
     ? ["draft", "pending_review"].includes(status)
@@ -312,30 +320,36 @@ const subscribeArea = () => {
         v-for="item in filteredProperties"
         :key="item.id"
         class="property card"
+        :class="{ 'admin-property': isAdmin }"
         @click="open(item.id)"
-        ><view class="cover"
-          ><image
-            v-if="coverUrl(item)"
-            :src="coverUrl(item)"
-            mode="aspectFill"
-          /><text v-else>小皮</text><view class="badge">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
-          ><view v-if="serviceLabels(item)[0]" class="cover-benefit">{{ serviceLabels(item)[0] }}</view
-          ><view
-            v-if="!isAdmin"
-            class="favorite"
-            :class="{ active: favoriteIDs.includes(item.id) }"
-            @click.stop="toggleFavorite(item.id)"
-            ><image :src="heartIcon" mode="aspectFit" /></view
-          ></view
-        ><view class="property-copy"
+        ><view class="property-main"
+          ><view class="cover"
+            ><image
+              v-if="coverUrl(item)"
+              :src="coverUrl(item)"
+              mode="aspectFill"
+            /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
+            ><view v-if="serviceLabels(item)[0]" class="cover-benefit">{{ serviceLabels(item)[0] }}</view
+            ><view
+              v-if="!isAdmin"
+              class="favorite"
+              :class="{ active: favoriteIDs.includes(item.id) }"
+              @click.stop="toggleFavorite(item.id)"
+              ><image :src="heartIcon" mode="aspectFit" /></view
+            ></view
+          ><view class="property-copy"
           ><view class="title small">{{ item.title || item.community }}</view
           ><view class="muted summary"
             >{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</view
           ><view v-if="serviceLabels(item).length" class="service-tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view
           ><view class="price"
             >{{ item.rentMonthly }} <text class="price-unit">元/月</text></view
-          ><view v-if="isAdmin" class="admin-card-actions" :class="{ 'offline-actions': item.status === 'offline' }" @click.stop><template v-if="['draft', 'pending_review'].includes(item.status)"><button @click.stop="editProperty(item.id)">编辑</button><button class="danger" @click.stop="removeProperty(item)">删除</button><button class="primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'published')">发布</button></template><template v-else-if="item.status === 'published' || item.status === 'available'"><button @click.stop="editProperty(item.id)">编辑</button><button class="primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">标记已租</button><button class="danger" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button><button class="danger subtle-danger" @click.stop="removeProperty(item)">删除</button></template><template v-else-if="item.status === 'rented'"><button @click.stop="editProperty(item.id)">编辑</button><button class="primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">设为可租</button><button class="danger subtle-danger" @click.stop="removeProperty(item)">删除</button></template><template v-else><button @click.stop="editProperty(item.id)">编辑</button><button class="primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">上架可租</button><button class="primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">设为已租</button><button class="danger" @click.stop="removeProperty(item)">删除</button></template></view
           ></view
+        ></view
+        ><view v-if="isAdmin" class="admin-card-actions" :class="[`status-${item.status}`, { 'offline-actions': item.status === 'offline' }]" @click.stop
+          ><view class="admin-action-meta"><text>{{ statusLabel(item.status) }}</text><small>{{ adminActionHint(item.status) }}</small></view
+          ><view class="admin-action-grid"><template v-if="['draft', 'pending_review'].includes(item.status)"><button class="action-edit" @click.stop="editProperty(item.id)">编辑房源</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'published')">发布房源</button></template><template v-else-if="item.status === 'published' || item.status === 'available'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑房源</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">标记已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'rented'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑房源</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">设为可租</button></template><template v-else><button class="action-edit" @click.stop="editProperty(item.id)">编辑房源</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">上架可租</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">设为已租</button></template></view
+          ><button class="action-delete" @click.stop="removeProperty(item)">删除房源</button></view
         ></view
       ></view
     ><view v-if="!loading && !loadFailed && !isAdmin" class="area-subscribe card" @click="subscribeArea"><view><strong>{{ activeAreaName ? `${activeAreaName} 没找到合适的？` : '还没找到合适的房源？' }}</strong><text>预约该片区新房源，有房发布时及时通知</text></view><b>预约新房源 ›</b></view
@@ -613,5 +627,33 @@ const subscribeArea = () => {
 .property > .property-copy > .price .price-unit { color:#8a8f85; font-size:20rpx; font-weight:400; }
 .area-subscribe { margin-top:26rpx; padding:24rpx; border:0; border-radius:18rpx; background:#e9eddc; }.area-subscribe strong { font-size:27rpx; }.area-subscribe text { font-size:21rpx; line-height:1.45; }.area-subscribe b { color:#526442; font-size:22rpx; }
 .empty-match { margin-top:24rpx; }.request-banner { margin:34rpx 0 12rpx; padding:25rpx 24rpx; border-radius:18rpx; background:#40543f; }.request-banner strong { font-size:29rpx; line-height:1.3; }.request-banner > view > text { margin-top:7rpx; line-height:1.45; }.request-banner > text { font-size:22rpx; }
-.admin-card-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10rpx;margin-top:14rpx}.admin-card-actions button{min-width:0;margin:0;padding:0;border:1rpx solid #dce5d7;border-radius:10rpx;background:#f7faf4;color:#526442;font-size:20rpx;line-height:56rpx}.admin-card-actions button::after{border:0}.admin-card-actions .primary{border-color:#40543f;background:#40543f;color:#fff}.admin-card-actions .danger{border-color:#f0d7cf;background:#fff7f4;color:#b76551}.admin-card-actions .subtle-danger{grid-column:auto}.admin-card-actions:not(.offline-actions) .subtle-danger{grid-column:span 3}.admin-card-actions.offline-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* Admin listing layer: content stays photo-first; lifecycle actions form a calm, separate panel. */
+.property-main { display:flex; align-items:stretch; gap:18rpx; min-width:0; }
+.property-main .cover { flex:none; }
+.property-main .property-copy { min-width:0; flex:1; }
+.admin-property { display:block; padding:14rpx; border-color:#e5e9df; border-radius:22rpx; background:#fffefa; }
+.admin-property .property-main { min-height:192rpx; }
+.badge.status-draft,.badge.status-pending_review { background:#a4773f; }
+.badge.status-rented { background:#69737d; }
+.badge.status-offline { background:#8a7566; }
+.admin-card-actions { margin-top:16rpx; padding:16rpx; border:1rpx solid #e4e8df; border-radius:16rpx; background:#f6f8f2; }
+.admin-card-actions.status-draft,.admin-card-actions.status-pending_review { border-color:#eadfca; background:#fcf8ef; }
+.admin-card-actions.status-rented { border-color:#e1e5e8; background:#f5f7f8; }
+.admin-card-actions.status-offline { border-color:#e8e1dc; background:#faf7f4; }
+.admin-action-meta { display:flex; align-items:baseline; justify-content:space-between; gap:14rpx; margin-bottom:14rpx; }
+.admin-action-meta text { flex:none; color:#40543f; font-size:23rpx; font-weight:750; line-height:1.25; }
+.admin-action-meta small { overflow:hidden; flex:1; color:#7a8576; font-size:19rpx; line-height:1.3; text-align:right; text-overflow:ellipsis; white-space:nowrap; }
+.status-draft .admin-action-meta text,.status-pending_review .admin-action-meta text { color:#9a6d34; }
+.status-rented .admin-action-meta text { color:#65707a; }
+.status-offline .admin-action-meta text { color:#7a6759; }
+.admin-action-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10rpx; }
+.admin-action-grid button,.action-delete { min-width:0; margin:0; padding:0 12rpx; border:1rpx solid transparent; border-radius:11rpx; font-size:21rpx; font-weight:650; line-height:60rpx; }
+.admin-action-grid button::after,.action-delete::after { border:0; }
+.admin-action-grid button:last-child:nth-child(3) { grid-column:span 2; }
+.action-edit { border-color:#d8e0d3!important; background:#fff!important; color:#53664d!important; }
+.action-primary { border-color:#40543f!important; background:#40543f!important; color:#fff!important; }
+.action-rented { border-color:#dbe1e5!important; background:#edf1f3!important; color:#53616c!important; }
+.action-offline { border-color:#eadbd0!important; background:#fff8f3!important; color:#9b694d!important; }
+.action-delete { display:block; width:100%; margin-top:10rpx; border-color:#efdcd4; background:transparent; color:#b86a54; line-height:54rpx; }
+.admin-action-grid button:active,.action-delete:active { opacity:.78; transform:scale(.985); }
 </style>

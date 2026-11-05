@@ -82,6 +82,28 @@ const adminPreviewLabel = computed(() => {
   if (status === "pending_review") return "待发布预览";
   return "草稿预览";
 });
+const adminPrimaryActions = computed(() => {
+  switch (item.value?.status) {
+    case "draft":
+    case "pending_review":
+      return [{ status: "published", label: "发布房源", tone: "primary" }];
+    case "published":
+    case "available":
+      return [
+        { status: "rented", label: "标记已租", tone: "primary" },
+        { status: "offline", label: "下架", tone: "secondary" },
+      ];
+    case "rented":
+      return [{ status: "available", label: "设为可租", tone: "primary" }];
+    case "offline":
+      return [
+        { status: "available", label: "上架可租", tone: "primary" },
+        { status: "rented", label: "设为已租", tone: "secondary" },
+      ];
+    default:
+      return [];
+  }
+});
 const activeVideoIsPortrait = computed(() => {
   const active = mediaItems.value[activeMediaIndex.value];
   const dimensions = videoDimensions.value[activeMediaIndex.value];
@@ -257,14 +279,12 @@ const editProperty = () => {
   if (!item.value) return;
   uni.navigateTo({ url: `/pages/admin/property-edit?id=${item.value.id}` });
 };
-const publishFromPreview = () => {
-  if (!item.value || !["draft", "offline", "pending_review"].includes(item.value.status))
-    return;
-  const nextStatus = item.value.status === "offline" ? "available" : "published";
+const updateStatusFromPreview = (nextStatus: string, label: string) => {
+  if (!item.value) return;
   uni.showModal({
-    title: "确认发布房源",
-    content: "该房源会立即在用户端显示。",
-    confirmText: "确认发布",
+    title: `确认${label}`,
+    content: nextStatus === "offline" ? "下架后，用户端将不再展示该房源。" : nextStatus === "rented" ? "标记后，房源会归入已租列表。" : "该状态会立即同步到房源管理。",
+    confirmText: "确认",
     success: async (result) => {
       if (!result.confirm || !item.value) return;
       try {
@@ -273,11 +293,11 @@ const publishFromPreview = () => {
           data: {
             propertyId: item.value.id,
             status: nextStatus,
-            note: "管理员预览确认后发布",
+            note: `管理员详情页${label}`,
           },
         });
         item.value.status = nextStatus;
-        uni.showToast({ title: "房源已发布" });
+        uni.showToast({ title: "状态已更新" });
       } catch (error) {
         uni.showToast({
           title: error instanceof Error ? error.message : "发布失败",
@@ -287,18 +307,21 @@ const publishFromPreview = () => {
     },
   });
 };
-const deleteDraftFromPreview = () => {
-  if (!item.value || item.value.status !== "draft") return;
+const deletePropertyFromPreview = () => {
+  if (!item.value) return;
+  const isLiveListing = ["published", "available", "rented"].includes(item.value.status);
   uni.showModal({
-    title: "删除草稿",
-    content: "草稿及其图片、视频将永久删除，无法恢复。",
+    title: isLiveListing ? "确认删除房源" : "删除房源",
+    content: isLiveListing
+      ? "该房源曾对外展示。删除会移除图片、视频、收藏和浏览记录；已提交的预约会保留，但不再关联此房源。"
+      : "房源及其图片、视频将永久删除，无法恢复。",
     confirmText: "删除",
     confirmColor: "#c45843",
     success: async (result) => {
       if (!result.confirm || !item.value) return;
       try {
         await deleteProperty(item.value.id);
-        uni.showToast({ title: "草稿已删除" });
+        uni.showToast({ title: "房源已删除" });
         setTimeout(() => uni.navigateBack(), 450);
       } catch (error) {
         uni.showToast({ title: error instanceof Error ? error.message : "删除失败", icon: "none" });
@@ -442,18 +465,9 @@ const contact = () => {
         ><view><strong>{{ property.title || property.community }}</strong><small>{{ property.community }} · {{ property.layout }}</small></view
         ><view class="nearby-price"><strong>{{ property.rentMonthly }} 元/月</strong><small>{{ property.distance.toFixed(1) }}km</small></view
       ></view></view
-    ><view class="bottom-space" /><view v-if="isAdmin" class="action-bar admin-action-bar" :class="{ 'has-delete': item.status === 'draft' }"
-      ><view class="contact-action" @click="editProperty"
-        ><text>✎</text><small>继续编辑</small></view
-      ><button v-if="item.status !== 'offline'" class="share-action" open-type="share"><text>↗</text><small>分享</small></button
-      ><view v-if="item.status === 'draft'" class="delete-action" @click="deleteDraftFromPreview"
-        ><text>⌫</text><small>删除草稿</small></view
-      ><view
-        v-if="['draft', 'offline', 'pending_review'].includes(item.status)"
-        class="reserve"
-        @click="publishFromPreview"
-        >确认发布</view
-      ><view v-else class="reserve disabled">已发布</view></view
+    ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
+      ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
+      ><view class="admin-detail-tools"><button class="admin-detail-tool" @click="editProperty">编辑房源</button><button v-if="item.status !== 'offline'" class="admin-detail-tool" open-type="share">分享给他人</button><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="reserve reserve-secondary" @click="reserve">预约看房</view
       ><button class="share-action" open-type="share"><text>↗</text><small>分享</small></button
@@ -738,7 +752,7 @@ const contact = () => {
 .user-action-bar{grid-template-columns:180rpx 116rpx 1fr}.admin-action-bar{grid-template-columns:132rpx 112rpx 1fr}.admin-action-bar.has-delete{grid-template-columns:112rpx 96rpx 112rpx 1fr}.reserve-secondary{border:1rpx solid #cbd3c5!important;background:#f2f4ed!important;color:#40543f!important;line-height:84rpx}.contact-primary{gap:12rpx}.contact-primary text{font-size:28rpx}.share-action,.delete-action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3rpx;margin:0;padding:0;border:0;background:transparent;color:#596857;line-height:1}.share-action::after{border:0}.share-action text,.delete-action text{font-size:30rpx;line-height:1}.share-action small,.delete-action small{font-size:19rpx;line-height:1.2}.delete-action{color:#b76551}
 
 /* Keep detail information-first while matching the light community palette. */
-.detail-page { padding-bottom:164rpx; }.detail-cover,.media-image,.media-video { border-radius:24rpx; background:#dce4d5; }.detail-cover { height:440rpx; }.media-list { gap:14rpx; }.media-image,.media-video { height:440rpx; }.overview { margin-top:18rpx; border:0; border-radius:24rpx; }.overview .title { margin-top:18rpx; font-size:40rpx; }.overview .muted { margin-top:8rpx; font-size:25rpx; }.overview .price { color:#d76440; }.heart { color:#657162; }.heart.active { color:#d76440; }.tags text { border-radius:8rpx; background:#edf0e6; color:#5b6956; }.location-card,.nearby-card { border:0; border-radius:24rpx; }.location-heading strong { color:#29382d; }.location-heading > text,.navigate-button { color:#536a45; }.navigate-button { border-radius:12rpx; background:#e9eee0; }.detail-map { border-radius:16rpx; }.row { border-color:#eeece7; }.row text:first-child { color:#8a9389; }.desc { color:#64705f; }.amenity-icon { background:#edf0e6; }.nearby-heading > text,.nearby-price strong { color:#d76440; }.nearby-item { border-color:#eeece7; }.action-bar { background:rgba(255,255,255,.97); box-shadow:0 -6rpx 24rpx rgba(45,55,43,.07); }.contact-action { color:#5a6657; }.reserve { border-radius:16rpx; background:#40543f; }.reserve.disabled { background:#b5bdb0; }
+.detail-page { padding-bottom:238rpx; }.detail-cover,.media-image,.media-video { border-radius:24rpx; background:#dce4d5; }.detail-cover { height:440rpx; }.media-list { gap:14rpx; }.media-image,.media-video { height:440rpx; }.overview { margin-top:18rpx; border:0; border-radius:24rpx; }.overview .title { margin-top:18rpx; font-size:40rpx; }.overview .muted { margin-top:8rpx; font-size:25rpx; }.overview .price { color:#d76440; }.heart { color:#657162; }.heart.active { color:#d76440; }.tags text { border-radius:8rpx; background:#edf0e6; color:#5b6956; }.location-card,.nearby-card { border:0; border-radius:24rpx; }.location-heading strong { color:#29382d; }.location-heading > text,.navigate-button { color:#536a45; }.navigate-button { border-radius:12rpx; background:#e9eee0; }.detail-map { border-radius:16rpx; }.row { border-color:#eeece7; }.row text:first-child { color:#8a9389; }.desc { color:#64705f; }.amenity-icon { background:#edf0e6; }.nearby-heading > text,.nearby-price strong { color:#d76440; }.nearby-item { border-color:#eeece7; }.action-bar { background:rgba(255,255,255,.97); box-shadow:0 -6rpx 24rpx rgba(45,55,43,.07); }.contact-action { color:#5a6657; }.reserve { border-radius:16rpx; background:#40543f; }.reserve.disabled { background:#b5bdb0; }
 .detail-page .page-presentation-head{margin-bottom:28rpx}.detail-page .overview{margin-top:22rpx}.detail-page .card{margin-bottom:24rpx}.overview .title{line-height:1.35}.amenity-grid{row-gap:14rpx}
 .overview .price{font-size:50rpx;line-height:1.1}.overview .price small{font-size:23rpx}.overview .tags{margin-top:16rpx}.detail-page .title.small{font-size:33rpx;line-height:1.3}.row{min-height:82rpx;padding:24rpx 0;align-items:center}.row text:last-child{max-width:70%;line-height:1.45;text-align:right}.desc{margin-top:14rpx;font-size:26rpx;line-height:1.72}.location-heading small{margin-top:8rpx;line-height:1.45}.nearby-item{padding:22rpx 0}.nearby-item small{margin-top:7rpx;line-height:1.4}.action-bar{padding-top:18rpx;padding-bottom:calc(18rpx + env(safe-area-inset-bottom))}
 .media-gallery{position:relative;overflow:hidden;border-radius:24rpx;background:#dce4d5}.media-swiper{width:100%;height:440rpx}.media-gallery .media-image,.media-gallery .media-video,.video-stage{display:block;width:100%;height:100%;border-radius:0}.video-stage{position:relative;background:#40543f}.play-video{position:absolute;top:50%;left:50%;display:flex;align-items:center;gap:12rpx;padding:18rpx 26rpx;border-radius:999rpx;transform:translate(-50%,-50%);background:rgba(25,37,27,.76);color:#fff}.play-video text{font-size:28rpx;line-height:1}.play-video small{font-size:24rpx;white-space:nowrap}.media-counter,.media-kind{position:absolute;bottom:22rpx;padding:9rpx 16rpx;border-radius:999rpx;background:rgba(24,34,25,.64);color:#fff;font-size:22rpx;font-variant-numeric:tabular-nums}.media-counter{right:22rpx}.media-kind{left:22rpx}.detail-cover-empty{flex-direction:column;gap:10rpx;background:linear-gradient(145deg,#e8e2d5,#d7dfcd);color:#465440;font-size:31rpx;font-weight:650}.detail-cover-empty .detail-cover-icon{font-size:116rpx;line-height:1}.detail-cover-empty small{color:#788071;font-size:23rpx;font-weight:400}.overview{padding:30rpx 28rpx}.overview-top .price{flex:1;min-width:0;white-space:nowrap}.heart{flex:none}.overview .title{margin-top:16rpx;color:#263227;font-size:40rpx;font-weight:750;letter-spacing:-.6rpx}.overview .muted{margin-top:9rpx;color:#6d766b;font-size:26rpx}.key-facts{width:100%;margin-top:24rpx;white-space:normal}.key-facts-row{display:inline-flex;gap:12rpx;white-space:nowrap}.key-facts-row>view{box-sizing:border-box;width:224rpx;padding:16rpx 14rpx;border-radius:14rpx;background:#eeece5}.key-facts strong{display:block;overflow:hidden;color:#384438;font-size:24rpx;font-weight:650;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.key-facts small{display:block;margin-top:7rpx;color:#8a9087;font-size:19rpx}.map-summary{display:flex;align-items:center;justify-content:space-between;padding:20rpx 0 2rpx}.map-summary strong,.map-summary small{display:block}.map-summary strong{color:#425240;font-size:27rpx}.map-summary small{margin-top:6rpx;color:#879087;font-size:21rpx}.map-summary>text{color:#596b52;font-size:38rpx;line-height:1}.play-video:active,.map-summary:active{opacity:.8}.heart:active,.reserve:active,.contact-action:active{transform:scale(.98);opacity:.86}
@@ -747,4 +761,18 @@ const contact = () => {
 .overview .price .price-unit{font-size:23rpx}.overview .price.pending .price-unit{color:#8d9789}
 .detail-page-head{margin:8rpx 4rpx 18rpx}.detail-page-head view{color:#29382d;font-size:40rpx;font-weight:800;line-height:1.25;letter-spacing:-1rpx}.detail-page-head text{display:block;margin-top:8rpx;color:#7b8579;font-size:23rpx;line-height:1.45}
 .media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}
+.media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}
+
+/* Admin detail actions: lifecycle decisions are prominent; tools stay quiet and separate. */
+.admin-detail-bar { position:fixed; z-index:6; right:0; bottom:0; left:0; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
+.admin-detail-main { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:12rpx; }
+.admin-detail-primary { min-width:0; margin:0; padding:0 16rpx; border:1rpx solid transparent; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:82rpx; }
+.admin-detail-primary::after,.admin-detail-tool::after { border:0; }
+.admin-detail-primary.primary { border-color:#40543f; background:#40543f; color:#fff; }
+.admin-detail-primary.secondary { border-color:#dce3d7; background:#f2f5ef; color:#52624b; }
+.admin-detail-tools { display:flex; align-items:center; justify-content:center; gap:0; margin-top:12rpx; }
+.admin-detail-tool { position:relative; min-width:0; margin:0; padding:4rpx 22rpx; border:0; border-radius:0; background:transparent; color:#687464; font-size:20rpx; line-height:1.3; }
+.admin-detail-tool + .admin-detail-tool::before { position:absolute; top:8rpx; bottom:8rpx; left:0; width:1rpx; background:#e0e4dc; content:""; }
+.admin-detail-tool.delete { color:#b96d57; }
+.admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
 </style>
