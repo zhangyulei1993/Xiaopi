@@ -199,7 +199,7 @@ const channelTitles = computed(() =>
 );
 const requiredReady = computed(() =>
   Boolean(
-    form.title?.trim() &&
+    (generatedTitle.value.trim() || String(form.title || "").trim() || String(form.community || "").trim()) &&
     form.community?.trim() &&
     form.location?.trim() &&
     form.layout?.trim() &&
@@ -957,7 +957,10 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
 type SaveMode = "draft" | "preview" | "publish";
 const save = async (mode: SaveMode = "draft") => {
   if (saving.value) return;
-  const minimumDraftReady = Boolean(form.title?.trim() && form.community?.trim());
+  const finalTitle = generatedTitle.value.trim() || String(form.title || "").trim() || String(form.community || "").trim();
+  const finalCommunity = String(form.community || "").trim();
+  const finalRent = Number(form.rentMonthly);
+  const minimumDraftReady = Boolean(finalTitle && finalCommunity && Number.isFinite(finalRent) && finalRent >= 0);
   if (!minimumDraftReady) {
     uni.showToast({
       title: "草稿至少填写标题和小区",
@@ -985,11 +988,11 @@ const save = async (mode: SaveMode = "draft") => {
     const details = String(form.description || "").trim();
     const payload = {
       ...form,
-      title: generatedTitle.value,
+      title: finalTitle,
       listingSource: form.listingSource || "直租",
       remainingLeaseMonths: form.listingSource === "转租" ? Number(form.remainingLeaseMonths) || 0 : 0,
       transferDeposit: form.listingSource === "转租" ? transferDepositAmount.value : 0,
-      community: form.community?.trim(),
+      community: finalCommunity,
       location: form.location?.trim(),
       buildingNo: buildingNo.value.trim(),
       unitNo: unitNo.value.trim(),
@@ -1225,7 +1228,7 @@ const mediaUrl = resolveAssetUrl;
         ><view class="listing-source"><text>出租来源</text><view class="listing-source-options"><view :class="{ active: form.listingSource === '直租' }" @click="setListingSource('直租')"><text>{{ form.listingSource === '直租' ? '✓' : '' }}</text>直租</view><view :class="{ active: form.listingSource === '转租' }" @click="setListingSource('转租')"><text>{{ form.listingSource === '转租' ? '✓' : '' }}</text>转租</view></view></view
         ><view class="layout-guidance">{{ rentType === "整租" ? "填写整套户型、卫生间与阳台信息。" : "填写本次出租的房间配置，不再重复填写整套户型。" }}</view
         ><view class="picker-grid"
-          ><template v-if="rentType === '整租'"><view class="whole-rental-options"><view class="whole-option-row"><text>房间</text><view><button v-for="count in [1, 2, 3]" :key="count" :class="{ active: roomCount === String(count) }" @click="roomCount = String(count); syncLayout()">{{ count }}</button><button :class="{ active: roomCount === 'custom' }" @click="roomCount = 'custom'; syncLayout()">手动</button><input v-if="roomCount === 'custom'" v-model.number="customRoomCount" type="number" maxlength="2" placeholder="数" @input="syncLayout" /></view></view><view class="whole-option-row"><text>客厅</text><view><button v-for="count in [0, 1, 2, 3]" :key="count" :class="{ active: hallCount === String(count) }" @click="hallCount = String(count); syncLayout()">{{ count === 0 ? '-' : count }}</button></view></view><view class="whole-option-row"><text>厨房</text><view><button v-for="item in [{ value: '1', label: '有' }, { value: '0', label: '无' }]" :key="item.value" :class="{ active: kitchenCount === item.value }" @click="kitchenCount = item.value; syncLayout()">{{ item.label }}</button></view></view><view class="whole-option-row"><text>卫生间</text><view><button v-for="count in [0, 1, 2, 3]" :key="count" :class="{ active: bathroomCount === String(count) }" @click="bathroomCount = String(count); syncLayout()">{{ count === 0 ? '-' : count }}</button></view></view><view class="whole-option-row"><text>阳台</text><view><button v-for="count in [0, 1, 2]" :key="count" :class="{ active: balcony === String(count) }" @click="balcony = String(count); syncLayout()">{{ count === 0 ? '无' : count }}</button></view></view></view></template
+          ><template v-if="rentType === '整租'"><view class="whole-rental-options"><view class="whole-option-row"><text>房间</text><view><button v-for="count in [1, 2, 3]" :key="count" :class="{ active: roomCount === String(count) }" @click="roomCount = String(count); syncLayout()">{{ count }}</button><button :class="{ active: roomCount === 'custom' }" @click="roomCount = 'custom'; syncLayout()">手动</button><input v-if="roomCount === 'custom'" v-model.number="customRoomCount" type="number" maxlength="2" placeholder="数" @input="syncLayout" /></view></view><view class="whole-option-row"><text>客厅</text><view><button v-for="count in [0, 1, 2, 3]" :key="count" :class="{ active: hallCount === String(count) }" @click="hallCount = String(count); syncLayout()">{{ count === 0 ? '-' : count }}</button></view></view><view class="whole-option-row"><text>厨房</text><view><button v-for="item in [{ value: '1', label: '有' }, { value: '0', label: '无' }]" :key="item.value" :class="{ active: kitchenCount === item.value }" @click="kitchenCount = item.value; syncLayout()">{{ item.label }}</button></view></view><view class="whole-option-row"><text>卫生间</text><view><button v-for="count in [1, 2, 3]" :key="count" :class="{ active: bathroomCount === String(count) }" @click="bathroomCount = String(count); syncLayout()">{{ count }}</button></view></view><view class="whole-option-row"><text>阳台</text><view><button v-for="count in [0, 1, 2]" :key="count" :class="{ active: balcony === String(count) }" @click="balcony = String(count); syncLayout()">{{ count === 0 ? '无' : count }}</button></view></view></view></template
           ><template v-else><view class="shared-rental-options"
             ><view class="shared-room-type"
               ><small>本次出租 · 房型</small

@@ -665,8 +665,25 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 	var p domain.Property
-	if err := decodeJSON(w, r, &p); err != nil || p.ID == "" || strings.TrimSpace(p.Title) == "" || strings.TrimSpace(p.Community) == "" || p.RentMonthly < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "id, title, community and a non-negative rentMonthly are required"})
+	if err := decodeJSON(w, r, &p); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid property payload"})
+		return
+	}
+	missing := make([]string, 0, 4)
+	if strings.TrimSpace(p.ID) == "" {
+		missing = append(missing, "id")
+	}
+	if strings.TrimSpace(p.Title) == "" {
+		missing = append(missing, "title")
+	}
+	if strings.TrimSpace(p.Community) == "" {
+		missing = append(missing, "community")
+	}
+	if p.RentMonthly < 0 {
+		missing = append(missing, "non-negative rentMonthly")
+	}
+	if len(missing) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "missing or invalid: " + strings.Join(missing, ", ")})
 		return
 	}
 	if s.store == nil {
