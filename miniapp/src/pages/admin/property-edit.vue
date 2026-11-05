@@ -281,11 +281,13 @@ const runLocationSearch = async () => {
   }
   locationSearching.value = true;
   try {
-    locationResults.value = await searchLocations(
+    const results = await searchLocations(
       keyword,
       channelLatitude.value,
       channelLongitude.value,
     );
+    // 商户常把小区名写在括号中；录入房源时只保留可直接作为小区的地点。
+    locationResults.value = results.filter((item) => !/[()（）]/.test(item.title || ""));
   } catch (error) {
     locationResults.value = [];
     uni.showToast({
@@ -462,6 +464,33 @@ const chooseFloor = (floor: string) => {
 const chooseHousehold = (household: string) => {
   roomNo.value = selectedFloor.value && household ? `${selectedFloor.value}${household}` : "";
   structureStep.value = "";
+};
+const structureStepIndex = (step: StructureStep) =>
+  (["building", "unit", "floor", "room"] as StructureStep[]).indexOf(step);
+const canReturnToStructureStep = (step: StructureStep) => {
+  if (step === "building") return true;
+  if (step === "unit") return Boolean(buildingNo.value);
+  if (step === "floor") return Boolean(buildingNo.value && unitNo.value);
+  return Boolean(buildingNo.value && unitNo.value && selectedFloor.value);
+};
+const returnToStructureStep = (step: StructureStep) => {
+  if (!step || !canReturnToStructureStep(step)) return;
+  if (step === "building") {
+    unitNo.value = "";
+    selectedFloor.value = "";
+    roomNo.value = "";
+  } else if (step === "unit") {
+    selectedFloor.value = "";
+    roomNo.value = "";
+  } else if (step === "floor") {
+    roomNo.value = "";
+  }
+  structureStep.value = step;
+};
+const returnToPreviousStructureStep = () => {
+  const currentIndex = structureStepIndex(structureStep.value);
+  if (currentIndex <= 0) return;
+  returnToStructureStep((["building", "unit", "floor", "room"] as StructureStep[])[currentIndex - 1]);
 };
 const openStructurePicker = () => {
   if (!form.community?.trim()) return;
@@ -1281,8 +1310,8 @@ const mediaUrl = resolveAssetUrl;
       ><view v-if="structureStep" class="structure-modal" @click="structureStep = ''"
         ><view class="structure-sheet" @click.stop
           ><view class="structure-sheet-head"
-            ><view><strong>{{ structureStep === "building" ? "选择楼栋" : structureStep === "unit" ? "选择单元" : structureStep === "floor" ? "选择楼层" : "选择房号" }}</strong><small>{{ form.community }}</small></view><text @click="structureStep = ''">×</text></view
-          ><view class="structure-progress"><text :class="{ active: structureStep === 'building' }">楼栋</text><text :class="{ active: structureStep === 'unit' }">单元</text><text :class="{ active: structureStep === 'floor' }">楼层</text><text :class="{ active: structureStep === 'room' }">房号</text></view
+            ><view><strong>{{ structureStep === "building" ? "选择楼栋" : structureStep === "unit" ? "选择单元" : structureStep === "floor" ? "选择楼层" : "选择房号" }}</strong><small>{{ form.community }}</small></view><view class="structure-head-actions"><text v-if="structureStep !== 'building'" class="structure-back" @click="returnToPreviousStructureStep">‹ 返回</text><text class="structure-close" @click="structureStep = ''">×</text></view></view
+          ><view class="structure-progress"><text :class="{ active: structureStep === 'building', available: canReturnToStructureStep('building') }" @click="returnToStructureStep('building')">楼栋</text><text :class="{ active: structureStep === 'unit', available: canReturnToStructureStep('unit') }" @click="returnToStructureStep('unit')">单元</text><text :class="{ active: structureStep === 'floor', available: canReturnToStructureStep('floor') }" @click="returnToStructureStep('floor')">楼层</text><text :class="{ active: structureStep === 'room', available: canReturnToStructureStep('room') }" @click="returnToStructureStep('room')">房号</text></view
           ><scroll-view scroll-y class="structure-grid-scroll"
             ><view v-if="structureStep === 'building'" class="structure-grid"><view v-for="rule in buildingOptions" :key="rule.id" class="structure-grid-item" :class="{ active: buildingNo === rule.buildingNo }" @click="selectBuildingRule(rule)">{{ rule.buildingNo }}</view></view
             ><view v-else-if="structureStep === 'unit'" class="structure-grid"><view v-for="unit in unitOptions" :key="unit" class="structure-grid-item" :class="{ active: unitNo === unit }" @click="chooseUnit(unit)">{{ unit }} 单元</view></view
@@ -1494,9 +1523,12 @@ const mediaUrl = resolveAssetUrl;
 .structure-sheet-head strong,.structure-sheet-head small { display:block; }
 .structure-sheet-head strong { color:#173f3c;font-size:32rpx; }
 .structure-sheet-head small { margin-top:7rpx;color:#81948f;font-size:20rpx; }
-.structure-sheet-head > text { width:48rpx;height:48rpx;line-height:44rpx;text-align:center;border-radius:50%;background:#f0f5f2;color:#527069;font-size:38rpx; }
+.structure-head-actions { display:flex;align-items:center;gap:12rpx; }
+.structure-back { padding:0 16rpx;border-radius:24rpx;background:#edf6f3;color:#0e8177;font-size:21rpx;font-weight:700;line-height:48rpx; }
+.structure-close { width:48rpx;height:48rpx;line-height:44rpx;text-align:center;border-radius:50%;background:#f0f5f2;color:#527069;font-size:38rpx; }
 .structure-progress { display:grid;grid-template-columns:repeat(4,1fr);gap:8rpx;margin:0 30rpx;padding:12rpx;border-radius:14rpx;background:#f3f7f5; }
 .structure-progress text { text-align:center;color:#91a59f;font-size:20rpx; }
+.structure-progress text.available { color:#55766f;text-decoration:underline; }
 .structure-progress text.active { color:#0e8177;font-weight:800; }
 .structure-grid-scroll { height:500rpx;padding:24rpx 30rpx;box-sizing:border-box; }
 .structure-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16rpx; }
