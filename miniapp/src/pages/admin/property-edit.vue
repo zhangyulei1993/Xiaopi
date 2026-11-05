@@ -170,10 +170,11 @@ const requiredReady = computed(() =>
     form.location?.trim() &&
     form.layout?.trim() &&
     geoReady.value &&
-    Number(form.rentMonthly) > 0,
+    Number(form.rentMonthly) > 0 &&
+    Boolean(form.depositPayment?.trim()),
   ),
 );
-const sectionSteps = ["位置租金", "户型方式", "配套描述", "房源素材"];
+const sectionSteps = ["位置门牌", "户型出租", "环境配套", "租金入住", "素材发布"];
 const goToSection = (index: number) => {
   activeSection.value = Math.max(0, Math.min(sectionSteps.length - 1, index));
   uni.pageScrollTo({ scrollTop: 0, duration: 220 });
@@ -362,14 +363,13 @@ const orderedImages = computed(() => {
 });
 const sectionReady = computed(() => [
   Boolean(
-    form.title?.trim() &&
     form.community?.trim() &&
     form.location?.trim() &&
-    Number(form.rentMonthly) > 0 &&
     geoReady.value,
   ),
   Boolean(form.layout?.trim()),
   amenities.value.length > 0,
+  Boolean(Number(form.rentMonthly) > 0 && form.depositPayment?.trim()),
   mediaCount.value > 0,
 ]);
 const completionCount = computed(
@@ -957,7 +957,7 @@ const mediaUrl = resolveAssetUrl;
       ><view
         ><text>{{ id ? "完善房源信息" : "开始录入房源" }}</text></view
       ><view class="completion"
-        ><strong>{{ completionCount }}/4</strong><small>已完成</small></view
+        ><strong>{{ completionCount }}/5</strong><small>已完成</small></view
       ></view
     ><scroll-view class="step-nav" scroll-x :show-scrollbar="false"
       ><view class="step-track"
@@ -1066,32 +1066,7 @@ const mediaUrl = resolveAssetUrl;
               ></view
             ><text class="map-hint">轻触地图调整位置</text></view
           ></view
-        ><view class="rent-row"
-          ><view class="field"
-            ><text>月租 *</text
-            ><view class="rent-input"
-              ><input
-                v-model.number="form.rentMonthly"
-                type="number"
-                placeholder="0"
-              /><small>元/月</small></view
-            ></view
-          ><view class="field"
-            ><text>费用说明</text
-            ><input
-              v-model.trim="form.feeText"
-              maxlength="30"
-              placeholder="押一付一" /></view></view
-        ><view class="rent-row detail-row"
-          ><view class="field"
-            ><text>可入住日期</text
-            ><input v-model.trim="form.availableDate" maxlength="32" placeholder="如：随时 / 12月10日" /></view
-          ><view class="field"
-            ><text>押付方式</text
-            ><input v-model.trim="form.depositPayment" maxlength="64" placeholder="如：押一付一" /></view></view
-        ><view class="field"
-          ><text>水电与杂费</text
-          ><input v-model.trim="form.utilitiesText" maxlength="64" placeholder="如：民水民电，物业费另计" /></view></view
+        ></view
       ><view v-show="activeSection === 1" class="section-card"
         ><view class="section-head"
           ><text>02</text
@@ -1188,6 +1163,30 @@ const mediaUrl = resolveAssetUrl;
       ><view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
           ><text>04</text
+          ><view><strong>租金与入住</strong><small>把价格、付款与入住条件集中填写</small></view
+        ></view
+        ><view class="rent-row"
+          ><view class="field"
+            ><text>月租 *</text
+            ><view class="rent-input"><input v-model.number="form.rentMonthly" type="number" placeholder="如：2600" /><small>元/月</small></view></view
+          ><view class="field"
+            ><text>押付方式 *</text
+            ><input v-model.trim="form.depositPayment" maxlength="64" placeholder="如：押一付一" /></view></view
+        ><view class="rent-row detail-row"
+          ><view class="field"
+            ><text>可入住日期</text
+            ><input v-model.trim="form.availableDate" maxlength="32" placeholder="如：随时 / 12月10日" /></view
+          ><view class="field"
+            ><text>费用说明</text
+            ><input v-model.trim="form.feeText" maxlength="30" placeholder="如：直租无中介费" /></view></view
+        ><view class="field"
+          ><text>水电与杂费</text
+          ><input v-model.trim="form.utilitiesText" maxlength="64" placeholder="如：民水民电，物业费另计" /></view
+        ><view class="rent-summary"><text>对外展示</text><strong>¥ {{ Number(form.rentMonthly) || 0 }} <small>/月</small></strong><span>{{ form.depositPayment || "待填写押付方式" }}</span></view>
+        ></view
+      ><view v-show="activeSection === 4" class="section-card"
+        ><view class="section-head"
+          ><text>05</text
           ><view
             ><strong>图片与视频</strong></view
           ></view
@@ -1278,15 +1277,15 @@ const mediaUrl = resolveAssetUrl;
             ><strong>＋ 视频</strong><small>{{ videoCount }}/1</small></view
           ></view
         ></view
-        ><view v-if="activeSection === 3" class="media-limit-hint"
+        ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
-      ><view v-if="activeSection === 3" class="title-composer final-title-composer"
+      ><view v-if="activeSection === 4" class="title-composer final-title-composer"
         ><view><strong>发布标题</strong><small>选择要展示的信息，确认发布前仍可返回修改</small></view
         ><checkbox-group @change="titleParts = $event.detail.value"><label v-for="option in titlePartOptions" :key="option.key" :class="{ active: titleParts.includes(option.key) }"><checkbox :value="option.key" :checked="titleParts.includes(option.key)" color="#0e8177" />{{ option.label }}</label></checkbox-group>
         ><view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle }}</strong></view></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
-        ><view v-if="activeSection < 3" class="step-actions"
+        ><view v-if="activeSection < 4" class="step-actions"
           ><button
             v-if="activeSection > 0"
             class="back-button"
@@ -1806,6 +1805,11 @@ const mediaUrl = resolveAssetUrl;
   color: #8aa7a0;
   font-size: 21rpx;
 }
+.rent-summary { display:flex;align-items:baseline;gap:12rpx;margin-top:18rpx;padding:20rpx 22rpx;border-radius:16rpx;background:#f8f3ea; }
+.rent-summary text { color:#8a7b62;font-size:20rpx; }
+.rent-summary strong { color:#d95c38;font-size:38rpx;line-height:1; }
+.rent-summary strong small { margin-left:4rpx;font-size:21rpx;font-weight:600; }
+.rent-summary span { color:#667d76;font-size:21rpx; }
 .picker-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
