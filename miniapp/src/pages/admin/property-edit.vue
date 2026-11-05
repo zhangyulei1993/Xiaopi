@@ -59,6 +59,8 @@ const form = reactive<Partial<Property>>({
   title: "",
   community: "",
   location: "",
+  buildingNo: "",
+  roomNo: "",
   latitude: 0,
   longitude: 0,
   layout: "",
@@ -358,11 +360,6 @@ const generatedTitle = computed(() => {
   const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
   return parts.join(" · ") || community;
 });
-const locationWithUnit = computed(() => {
-  const location = String(form.location || "").trim();
-  const unit = [buildingNo.value.trim(), roomNo.value.trim()].filter(Boolean).join(" ");
-  return [location, unit].filter(Boolean).join(" · ");
-});
 watch([() => form.community, roomCount, hallCount, rentType, buildingNo, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
@@ -403,6 +400,8 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
+    buildingNo.value = property.buildingNo || "";
+    roomNo.value = property.roomNo || "";
     locationQuery.value = property.community || property.location || "";
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
@@ -690,7 +689,9 @@ const save = async (openPreview = false) => {
       ...form,
       title: generatedTitle.value,
       community: form.community?.trim(),
-      location: locationWithUnit.value,
+      location: form.location?.trim(),
+      buildingNo: buildingNo.value.trim(),
+      roomNo: roomNo.value.trim(),
       description: `配套设施：${amenities.value.join("、")}\n${details}`.trim(),
     };
     const property = id.value

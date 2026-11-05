@@ -23,6 +23,8 @@ type Property struct {
 	Title            string          `json:"title"`
 	Community        string          `json:"community"`
 	Location         string          `json:"location"`
+	BuildingNo       string          `json:"buildingNo"`
+	RoomNo           string          `json:"roomNo"`
 	Latitude         float64         `json:"latitude"`
 	Longitude        float64         `json:"longitude"`
 	Layout           string          `json:"layout"`
