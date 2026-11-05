@@ -197,6 +197,7 @@ const channelRadiusKm = computed(
 const channelTitles = computed(() =>
   channels.value.map((channel) => channel.title),
 );
+const isLiveEditing = computed(() => ["published", "available"].includes(currentStatus.value));
 const requiredReady = computed(() =>
   Boolean(
     (generatedTitle.value.trim() || String(form.title || "").trim() || String(form.community || "").trim()) &&
@@ -1041,9 +1042,10 @@ const save = async (mode: SaveMode = "draft") => {
     } else {
       currentStatus.value = property.status;
     }
+    const savedAsLive = ["published", "available"].includes(property.status);
     uni.showModal({
-      title: mode === "publish" ? "房源已发布" : mode === "preview" ? "草稿已保存" : "草稿已保存",
-      content: mode === "publish" ? "该房源已上架为可租状态。" : mode === "preview" ? "现在以用户视角核对房源详情。" : "可随时返回继续编辑。",
+      title: mode === "publish" ? "房源已发布" : mode === "preview" ? (savedAsLive ? "修改已保存" : "草稿已保存") : (savedAsLive ? "修改已保存" : "草稿已保存"),
+      content: mode === "publish" ? "该房源已上架为可租状态。" : mode === "preview" ? (savedAsLive ? "现在查看用户可见的公开效果。" : "现在以草稿预览核对房源详情。") : (savedAsLive ? "房源继续保持可租状态。" : "可随时返回继续编辑。"),
       showCancel: false,
       success: () => {
         if (mode === "preview" || mode === "publish") {
@@ -1437,20 +1439,10 @@ const mediaUrl = resolveAssetUrl;
           >
             下一步 · {{ sectionSteps[activeSection + 1] }}
           </button></view
-        ><view v-else class="save-actions three-actions"
-          ><button :disabled="saving" @click="save()">保存草稿</button
-          ><button :disabled="saving || !requiredReady" @click="save('preview')">预览房源</button
-          ><button
-            class="primary"
-            :disabled="saving || !requiredReady"
-            @click="confirmPublish"
-          >
-            {{
-              saving
-                ? "处理中..."
-                : "直接发布"
-            }}
-          </button></view
+        ><view v-else class="save-actions" :class="{ 'three-actions': !isLiveEditing }"
+          ><template v-if="isLiveEditing"><button :disabled="saving" @click="save()">保存修改</button><button class="primary" :disabled="saving || !requiredReady" @click="save('preview')">查看公开效果</button></template
+          ><template v-else><button :disabled="saving" @click="save()">保存草稿</button><button :disabled="saving || !requiredReady" @click="save('preview')">预览草稿</button><button class="primary" :disabled="saving || !requiredReady" @click="confirmPublish">{{ saving ? "处理中..." : "直接发布" }}</button></template
+          ></view
         ></view
       ><view v-if="structureStep" class="structure-modal" @click="structureStep = ''"
         ><view class="structure-sheet" @click.stop

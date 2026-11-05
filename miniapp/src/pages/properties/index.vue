@@ -191,7 +191,8 @@ const coverUrl = (item: Property) => {
 };
 const serviceLabels = (item: Property) => {
   const source = String(item.feeText || "");
-  return ["直租", "无中介费", "可短租", "押一付一", "拎包入住", "民水民电"]
+  const listingSource = item.listingSource === "转租" ? "转租" : "直租";
+  return [listingSource, "无中介费", "可短租", "押一付一", "拎包入住", "民水民电"]
     .filter((label) => source.includes(label))
     .slice(0, 2);
 };

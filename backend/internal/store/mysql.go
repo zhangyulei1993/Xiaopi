@@ -435,6 +435,11 @@ func (s *MySQL) UpdatePropertyStatus(ctx context.Context, propertyID, nextStatus
 	if err := tx.QueryRowContext(ctx, `SELECT status FROM properties WHERE id=? FOR UPDATE`, propertyID).Scan(&current); err != nil {
 		return err
 	}
+	// The edit page can be reopened after a network retry. Repeating the target
+	// status is intentionally idempotent rather than an operator-facing 409.
+	if current == nextStatus {
+		return tx.Commit()
+	}
 	if !domain.CanTransitionPropertyStatus(current, nextStatus) {
 		return domain.ErrInvalidPropertyStatusTransition
 	}
