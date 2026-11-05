@@ -27,6 +27,11 @@ type Config struct {
 	TokenTTL      time.Duration
 	TencentMapKey string
 	TencentMapURL string
+	COSBucket     string
+	COSRegion     string
+	COSSecretID   string
+	COSSecretKey  string
+	COSPublicBase string
 }
 
 func ConfigFromEnv() Config {
@@ -49,7 +54,16 @@ func ConfigFromEnv() Config {
 		TokenTTL:      ttl,
 		TencentMapKey: strings.TrimSpace(os.Getenv("TENCENT_MAP_KEY")),
 		TencentMapURL: strings.TrimRight(mapURL, "/"),
+		COSBucket:     strings.TrimSpace(os.Getenv("COS_BUCKET")),
+		COSRegion:     strings.TrimSpace(os.Getenv("COS_REGION")),
+		COSSecretID:   strings.TrimSpace(os.Getenv("COS_SECRET_ID")),
+		COSSecretKey:  strings.TrimSpace(os.Getenv("COS_SECRET_KEY")),
+		COSPublicBase: strings.TrimRight(strings.TrimSpace(os.Getenv("COS_PUBLIC_BASE")), "/"),
 	}
+}
+
+func (c Config) cosConfigured() bool {
+	return c.COSBucket != "" && c.COSRegion != "" && c.COSSecretID != "" && c.COSSecretKey != "" && c.COSPublicBase != ""
 }
 
 func (c Config) authConfigured() bool {

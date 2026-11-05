@@ -28,6 +28,11 @@ services:
       WECHAT_MOCK_ENABLED: ${WECHAT_MOCK_ENABLED:-false}
       CONTACT_PHONE: ${CONTACT_PHONE:-}
       TENCENT_MAP_KEY: ${TENCENT_MAP_KEY:?TENCENT_MAP_KEY is required}
+      COS_BUCKET: ${COS_BUCKET:-}
+      COS_REGION: ${COS_REGION:-}
+      COS_SECRET_ID: ${COS_SECRET_ID:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_PUBLIC_BASE: ${COS_PUBLIC_BASE:-}
     volumes:
       - ../backend:/workspace/backend
     depends_on:

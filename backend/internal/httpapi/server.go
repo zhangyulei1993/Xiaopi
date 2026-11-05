@@ -781,6 +781,7 @@ func mediaStorageDir() string {
 }
 
 func (s *Server) removeStoredUpload(url string) {
+	s.deleteCOSObject(context.Background(), url)
 	const prefix = "/uploads/"
 	if !strings.HasPrefix(url, prefix) {
 		return
@@ -858,24 +859,35 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to process file")
 		return
 	}
-	dir := mediaStorageDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
-		return
-	}
 	name := fmt.Sprintf("%d-%s", time.Now().UnixNano(), filepath.Base(header.Filename))
-	path := filepath.Join(dir, name)
-	out, err := os.Create(path)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
-		return
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, file); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
-		return
-	}
 	mediaPath := "/uploads/" + name
+	localPath := ""
+	if s.config.cosConfigured() {
+		objectKey := "media/" + time.Now().Format("2006/01/02/") + name
+		url, uploadErr := s.putCOSObject(r.Context(), objectKey, contentType, file)
+		if uploadErr != nil {
+			writeError(w, http.StatusBadGateway, "上传 COS 失败，请稍后重试")
+			return
+		}
+		mediaPath = url
+	} else {
+		dir := mediaStorageDir()
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
+			return
+		}
+		localPath = filepath.Join(dir, name)
+		out, createErr := os.Create(localPath)
+		if createErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": createErr.Error()})
+			return
+		}
+		defer out.Close()
+		if _, copyErr := io.Copy(out, file); copyErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": copyErr.Error()})
+			return
+		}
+	}
 	mediaID := ""
 	mediaType := ""
 	sortOrder := 0
@@ -884,7 +896,11 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		var idErr error
 		mediaID, idErr = newID()
 		if idErr != nil {
-			_ = os.Remove(path)
+			if localPath != "" {
+				_ = os.Remove(localPath)
+			} else {
+				s.removeStoredUpload(mediaPath)
+			}
 			writeError(w, http.StatusInternalServerError, "failed to create media id")
 			return
 		}
@@ -897,7 +913,11 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 			sortOrder = 0
 		}
 		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: sortOrder}); err != nil {
-			_ = os.Remove(path)
+			if localPath != "" {
+				_ = os.Remove(localPath)
+			} else {
+				s.removeStoredUpload(mediaPath)
+			}
 			writeError(w, http.StatusInternalServerError, "failed to save media")
 			return
 		}

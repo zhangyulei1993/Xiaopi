@@ -13,6 +13,13 @@ docker compose -f docker/docker-compose.yml up -d
 - MySQL：`127.0.0.1:13306`
 - Redis：`127.0.0.1:16379`
 
+### 房源媒体存储（生产）
+
+配置 `COS_BUCKET`、`COS_REGION`、`COS_SECRET_ID`、`COS_SECRET_KEY` 与
+`COS_PUBLIC_BASE` 后，新上传的房源图片和视频会直接存入腾讯云 COS；未配置时仍
+使用本地 `uploads` 目录，方便开发环境继续运行。生产密钥仅保存在
+`/opt/xiaopi/.env`，不要写入仓库或小程序端。
+
 ## 小程序
 
 ```bash
