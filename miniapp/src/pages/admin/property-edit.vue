@@ -87,7 +87,7 @@ const form = reactive<Partial<Property>>({
 const roomCount = ref("一室"),
   hallCount = ref("一厅"),
   rentType = ref("整租"),
-  roomType = ref("单间"),
+  roomType = ref("主卧"),
   toiletType = ref("独卫"),
   bayWindow = ref("带飘窗");
 const buildingNo = ref("");
@@ -95,7 +95,7 @@ const unitNo = ref("");
 const roomNo = ref("");
 const selectedFloor = ref("");
 const buildingRules = ref<BuildingRule[]>([]);
-type StructureStep = "building" | "unit" | "floor" | "room" | "";
+type StructureStep = "building" | "unit" | "room" | "";
 const structureStep = ref<StructureStep>("");
 const showStructureSetup = ref(false);
 const ruleSaving = ref(false);
@@ -103,7 +103,8 @@ const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, househ
 const titleParts = ref(["community", "unit", "layout", "rentType"]);
 const titlePartOptions = [
   { key: "community", label: "小区" },
-  { key: "unit", label: "栋室" },
+  { key: "unit", label: "门牌" },
+  { key: "floor", label: "楼层" },
   { key: "layout", label: "户型" },
   { key: "rentType", label: "整租/合租" },
   { key: "area", label: "面积" },
@@ -126,7 +127,7 @@ const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
 const rooms = ["一室", "两室", "三室", "四室", "五室及以上"],
   halls = ["一厅", "两厅", "三厅", "无厅"],
   rentTypes = ["整租", "合租"],
-  roomTypes = ["单间", "主卧", "次卧", "床位"],
+  roomTypes = ["主卧", "次卧", "单间", "床位"],
   toilets = ["独卫", "非独卫"],
   windows = ["带飘窗", "不带飘窗"];
 type FeaturedChannel = {
@@ -315,6 +316,7 @@ const applyLocationResult = (item: LocationSearchItem) => {
 		unitNo.value = "";
 		roomNo.value = "";
 		selectedFloor.value = "";
+		form.floorInfo = "";
 		showStructureSetup.value = false;
 	}
   void loadBuildingRules();
@@ -379,6 +381,7 @@ const generatedTitle = computed(() => {
   const values: Record<string, string> = {
     community,
     unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(" · "),
+    floor: selectedFloor.value ? `${selectedFloor.value}层` : "",
     layout: `${roomCount.value}${hallCount.value}`,
     rentType: rentType.value,
     area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
@@ -386,7 +389,7 @@ const generatedTitle = computed(() => {
   const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
   return parts.join(" · ") || community;
 });
-watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo, roomNo, () => form.areaSqm, titleParts], () => {
+watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
     : "";
@@ -416,20 +419,28 @@ const buildingOptions = computed(() => {
 const selectedBuildingRule = computed(() =>
   buildingOptions.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
 );
+const automaticFloorInfo = computed(() => {
+  const rule = selectedBuildingRule.value;
+  return selectedFloor.value && rule ? `${selectedFloor.value}/${rule.floorCount}层` : "";
+});
 const hasStructureRule = computed(() => Boolean(selectedBuildingRule.value));
 const unitOptions = computed(() => {
   const total = selectedBuildingRule.value?.unitCount || 0;
   return Array.from({ length: total }, (_, index) => String(index + 1));
 });
-const floorOptions = computed(() => {
+const roomOptions = computed(() => {
   const rule = selectedBuildingRule.value;
-  return rule
-    ? Array.from({ length: rule.floorCount }, (_, index) => String(rule.floorStart + index))
-    : [];
-});
-const householdOptions = computed(() => {
-  const total = selectedBuildingRule.value?.householdsPerFloor || 0;
-  return Array.from({ length: total }, (_, index) => String(index + 1).padStart(2, "0"));
+  if (!rule) return [];
+  const floors = Array.from(
+    { length: rule.floorCount },
+    (_, index) => String(rule.floorStart + rule.floorCount - index - 1),
+  );
+  return floors.flatMap((floor) =>
+    Array.from({ length: rule.householdsPerFloor }, (_, index) => {
+      const household = String(index + 1).padStart(2, "0");
+      return { floor, roomNo: `${floor}${household}` };
+    }),
+  );
 });
 const generatedRoomNo = computed(() => {
   return roomNo.value;
@@ -448,30 +459,28 @@ const selectBuildingRule = (rule: BuildingRule) => {
   unitNo.value = "";
   selectedFloor.value = "";
   roomNo.value = "";
+  form.floorInfo = "";
   structureStep.value = "unit";
 };
 const chooseUnit = (unit: string) => {
   unitNo.value = unit;
   selectedFloor.value = "";
   roomNo.value = "";
-  structureStep.value = "floor";
-};
-const chooseFloor = (floor: string) => {
-  selectedFloor.value = floor;
-  roomNo.value = "";
+  form.floorInfo = "";
   structureStep.value = "room";
 };
-const chooseHousehold = (household: string) => {
-  roomNo.value = selectedFloor.value && household ? `${selectedFloor.value}${household}` : "";
+const chooseRoom = (room: { floor: string; roomNo: string }) => {
+  selectedFloor.value = room.floor;
+  roomNo.value = room.roomNo;
+  form.floorInfo = automaticFloorInfo.value;
   structureStep.value = "";
 };
 const structureStepIndex = (step: StructureStep) =>
-  (["building", "unit", "floor", "room"] as StructureStep[]).indexOf(step);
+  (["building", "unit", "room"] as StructureStep[]).indexOf(step);
 const canReturnToStructureStep = (step: StructureStep) => {
   if (step === "building") return true;
   if (step === "unit") return Boolean(buildingNo.value);
-  if (step === "floor") return Boolean(buildingNo.value && unitNo.value);
-  return Boolean(buildingNo.value && unitNo.value && selectedFloor.value);
+  return Boolean(buildingNo.value && unitNo.value);
 };
 const returnToStructureStep = (step: StructureStep) => {
   if (!step || !canReturnToStructureStep(step)) return;
@@ -479,26 +488,24 @@ const returnToStructureStep = (step: StructureStep) => {
     unitNo.value = "";
     selectedFloor.value = "";
     roomNo.value = "";
+    form.floorInfo = "";
   } else if (step === "unit") {
+    roomNo.value = "";
     selectedFloor.value = "";
-    roomNo.value = "";
-  } else if (step === "floor") {
-    roomNo.value = "";
+    form.floorInfo = "";
   }
   structureStep.value = step;
 };
 const returnToPreviousStructureStep = () => {
   const currentIndex = structureStepIndex(structureStep.value);
   if (currentIndex <= 0) return;
-  returnToStructureStep((["building", "unit", "floor", "room"] as StructureStep[])[currentIndex - 1]);
+  returnToStructureStep((["building", "unit", "room"] as StructureStep[])[currentIndex - 1]);
 };
 const openStructurePicker = () => {
   if (!form.community?.trim()) return;
   structureStep.value = buildingNo.value
     ? unitNo.value
-      ? selectedFloor.value
-        ? "room"
-        : "floor"
+      ? "room"
       : "unit"
     : "building";
 };
@@ -529,11 +536,17 @@ const saveCurrentBuildingRule = async () => {
   }
 };
 const syncLayout = () => {
-  form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
+  const availableRoom = rentType.value === "合租" ? roomType.value : "整套";
+  form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${availableRoom} · ${toiletType.value} · ${bayWindow.value}`;
   form.rentType = rentType.value;
 };
 const pickLayoutValue = (values: string[], index: string | number) =>
   values[Number(index)] || values[0];
+const setRentType = (index: string | number) => {
+  rentType.value = pickLayoutValue(rentTypes, index);
+  if (rentType.value === "合租" && roomType.value === "整套") roomType.value = "主卧";
+  syncLayout();
+};
 const parseLayout = (value = "") => {
   const parts = value.split(" · ");
   if (parts.length === 5) {
@@ -1010,12 +1023,6 @@ const mediaUrl = resolveAssetUrl;
             v-model.trim="form.location"
             maxlength="60"
             placeholder="选择小区后自动回填，可补充门牌信息" /></view
-        ><view class="title-composer"
-          ><view><strong>标题组合</strong><small>勾选要展示在房源标题里的信息</small></view
-          ><checkbox-group @change="titleParts = $event.detail.value"><label v-for="option in titlePartOptions" :key="option.key" :class="{ active: titleParts.includes(option.key) }"><checkbox :value="option.key" :checked="titleParts.includes(option.key)" color="#0e8177" />{{ option.label }}</label></checkbox-group></view
-        ><view class="field auto-title"
-          ><text>房源标题预览</text
-          ><strong>{{ generatedTitle }}</strong><small>保存时按以上组合生成，后续户型信息变化会同步更新</small></view
         ><view class="channel-scope"
           ><text>关联范围</text
           ><picker
@@ -1089,8 +1096,12 @@ const mediaUrl = resolveAssetUrl;
         ><view class="section-head"
           ><text>02</text
           ><view
-            ><strong>户型与方式</strong></view
+            ><strong>出租方式与户型</strong></view
           ></view
+        ><view class="rent-mode-card"
+          ><view><strong>出租方式</strong><small>先确定发布整套还是单个房间</small></view
+          ><picker :range="rentTypes" @change="setRentType($event.detail.value)"><view class="rent-mode-choice">{{ rentType }}<text>切换 ›</text></view></picker></view
+        ><view class="layout-guidance">{{ rentType === "整租" ? "整租：填写整套房源的户型信息。" : "合租：先填写整套户型，再选择本次出租的房间。" }}</view
         ><view class="picker-grid"
           ><picker
             :range="rooms"
@@ -1106,19 +1117,12 @@ const mediaUrl = resolveAssetUrl;
               ><strong>{{ hallCount }}</strong
               ><small>客厅</small></view
             ></picker
-          ><picker
-            :range="rentTypes"
-            @change="rentType = pickLayoutValue(rentTypes, $event.detail.value); syncLayout()"
-            ><view class="picker-item"
-              ><strong>{{ rentType }}</strong
-              ><small>方式</small></view
-            ></picker
-          ><picker
+          ><picker v-if="rentType === '合租'"
             :range="roomTypes"
             @change="roomType = pickLayoutValue(roomTypes, $event.detail.value); syncLayout()"
             ><view class="picker-item"
               ><strong>{{ roomType }}</strong
-              ><small>房间</small></view
+              ><small>本次出租</small></view
             ></picker
           ><picker
             :range="toilets"
@@ -1139,7 +1143,7 @@ const mediaUrl = resolveAssetUrl;
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
         ><view class="detail-grid"
           ><view class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
-          ><view class="field"><text>楼层</text><input v-model.trim="form.floorInfo" maxlength="64" placeholder="如：8/26层" /></view
+          ><view class="field auto-floor"><text>楼层</text><strong>{{ automaticFloorInfo || form.floorInfo || "选择门牌后自动生成" }}</strong></view
           ><view class="field"><text>朝向</text><input v-model.trim="form.orientation" maxlength="32" placeholder="如：南" /></view
           ><view class="field"><text>电梯</text><input v-model.trim="form.elevator" maxlength="32" placeholder="如：有电梯" /></view
           ><view class="field metro-field"><text>步行至地铁（分钟）</text><input v-model.number="form.metroMinutes" type="number" placeholder="如：8" /></view></view
@@ -1276,6 +1280,10 @@ const mediaUrl = resolveAssetUrl;
         ></view
         ><view v-if="activeSection === 3" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
+      ><view v-if="activeSection === 3" class="title-composer final-title-composer"
+        ><view><strong>发布标题</strong><small>选择要展示的信息，确认发布前仍可返回修改</small></view
+        ><checkbox-group @change="titleParts = $event.detail.value"><label v-for="option in titlePartOptions" :key="option.key" :class="{ active: titleParts.includes(option.key) }"><checkbox :value="option.key" :checked="titleParts.includes(option.key)" color="#0e8177" />{{ option.label }}</label></checkbox-group>
+        ><view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle }}</strong></view></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
         ><view v-if="activeSection < 3" class="step-actions"
@@ -1310,13 +1318,12 @@ const mediaUrl = resolveAssetUrl;
       ><view v-if="structureStep" class="structure-modal" @click="structureStep = ''"
         ><view class="structure-sheet" @click.stop
           ><view class="structure-sheet-head"
-            ><view><strong>{{ structureStep === "building" ? "选择楼栋" : structureStep === "unit" ? "选择单元" : structureStep === "floor" ? "选择楼层" : "选择房号" }}</strong><small>{{ form.community }}</small></view><view class="structure-head-actions"><text v-if="structureStep !== 'building'" class="structure-back" @click="returnToPreviousStructureStep">‹ 返回</text><text class="structure-close" @click="structureStep = ''">×</text></view></view
-          ><view class="structure-progress"><text :class="{ active: structureStep === 'building', available: canReturnToStructureStep('building') }" @click="returnToStructureStep('building')">楼栋</text><text :class="{ active: structureStep === 'unit', available: canReturnToStructureStep('unit') }" @click="returnToStructureStep('unit')">单元</text><text :class="{ active: structureStep === 'floor', available: canReturnToStructureStep('floor') }" @click="returnToStructureStep('floor')">楼层</text><text :class="{ active: structureStep === 'room', available: canReturnToStructureStep('room') }" @click="returnToStructureStep('room')">房号</text></view
+            ><view><strong>{{ structureStep === "building" ? "选择楼栋" : structureStep === "unit" ? "选择单元" : "选择房号" }}</strong><small>{{ form.community }}</small></view><view class="structure-head-actions"><text v-if="structureStep !== 'building'" class="structure-back" @click="returnToPreviousStructureStep">‹ 返回</text><text class="structure-close" @click="structureStep = ''">×</text></view></view
+          ><view class="structure-progress structure-progress-three"><text :class="{ active: structureStep === 'building', available: canReturnToStructureStep('building') }" @click="returnToStructureStep('building')">楼栋</text><text :class="{ active: structureStep === 'unit', available: canReturnToStructureStep('unit') }" @click="returnToStructureStep('unit')">单元</text><text :class="{ active: structureStep === 'room', available: canReturnToStructureStep('room') }" @click="returnToStructureStep('room')">房号</text></view
           ><scroll-view scroll-y class="structure-grid-scroll"
             ><view v-if="structureStep === 'building'" class="structure-grid"><view v-for="rule in buildingOptions" :key="rule.id" class="structure-grid-item" :class="{ active: buildingNo === rule.buildingNo }" @click="selectBuildingRule(rule)">{{ rule.buildingNo }}</view></view
             ><view v-else-if="structureStep === 'unit'" class="structure-grid"><view v-for="unit in unitOptions" :key="unit" class="structure-grid-item" :class="{ active: unitNo === unit }" @click="chooseUnit(unit)">{{ unit }} 单元</view></view
-            ><view v-else-if="structureStep === 'floor'" class="structure-grid"><view v-for="floor in floorOptions" :key="floor" class="structure-grid-item" :class="{ active: selectedFloor === floor }" @click="chooseFloor(floor)">{{ floor }} 层</view></view
-            ><view v-else class="structure-grid"><view v-for="household in householdOptions" :key="household" class="structure-grid-item" :class="{ active: roomNo === `${selectedFloor}${household}` }" @click="chooseHousehold(household)">{{ selectedFloor }}{{ household }}</view></view></scroll-view
+            ><view v-else class="structure-grid"><view v-for="room in roomOptions" :key="room.roomNo" class="structure-grid-item" :class="{ active: roomNo === room.roomNo }" @click="chooseRoom(room)">{{ room.roomNo }}</view></view></scroll-view
           ><view class="structure-sheet-footer"><text>不填门牌也可以继续录入</text><button @click="structureStep = ''">暂不选择</button></view
         ></view
       ></view
@@ -1506,6 +1513,17 @@ const mediaUrl = resolveAssetUrl;
   color: #7d9992;
   font-size: 20rpx;
 }
+.final-title-composer { margin-top:18rpx; }
+.final-title-composer .auto-title { margin-top:18rpx;padding:18rpx;border-radius:14rpx; }
+.final-title-composer .auto-title text { display:block;margin-bottom:8rpx;color:#6d8e89;font-size:20rpx;font-weight:600; }
+.rent-mode-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;padding:22rpx;border:1rpx solid #cce4dc;border-radius:16rpx;background:#eff8f4; }
+.rent-mode-card strong,.rent-mode-card small { display:block; }
+.rent-mode-card strong { color:#173f3c;font-size:25rpx; }
+.rent-mode-card small { margin-top:6rpx;color:#78938e;font-size:19rpx; }
+.rent-mode-choice { display:flex;align-items:center;gap:10rpx;padding:12rpx 14rpx;border-radius:12rpx;background:#0e8177;color:#fff;font-size:24rpx;font-weight:700; }
+.rent-mode-choice text { color:#d8f3ec;font-size:19rpx; }
+.layout-guidance { margin:14rpx 2rpx 18rpx;color:#76918b;font-size:20rpx;line-height:1.5; }
+.auto-floor strong { display:block;color:#315f5a;font-size:26rpx;line-height:1.4; }
 .rent-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1527,6 +1545,7 @@ const mediaUrl = resolveAssetUrl;
 .structure-back { padding:0 16rpx;border-radius:24rpx;background:#edf6f3;color:#0e8177;font-size:21rpx;font-weight:700;line-height:48rpx; }
 .structure-close { width:48rpx;height:48rpx;line-height:44rpx;text-align:center;border-radius:50%;background:#f0f5f2;color:#527069;font-size:38rpx; }
 .structure-progress { display:grid;grid-template-columns:repeat(4,1fr);gap:8rpx;margin:0 30rpx;padding:12rpx;border-radius:14rpx;background:#f3f7f5; }
+.structure-progress-three { grid-template-columns:repeat(3,1fr); }
 .structure-progress text { text-align:center;color:#91a59f;font-size:20rpx; }
 .structure-progress text.available { color:#55766f;text-decoration:underline; }
 .structure-progress text.active { color:#0e8177;font-weight:800; }
