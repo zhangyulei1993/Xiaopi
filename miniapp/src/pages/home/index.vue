@@ -57,9 +57,12 @@ const coverUrl = (item?: Property) => {
 const serviceLabels = (item: Property) => {
   const source = String(item.feeText || "");
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
-  return [listingSource, "无中介费", "可短租", "押一付一", "拎包入住", "民水民电"]
-    .filter((label, index) => index === 0 || source.includes(label))
-    .slice(0, 2);
+  const feeLabel = source.includes("无中介费")
+    ? "无中介费"
+    : source.includes("有中介费")
+      ? "有中介费"
+      : "";
+  return [listingSource, feeLabel].filter(Boolean);
 };
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
 const doorplate = (item: Property) => [
@@ -179,15 +182,15 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .recommend-head{margin:50rpx 32rpx 24rpx}
 .recommend-head strong{font-size:38rpx}
 .property-list{padding:0 32rpx}
-.listing{gap:16rpx;margin-bottom:18rpx;padding:12rpx;border-radius:20rpx}
-.listing-image{width:278rpx;height:196rpx}
+.listing{gap:18rpx;margin-bottom:18rpx;padding:12rpx;border:1rpx solid #eee6dc;border-radius:20rpx;background:#fffdf9}
+.listing-image{width:244rpx;height:200rpx;border-radius:14rpx}
 .listing-info strong{display:-webkit-box;overflow:hidden;font-size:28rpx;line-height:1.35;text-overflow:ellipsis;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.listing{height:220rpx;box-sizing:border-box}
-.listing-image{width:240rpx;height:196rpx}
-.listing-info{display:flex;height:196rpx;flex-direction:column;box-sizing:border-box}
+.listing{height:224rpx;box-sizing:border-box}
+.listing-image{width:244rpx;height:200rpx}
+.listing-info{display:flex;height:200rpx;flex-direction:column;box-sizing:border-box}
 .home-listing-title{display:-webkit-box;overflow:hidden;max-height:77rpx;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.32;letter-spacing:-.4rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.home-listing-address{overflow:hidden;max-height:31rpx;margin-top:6rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.home-listing-address{overflow:hidden;max-height:31rpx;margin-top:10rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .listing-info .tags{height:27rpx;margin-top:7rpx;white-space:nowrap}
-.listing-info .tags text{padding:5rpx 8rpx;font-size:17rpx}
+.listing-info .tags text{padding:5rpx 8rpx;font-size:18rpx}
 .listing-price{min-height:34rpx;margin-top:auto;font-size:34rpx}
 </style>
