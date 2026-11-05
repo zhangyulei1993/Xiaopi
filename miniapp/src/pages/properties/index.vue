@@ -197,6 +197,17 @@ const serviceLabels = (item: Property) => {
     .slice(0, 2);
 };
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
+const doorplate = (item: Property) => [
+  item.buildingNo,
+  item.unitNo && String(item.unitNo).includes("单元") ? item.unitNo : item.unitNo && `${item.unitNo}单元`,
+  item.roomNo && String(item.roomNo).includes("室") ? item.roomNo : item.roomNo && `${item.roomNo}室`,
+].filter(Boolean).join("");
+const listingTitle = (item: Property) => {
+  const raw = String(item.title || item.community || "").trim();
+  const layout = String(item.layout || "").split(" · ")[0].trim();
+  if (layout && compact(raw).includes(compact(layout)) && item.community) return `${item.community}${doorplate(item)}`;
+  return raw || String(item.community || "房源");
+};
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
   if (!raw) return "位置待补充";
@@ -205,11 +216,7 @@ const cardLocation = (value: unknown) => {
   return [district, landmark].filter(Boolean).join(" · ") || raw.split(/[·・]/)[0].trim();
 };
 const listingSubtitle = (item: Property) => {
-  const title = compact(item.title || item.community);
-  const layout = String(item.layout || "户型待补充").trim();
-  const layoutCore = layout.split(" · ")[0].trim();
-  const hasLayoutInTitle = Boolean(layoutCore && title.includes(compact(layoutCore)));
-  return [hasLayoutInTitle ? "" : layout, cardLocation(item.location)].filter(Boolean).join(" · ");
+  return cardLocation(item.location);
 };
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
@@ -346,7 +353,7 @@ const subscribeArea = () => {
               ><image :src="heartIcon" mode="aspectFit" /></view
             ></view
           ><view class="property-copy"
-          ><view class="title small">{{ item.title || item.community }}</view
+          ><view class="title small">{{ listingTitle(item) }}</view
           ><view class="muted summary"
             >{{ listingSubtitle(item) }}</view
           ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view

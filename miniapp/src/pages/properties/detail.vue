@@ -73,6 +73,25 @@ const priceText = computed(() =>
 const priceUnit = computed(() =>
   Number(item.value?.rentMonthly) > 0 ? "元/月" : "租金",
 );
+const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
+const detailDoorplate = computed(() => {
+  const property = item.value;
+  if (!property) return "";
+  return [
+    property.buildingNo,
+    property.unitNo && String(property.unitNo).includes("单元") ? property.unitNo : property.unitNo && `${property.unitNo}单元`,
+    property.roomNo && String(property.roomNo).includes("室") ? property.roomNo : property.roomNo && `${property.roomNo}室`,
+  ].filter(Boolean).join("");
+});
+const detailTitle = computed(() => {
+  const property = item.value;
+  if (!property) return "";
+  const raw = String(property.title || property.community || "").trim();
+  const layout = String(property.layout || "").split(" · ")[0].trim();
+  if (layout && compact(raw).includes(compact(layout)) && property.community) return `${property.community}${detailDoorplate.value}`;
+  return raw || property.community;
+});
+const detailMeta = computed(() => [item.value?.layout, item.value?.rentType].filter(Boolean).join(" · "));
 const isAdminPreview = computed(
   () => isAdmin.value && !["published", "available"].includes(item.value?.status || ""),
 );
@@ -404,11 +423,11 @@ const contact = () => {
           >{{ favorite ? "♥" : "♡"
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
         ></view
-      ><view class="title">{{ item.title || item.community }}</view
+      ><view class="title">{{ detailTitle }}</view
+      ><view v-if="detailMeta" class="overview-meta">{{ detailMeta }}</view
       ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
-        ><view><small>户型</small><strong>{{ item.layout || "待补充" }}</strong></view
         ><view><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
         ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ><view><small>电梯</small><strong>{{ item.elevator || "待补充" }}</strong></view
@@ -767,6 +786,7 @@ const contact = () => {
 .detail-skeleton { padding: 28rpx 24rpx; }.skeleton-media,.skeleton-card { border-radius: 24rpx; background: linear-gradient(100deg,#ecebe4 25%,#f6f4ee 42%,#ecebe4 58%); background-size: 200% 100%; animation: skeleton-shift 1.2s linear infinite; }.skeleton-media { height: 440rpx; }.skeleton-card { margin-top: 24rpx; padding: 28rpx; }.skeleton-card > view { width: 72%; height: 30rpx; margin-bottom: 18rpx; border-radius: 12rpx; background: rgba(255,255,255,.62); }.skeleton-card > view:nth-child(2) { width: 46%; }.skeleton-card > view:nth-child(3) { width: 88%; margin-bottom: 0; }.skeleton-card.short > view { width: 56%; }.skeleton-card.short > view:nth-child(2) { width: 78%; margin-bottom: 0; } @keyframes skeleton-shift { to { background-position: -200% 0; } }
 .detail-kicker { margin: 6rpx 4rpx 18rpx; color: #7b8579; font-size: 23rpx; }.media-strip { margin: 14rpx 0 4rpx; white-space: nowrap; }.media-strip-row { display: inline-flex; gap: 12rpx; padding: 0 2rpx; }.media-thumb { width: 104rpx; height: 76rpx; overflow: hidden; border: 2rpx solid transparent; border-radius: 12rpx; background: #e8ebe3; box-sizing: border-box; }.media-thumb image { width: 100%; height: 100%; }.media-thumb.video { display: flex; align-items: center; justify-content: center; background: #40543f; color: #fff; font-size: 20rpx; }.media-thumb.active { border-color: #536a45; box-shadow: 0 0 0 2rpx #dce7d5; }.admin-preview-tag { display: inline-block; margin-bottom: 14rpx; padding: 7rpx 12rpx; border-radius: 8rpx; background: #f8eadf; color: #b55b37; font-size: 20rpx; font-weight: 650; }.overview .price.pending { color: #73826d; font-size: 39rpx; }.overview .price.pending small { color: #8d9789; }.key-facts,.detail-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }.key-facts > view,.detail-info-grid>view { min-width: 0; padding: 16rpx; border-radius: 14rpx; background: #eeece5; }.key-facts > .wide,.detail-info-grid>.wide { grid-column: span 2; }.key-facts strong,.detail-info-grid strong { white-space: normal; text-overflow: clip; }.key-facts small,.detail-info-grid small { margin-top: 0; }.detail-info .title{margin-bottom:20rpx}.detail-info-grid small{display:block;color:#8a9087;font-size:19rpx}.detail-info-grid strong{display:block;margin-top:7rpx;color:#384438;font-size:24rpx;line-height:1.4}.location-heading { margin-bottom: 8rpx; }
 .overview .price .price-unit{font-size:23rpx}.overview .price.pending .price-unit{color:#8d9789}
+.overview-meta{margin-top:10rpx;color:#586b57;font-size:26rpx;font-weight:650;line-height:1.4}
 .detail-page-head{margin:8rpx 4rpx 18rpx}.detail-page-head view{color:#29382d;font-size:40rpx;font-weight:800;line-height:1.25;letter-spacing:-1rpx}.detail-page-head text{display:block;margin-top:8rpx;color:#7b8579;font-size:23rpx;line-height:1.45}
 .media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}
 .media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}

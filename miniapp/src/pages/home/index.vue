@@ -63,6 +63,20 @@ const serviceLabels = (item: Property) => {
 };
 const listingSourceLabel = (item: Property) => item.listingSource === "转租" ? "转租" : "直租";
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
+const doorplate = (item: Property) => [
+  item.buildingNo,
+  item.unitNo && String(item.unitNo).includes("单元") ? item.unitNo : item.unitNo && `${item.unitNo}单元`,
+  item.roomNo && String(item.roomNo).includes("室") ? item.roomNo : item.roomNo && `${item.roomNo}室`,
+].filter(Boolean).join("");
+const listingTitle = (item: Property) => {
+  const raw = String(item.title || item.community || "").trim();
+  const layout = String(item.layout || "").split(" · ")[0].trim();
+  // 仅修正历史测试数据：旧标题把事实区的户型也塞进标题；新建自定义标题仍原样保留。
+  if (layout && compact(raw).includes(compact(layout)) && item.community) {
+    return `${item.community}${doorplate(item)}`;
+  }
+  return raw || String(item.community || "房源");
+};
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
   if (!raw) return "位置待补充";
@@ -71,12 +85,7 @@ const cardLocation = (value: unknown) => {
   return [district, landmark].filter(Boolean).join(" · ") || raw.split(/[·・]/)[0].trim();
 };
 const listingSubtitle = (item: Property) => {
-  const title = compact(item.title || item.community);
-  const layout = String(item.layout || "户型待补充").trim();
-  const layoutCore = layout.split(" · ")[0].trim();
-  // 标题由发布者决定；若已经包含户型，只在副标题补充位置，杜绝同一信息连写两遍。
-  const hasLayoutInTitle = Boolean(layoutCore && title.includes(compact(layoutCore)));
-  return [hasLayoutInTitle ? "" : layout, cardLocation(item.location)].filter(Boolean).join(" · ");
+  return cardLocation(item.location);
 };
 onShow(async () => {
   isAdmin.value = getSession()?.role === "admin";
@@ -124,7 +133,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ item.title || item.community }}</strong><small>{{ listingSubtitle(item) }}</small><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view class="listing-source" :class="{ transfer: item.listingSource === '转租' }">{{ listingSourceLabel(item) }}</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><strong>{{ listingTitle(item) }}</strong><small>{{ listingSubtitle(item) }}</small><view v-if="serviceLabels(item).length > 1" class="tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
