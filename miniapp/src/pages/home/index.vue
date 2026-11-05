@@ -187,9 +187,9 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing-info strong{display:-webkit-box;overflow:hidden;font-size:28rpx;line-height:1.35;text-overflow:ellipsis;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .listing{height:224rpx;box-sizing:border-box}
 .listing-image{width:244rpx;height:200rpx}
-.listing-info{display:flex;height:200rpx;flex-direction:column;box-sizing:border-box}
-.home-listing-title{display:-webkit-box;overflow:hidden;height:77rpx;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.32;letter-spacing:-.4rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.home-listing-address{overflow:hidden;max-height:31rpx;margin-top:10rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.listing-info{display:flex;height:200rpx;flex-direction:column;padding:6rpx 4rpx 3rpx 0;box-sizing:border-box}
+.home-listing-title{display:-webkit-box;overflow:hidden;max-height:75rpx;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.28;letter-spacing:-.4rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.home-listing-address{overflow:hidden;max-height:31rpx;margin-top:8rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .listing-info .tags{height:32rpx;gap:10rpx;margin-top:10rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:18rpx}
 .listing-price{min-height:34rpx;margin-top:auto;font-size:34rpx}
