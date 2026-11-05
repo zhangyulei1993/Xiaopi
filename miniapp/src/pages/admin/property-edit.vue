@@ -111,6 +111,23 @@ const titlePartOptions = [
   { key: "rentType", label: "整租/合租" },
   { key: "area", label: "面积" },
 ];
+const toggleTitlePart = (key: string) => {
+  titleParts.value = titleParts.value.includes(key)
+    ? titleParts.value.filter((item) => item !== key)
+    : [...titleParts.value, key];
+};
+const moveTitlePart = (key: string, direction: -1 | 1) => {
+  const index = titleParts.value.indexOf(key);
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= titleParts.value.length) return;
+  const next = [...titleParts.value];
+  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+  titleParts.value = next;
+};
+const orderedTitlePartOptions = computed(() => [
+  ...titleParts.value.map((key) => titlePartOptions.find((option) => option.key === key)).filter(Boolean),
+  ...titlePartOptions.filter((option) => !titleParts.value.includes(option.key)),
+] as typeof titlePartOptions);
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
   amenityOptions = [
     "冰箱",
@@ -1132,50 +1149,50 @@ const mediaUrl = resolveAssetUrl;
             :range="rooms"
             @change="roomCount = pickLayoutValue(rooms, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ roomCount }}</strong
-              ><small>卧室</small></view
+              ><small>户型 · 卧室</small
+              ><strong>{{ roomCount }}</strong></view
             ></picker
           ><picker
             :range="halls"
             @change="hallCount = pickLayoutValue(halls, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ hallCount }}</strong
-              ><small>客厅</small></view
+              ><small>户型 · 客厅</small
+              ><strong>{{ hallCount }}</strong></view
             ></picker
           ><picker
             :range="bathroomCounts"
             @change="bathroomCount = pickLayoutValue(bathroomCounts, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ bathroomCount }}</strong
-              ><small>卫生间</small></view
+              ><small>卫生间</small
+              ><strong>{{ bathroomCount }}</strong></view
             ></picker
           ><picker
             :range="balconies"
             @change="balcony = pickLayoutValue(balconies, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ balcony }}</strong
-              ><small>阳台</small></view
+              ><small>阳台</small
+              ><strong>{{ balcony }}</strong></view
             ></picker></template
           ><template v-else><picker
             :range="roomTypes"
             @change="roomType = pickLayoutValue(roomTypes, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ roomType }}</strong
-              ><small>本次出租</small></view
+              ><small>本次出租 · 房型</small
+              ><strong>{{ roomType }}</strong></view
             ></picker
           ><picker
             :range="toilets"
             @change="toiletType = pickLayoutValue(toilets, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ toiletType }}</strong
-              ><small>卫生间</small></view
+              ><small>卫生间</small
+              ><strong>{{ toiletType }}</strong></view
             ></picker
           ><picker
             :range="windows"
             @change="bayWindow = pickLayoutValue(windows, $event.detail.value); syncLayout()"
             ><view class="picker-item"
-              ><strong>{{ bayWindow }}</strong
-              ><small>飘窗</small></view
+              ><small>飘窗（凸出窗台）</small
+              ><strong>{{ bayWindow === "有飘窗" ? "有" : "无" }}</strong></view
             ></picker></template
           ></view
         ><view class="layout-preview"
@@ -1239,8 +1256,8 @@ const mediaUrl = resolveAssetUrl;
             ><input v-model.trim="form.availableDate" maxlength="32" placeholder="默认拎包入住，可填写具体日期" /></view
           ><view class="field utility-summary"><text>水电与杂费</text><strong>{{ form.utilitiesText || "请选择" }}</strong></view></view
         ><view class="term-block"><text>水电与杂费</text><radio-group class="utility-options" @change="setUtilities($event.detail.value)"><label v-for="option in utilityOptions" :key="option" :class="{ active: form.utilitiesText === option }"><radio :value="String(utilityOptions.indexOf(option))" :checked="form.utilitiesText === option" color="#0e8177" />{{ option }}</label></radio-group></view>
-        ><view class="rent-summary"><text>对外展示</text><strong>¥ {{ Number(form.rentMonthly) || 0 }} <small>/月</small></strong><span>{{ form.depositPayment || "待填写押付方式" }}</span></view>
-        ></view
+        <view class="rent-summary"><text>对外展示</text><strong>¥ {{ Number(form.rentMonthly) || 0 }} <small>/月</small></strong><span>{{ form.depositPayment || "待填写押付方式" }}</span></view>
+        </view
       ><view v-show="activeSection === 4" class="section-card"
         ><view class="section-head"
           ><text>05</text
@@ -1337,9 +1354,9 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
-        ><view><strong>发布标题</strong><small>选择要展示的信息，确认发布前仍可返回修改</small></view
-        ><checkbox-group @change="titleParts = $event.detail.value"><label v-for="option in titlePartOptions" :key="option.key" :class="{ active: titleParts.includes(option.key) }"><checkbox :value="option.key" :checked="titleParts.includes(option.key)" color="#0e8177" />{{ option.label }}</label></checkbox-group>
-        ><view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle }}</strong></view></view
+        ><view><strong>发布标题</strong><small>点选信息；已选内容可用左右箭头调整拼接顺序</small></view
+        ><view class="title-part-list"><view v-for="(option, index) in orderedTitlePartOptions" :key="option.key" class="title-part" :class="{ active: titleParts.includes(option.key) }"><view class="title-part-name" @click="toggleTitlePart(option.key)"><text>{{ titleParts.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view><view v-if="titleParts.includes(option.key)" class="title-part-actions"><text :class="{ disabled: index === 0 }" @click="moveTitlePart(option.key, -1)">←</text><text :class="{ disabled: index === titleParts.length - 1 }" @click="moveTitlePart(option.key, 1)">→</text></view></view></view>
+        <view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle || "请至少选择一项" }}</strong></view></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
         ><view v-if="activeSection < 4" class="step-actions"
@@ -1572,6 +1589,15 @@ const mediaUrl = resolveAssetUrl;
 .final-title-composer { margin-top:18rpx; }
 .final-title-composer .auto-title { margin-top:18rpx;padding:18rpx;border-radius:14rpx; }
 .final-title-composer .auto-title text { display:block;margin-bottom:8rpx;color:#6d8e89;font-size:20rpx;font-weight:600; }
+.title-part-list { display:flex;flex-wrap:wrap;gap:10rpx;margin-top:16rpx; }
+.title-part { display:flex;align-items:center;overflow:hidden;border:1rpx solid #dce9e4;border-radius:11rpx;background:#fff;color:#708a84;font-size:20rpx; }
+.title-part.active { border-color:#b8dfd4;background:#edf8f4;color:#0e8177;font-weight:700; }
+.title-part-name { display:flex;align-items:center;gap:7rpx;padding:10rpx 12rpx; }
+.title-part-name text { display:flex;width:26rpx;height:26rpx;align-items:center;justify-content:center;border-radius:50%;background:#f0f4f2;color:#78938e;font-size:18rpx; }
+.title-part.active .title-part-name text { background:#0e8177;color:#fff; }
+.title-part-actions { display:flex;align-items:center;border-left:1rpx solid #cce6de; }
+.title-part-actions text { padding:10rpx 9rpx;color:#0e8177;font-size:22rpx;line-height:1; }
+.title-part-actions text.disabled { opacity:.28; }
 .rent-type-tabs { display:grid;grid-template-columns:1fr 1fr;gap:12rpx;padding:8rpx;border-radius:18rpx;background:#eef5f2; }
 .rent-type-tabs>view { padding:18rpx 20rpx;border-radius:13rpx;background:transparent;color:#6f8983; }
 .rent-type-tabs>view.active { background:#0e8177;color:#fff;box-shadow:0 8rpx 16rpx rgba(14,129,119,.18); }
@@ -1599,12 +1625,12 @@ const mediaUrl = resolveAssetUrl;
   grid-template-columns: 1fr 1fr;
   gap: 14rpx;
 }
-.unit-selector-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #dce9e4;border-radius:18rpx;background:#fbfdfc; }
+.unit-selector-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:18rpx;padding:16rpx 20rpx;border:1rpx solid #dce9e4;border-radius:16rpx;background:#fbfdfc; }
 .unit-selector-card.selected { border-color:#b8dfd4;background:#edf8f4;box-shadow:0 8rpx 18rpx rgba(14,129,119,.08); }
 .unit-selector-card strong,.unit-selector-card text { display:block; }
-.unit-selector-card strong { color:#173f3c;font-size:25rpx; }
+.unit-selector-card strong { color:#63817a;font-size:21rpx;font-weight:600; }
 .unit-selector-card strong small { margin-left:8rpx;color:#8aa39d;font-size:19rpx;font-weight:500; }
-.unit-selector-card text { margin-top:8rpx;color:#78938e;font-size:20rpx; }
+.unit-selector-card text { margin-top:5rpx;color:#315f5a;font-size:24rpx;font-weight:700; }
 .unit-selector-card b { flex:none;color:#0e8177;font-size:22rpx;font-weight:700; }
 .structure-modal { position:fixed;z-index:1000;top:0;right:0;bottom:0;left:0;display:flex;align-items:flex-end;background:rgba(8,32,29,.46); }
 .structure-sheet { width:100%;max-height:78vh;border-radius:30rpx 30rpx 0 0;background:#fff;box-shadow:0 -16rpx 40rpx rgba(5,35,31,.16); }
