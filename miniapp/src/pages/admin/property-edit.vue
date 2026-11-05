@@ -95,7 +95,6 @@ const unitNo = ref("");
 const roomNo = ref("");
 const selectedFloor = ref("");
 const buildingRules = ref<BuildingRule[]>([]);
-const showUnitDetails = ref(false);
 const showStructureSetup = ref(false);
 const ruleSaving = ref(false);
 const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
@@ -437,25 +436,23 @@ const loadBuildingRules = async () => {
   }
   buildingRules.value = await listBuildingRules(community).catch(() => []);
 };
-const selectBuildingRule = (event: { detail: { value: string | number } }) => {
-  const rule = buildingOptions.value[Number(event.detail.value)];
+const selectBuildingRule = (rule: BuildingRule) => {
   if (!rule) return;
   buildingNo.value = rule.buildingNo;
   unitNo.value = "";
   selectedFloor.value = "";
   roomNo.value = "";
 };
-const chooseUnit = (event: { detail: { value: string | number } }) => {
-  unitNo.value = unitOptions.value[Number(event.detail.value)] || "";
+const chooseUnit = (unit: string) => {
+  unitNo.value = unit;
   selectedFloor.value = "";
   roomNo.value = "";
 };
-const chooseFloor = (event: { detail: { value: string | number } }) => {
-  selectedFloor.value = floorOptions.value[Number(event.detail.value)] || "";
+const chooseFloor = (floor: string) => {
+  selectedFloor.value = floor;
   roomNo.value = "";
 };
-const chooseHousehold = (event: { detail: { value: string | number } }) => {
-  const household = householdOptions.value[Number(event.detail.value)] || "";
+const chooseHousehold = (household: string) => {
   roomNo.value = selectedFloor.value && household ? `${selectedFloor.value}${household}` : "";
 };
 const saveCurrentBuildingRule = async () => {
@@ -517,7 +514,6 @@ const loadProperty = async () => {
     buildingNo.value = property.buildingNo || "";
     unitNo.value = property.unitNo || "";
     roomNo.value = property.roomNo || "";
-		showUnitDetails.value = Boolean(buildingNo.value || unitNo.value || roomNo.value);
     locationQuery.value = property.community || property.location || "";
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
@@ -914,7 +910,7 @@ const mediaUrl = resolveAssetUrl;
         ></view
       ></scroll-view
     ><view v-if="loading" class="card loading">正在加载房源...</view
-    ><template v-else
+    ><template v-if="!loading"
       ><view v-show="activeSection === 0" class="section-card"
         ><view class="section-head"
           ><text>01</text
@@ -944,31 +940,36 @@ const mediaUrl = resolveAssetUrl;
                 ><small>{{ item.district }} · {{ item.address }}</small></view
               ><text v-if="item.distance"
                 >{{ (item.distance / 1000).toFixed(1) }}km</text
-              ></view
+			></view
             ></view
           ><view v-else-if="locationQuery.length >= 2 && !locationSearching" class="location-search-tip"
             >继续输入名称，系统会显示武汉范围内的匹配地点</view
           ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
-        ><view class="unit-disclosure" :class="{ open: showUnitDetails }"
-          ><view class="unit-disclosure-head" @click="showUnitDetails = !showUnitDetails"
-            ><view><strong>补充门牌信息 <small>选填</small></strong><text>没有楼栋、单元或房号，直接跳过即可</text></view><b>{{ showUnitDetails ? "收起" : "补充 ›" }}</b></view
-          ><view v-if="showUnitDetails" class="address-structure"
-            ><view class="structure-heading"><view><strong>楼栋、单元与房号</strong><small>默认 30 栋 · 3 单元 · 33 层 · 每层 6 户</small></view></view
-            ><view class="unit-row"
-              ><picker :range="buildingOptions" range-key="buildingNo" @change="selectBuildingRule"><view class="field picker-field"><text>楼栋</text><strong>{{ buildingNo || "选择楼栋" }}</strong></view></picker
-              ><view class="field"><text>房号</text><strong>{{ generatedRoomNo || "选择楼栋后生成" }}</strong></view></view
-            ><view v-if="hasStructureRule" class="structure-picker-grid"
-              ><picker :range="unitOptions" @change="chooseUnit"><view><small>单元</small><strong>{{ unitNo ? `${unitNo}单元` : "选择" }}</strong></view></picker
-              ><picker :range="floorOptions" :disabled="!unitNo" @change="chooseFloor"><view><small>楼层</small><strong>{{ selectedFloor ? `${selectedFloor}层` : "选择" }}</strong></view></picker
-              ><picker :range="householdOptions" :disabled="!selectedFloor" @change="chooseHousehold"><view><small>户号</small><strong>{{ roomNo ? `${roomNo}室` : "选择" }}</strong></view></picker></view
-            ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>有该小区的真实楼栋资料？</text><b>{{ showStructureSetup ? "收起" : "覆盖默认规则" }}</b></view
-            ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
+        ><view v-if="form.community" class="address-structure"
+          ><view class="structure-heading"><view><strong>选择门牌 <small>选填</small></strong><small>楼栋、单元、楼层和户号按顺序点选；可随时跳过</small></view></view
+          ><view class="structure-level"
+            ><view class="structure-level-head"><strong>1. 选楼栋</strong><small>{{ buildingNo || "请从下方选择" }}</small></view
+            ><scroll-view class="structure-options" scroll-x :show-scrollbar="false"
+              ><view class="structure-options-track"><view v-for="rule in buildingOptions" :key="rule.id" class="structure-option" :class="{ active: buildingNo === rule.buildingNo }" @click="selectBuildingRule(rule)">{{ rule.buildingNo }}</view></view></scroll-view></view
+          ><view v-if="hasStructureRule" class="structure-level"
+            ><view class="structure-level-head"><strong>2. 选单元</strong><small>{{ unitNo ? `${unitNo}单元` : "请选择" }}</small></view
+            ><scroll-view class="structure-options" scroll-x :show-scrollbar="false"
+              ><view class="structure-options-track"><view v-for="unit in unitOptions" :key="unit" class="structure-option" :class="{ active: unitNo === unit }" @click="chooseUnit(unit)">{{ unit }} 单元</view></view></scroll-view></view
+          ><view v-if="unitNo" class="structure-level"
+            ><view class="structure-level-head"><strong>3. 选楼层</strong><small>{{ selectedFloor ? `${selectedFloor}层` : "请选择" }}</small></view
+            ><scroll-view class="structure-options" scroll-x :show-scrollbar="false"
+              ><view class="structure-options-track"><view v-for="floor in floorOptions" :key="floor" class="structure-option" :class="{ active: selectedFloor === floor }" @click="chooseFloor(floor)">{{ floor }} 层</view></view></scroll-view></view
+          ><view v-if="selectedFloor" class="structure-level room-level"
+            ><view class="structure-level-head"><strong>4. 选房号</strong><small>{{ generatedRoomNo ? `${generatedRoomNo}室` : "请选择" }}</small></view
+            ><scroll-view class="structure-options" scroll-x :show-scrollbar="false"
+              ><view class="structure-options-track"><view v-for="household in householdOptions" :key="household" class="structure-option room-option" :class="{ active: roomNo === `${selectedFloor}${household}` }" @click="chooseHousehold(household)">{{ selectedFloor }}{{ household }}</view></view></scroll-view></view
+          ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>有该小区的真实楼栋资料？</text><b>{{ showStructureSetup ? "收起" : "覆盖默认规则" }}</b></view
+          ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
               ><view class="rule-setup-head"><text>楼栋结构规则</text><small>保存后，下次录入同一小区可直接选择</small></view
               ><view class="rule-inputs"><view><small>单元数</small><input v-model.number="ruleDraft.unitCount" type="number" /></view><view><small>起始层</small><input v-model.number="ruleDraft.floorStart" type="number" /></view><view><small>总层数</small><input v-model.number="ruleDraft.floorCount" type="number" /></view><view><small>每层户数</small><input v-model.number="ruleDraft.householdsPerFloor" type="number" /></view></view
               ><button :loading="ruleSaving" :disabled="!buildingNo || ruleSaving" @click="saveCurrentBuildingRule">保存楼栋规则</button></view
             ></view
-          ></view
-        ><view class="field"
+		><view class="field"
           ><text>详细地址补充</text
           ><input
             v-model.trim="form.location"
@@ -1462,26 +1463,22 @@ const mediaUrl = resolveAssetUrl;
   grid-template-columns: 1fr 1fr;
   gap: 14rpx;
 }
-.unit-disclosure { margin-top: 20rpx; border: 1rpx solid #e3eeea; border-radius: 18rpx; background: #fbfdfc; overflow: hidden; }
-.unit-disclosure.open { border-color: #cce2da; background: #f8fbf9; }
-.unit-disclosure-head { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 22rpx; }
-.unit-disclosure-head strong { display: block; color: #315b54; font-size: 25rpx; }
-.unit-disclosure-head strong small { margin-left: 8rpx; color: #8aa39d; font-size: 19rpx; font-weight: 500; }
-.unit-disclosure-head text { display: block; margin-top: 7rpx; color: #81948f; font-size: 20rpx; line-height: 1.4; }
-.unit-disclosure-head b { flex: none; color: #0e8177; font-size: 22rpx; font-weight: 700; }
-.unit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; }
-.unit-row .field { margin-top: 14rpx; }
-.address-structure { padding: 0 20rpx 20rpx; border-top: 1rpx solid #e3eeea; }
+.address-structure { margin-top: 18rpx; padding: 22rpx 0 20rpx; border: 1rpx solid #dce9e4; border-radius: 18rpx; background: #fbfdfc; overflow: hidden; }
+.address-structure .structure-heading { padding: 0 22rpx; }
 .structure-heading strong,.structure-heading small { display:block; }
-.structure-heading strong { color:#173f3c;font-size:24rpx; }
-.structure-heading small { margin-top:6rpx;color:#78938e;font-size:19rpx; }
-.picker-field { min-height: 102rpx; box-sizing: border-box; }
-.picker-field strong,.unit-row .field>strong { display:block;color:#173f3c;font-size:27rpx;line-height:1.35; }
-.structure-picker-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12rpx;margin-top:14rpx; }
-.structure-picker-grid>picker>view { padding:16rpx 12rpx;border-radius:12rpx;background:#eaf4f0; }
-.structure-picker-grid small,.structure-picker-grid strong { display:block; }
-.structure-picker-grid small { color:#6e8c86;font-size:18rpx; }
-.structure-picker-grid strong { margin-top:7rpx;color:#173f3c;font-size:22rpx; }
+.structure-heading strong { color:#173f3c;font-size:25rpx; }
+.structure-heading strong small { display:inline;margin-left:8rpx;color:#8aa39d;font-size:19rpx;font-weight:500; }
+.structure-heading > view > small { margin-top:7rpx;color:#78938e;font-size:19rpx;line-height:1.5; }
+.structure-level { margin-top:22rpx; }
+.structure-level-head { display:flex;align-items:center;justify-content:space-between;gap:18rpx;padding:0 22rpx 12rpx; }
+.structure-level-head strong { color:#315b54;font-size:22rpx; }
+.structure-level-head small { color:#78938e;font-size:19rpx; }
+.structure-options { width:100%;white-space:nowrap; }
+.structure-options-track { display:inline-flex;gap:12rpx;padding:0 22rpx 4rpx; }
+.structure-option { display:inline-flex;min-width:94rpx;height:62rpx;box-sizing:border-box;align-items:center;justify-content:center;padding:0 18rpx;border:1rpx solid #dce8e4;border-radius:12rpx;background:#f2f6f4;color:#315b54;font-size:22rpx;font-weight:700;white-space:nowrap; }
+.structure-option.active { border-color:#0e8177;background:#0e8177;color:#fff;box-shadow:0 6rpx 14rpx rgba(14,129,119,.2); }
+.room-level { padding-bottom:4rpx; }
+.room-option { min-width:88rpx; }
 .rule-setup { margin-top:14rpx;padding:16rpx;border-radius:12rpx;background:#eef5f2; }
 .rule-setup-head text,.rule-setup-head small { display:block; }
 .rule-setup-head text { color:#315b54;font-size:21rpx;font-weight:700; }
