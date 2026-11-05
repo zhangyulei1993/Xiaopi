@@ -193,7 +193,7 @@ const serviceLabels = (item: Property) => {
   const source = String(item.feeText || "");
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
   return [listingSource, "无中介费", "可短租", "押一付一", "拎包入住", "民水民电"]
-    .filter((label) => source.includes(label))
+    .filter((label, index) => index === 0 || source.includes(label))
     .slice(0, 2);
 };
 const toggleFavorite = async (id: string) => {
@@ -321,7 +321,7 @@ const subscribeArea = () => {
               v-if="coverUrl(item)"
               :src="coverUrl(item)"
               mode="aspectFill"
-            /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
+            /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view><view class="source-badge" :class="{ transfer: item.listingSource === '转租', tenant: !isAdmin }">{{ item.listingSource === '转租' ? '转租' : '直租' }}</view
             ><view v-if="serviceLabels(item)[0]" class="cover-benefit">{{ serviceLabels(item)[0] }}</view
             ><view
               v-if="!isAdmin"
@@ -609,6 +609,9 @@ const subscribeArea = () => {
 .favorite { top:9rpx; right:9rpx; width:44rpx; height:44rpx; background:rgba(47,44,34,.33); }
 .favorite image { width:28rpx; height:28rpx; }.favorite.active { background:#d66d50; }
 .cover-benefit { bottom:0; left:0; padding:8rpx 11rpx; border-radius:0 10rpx 0 0; background:#d66d50; color:#fff; font-size:18rpx; font-weight:700; line-height:1.1; }
+.source-badge { position:absolute; top:9rpx; right:9rpx; padding:5rpx 9rpx; border-radius:8rpx; background:rgba(255,255,255,.92); color:#405f58; font-size:18rpx; font-weight:800; line-height:1.1; }
+.source-badge.tenant { top:60rpx; }
+.source-badge.transfer { background:#f8eadf; color:#b7644b; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:9rpx 4rpx 3rpx 0; }
 .property .small { overflow:hidden; margin:0; color:#29382d; font-size:28rpx; font-weight:700; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
 .property .summary { display:-webkit-box; overflow:hidden; min-height:0; margin:9rpx 0 0; color:#7e867d; font-size:21rpx; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:2; }

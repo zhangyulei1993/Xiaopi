@@ -441,8 +441,14 @@ const generatedTitle = computed(() => {
     rentType: rentType.value,
     area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
   };
-  const parts = titleParts.value.map((key) => values[key]).filter(Boolean);
-  return parts.join("");
+  return titleParts.value
+    .map((key) => ({ key, value: values[key] }))
+    .filter((item) => item.value)
+    .reduce((title, item) => {
+      if (!title) return item.value;
+      // 门牌本身应连续展示，例如「5栋3单元101室」；其余语义字段用分隔点保持可读。
+      return item.key === "unit" ? `${title}${item.value}` : `${title} · ${item.value}`;
+    }, "");
 });
 watch([() => form.community, roomCount, customRoomCount, hallCount, kitchenCount, bathroomCount, balcony, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
   form.title = String(form.community || "").trim()
@@ -702,7 +708,7 @@ const loadProperty = async () => {
     existingMedia.value = property.media || [];
     parseLayout(property.layout);
     if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
-    titleParts.value = ["community", "unit", "layout", "rentType"];
+    titleParts.value = ["community", "unit", "rentType"];
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
     form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
