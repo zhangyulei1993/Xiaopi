@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onLoad } from "@dcloudio/uni-app";
+import { onLoad, onShareAppMessage, onShareTimeline } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { request, resolveAssetUrl } from "../../api/client";
 import {
@@ -97,6 +97,23 @@ const videoPoster = computed(() => {
   const image = mediaItems.value.find((media) => media.type === "image");
   return image ? mediaUrl(image.url) : "";
 });
+const shouldLoadMedia = (index: number) => {
+  const count = mediaItems.value.length;
+  if (count < 4) return true;
+  const current = activeMediaIndex.value;
+  return Math.abs(index - current) <= 1 || (index === 0 && current === count - 1) || (index === count - 1 && current === 0);
+};
+const sharePayload = () => {
+  const current = item.value;
+  const cover = current?.media?.find((media) => media.type === "image");
+  return {
+    title: current?.title || current?.community || "小皮租房房源",
+    path: `/pages/properties/detail?id=${encodeURIComponent(current?.id || "")}`,
+    imageUrl: cover ? mediaUrl(cover.url) : "",
+  };
+};
+onShareAppMessage(() => sharePayload());
+onShareTimeline(() => sharePayload());
 const handleMediaChange = (event: { detail: { current: number } }) => {
   activeMediaIndex.value = event.detail.current;
   playingVideoIndex.value = -1;
@@ -293,12 +310,13 @@ const contact = () => {
       ><swiper class="media-swiper" :style="{ height: `${mediaViewportHeight}rpx` }" circular :current="activeMediaIndex" @change="handleMediaChange">
         <swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`">
           <image
-            v-if="media.type === 'image'"
+            v-if="media.type === 'image' && shouldLoadMedia(index)"
             class="media-image"
             :src="mediaUrl(media.url)"
+            lazy-load
             mode="aspectFill"
             @click="previewImage(media.url)" />
-          <view v-else class="video-stage">
+          <view v-else-if="media.type === 'video' && shouldLoadMedia(index)" class="video-stage">
             <video
               class="media-video"
               :src="mediaUrl(media.url)"
@@ -308,6 +326,7 @@ const contact = () => {
               show-progress
               show-fullscreen-btn
               enable-progress-gesture
+              preload="metadata"
               object-fit="contain"
               @loadedmetadata="readVideoMetadata(index, $event)"
               @play="playingVideoIndex = index"
@@ -315,6 +334,7 @@ const contact = () => {
               @ended="playingVideoIndex = -1"
             ></video>
           </view>
+          <view v-else class="media-loading">加载媒体中</view>
         </swiper-item>
       </swiper
       ><view v-if="mediaItems[activeMediaIndex]?.type !== 'video'" class="media-counter">{{ activeMediaIndex + 1 }} / {{ mediaItems.length }}</view></view
@@ -334,7 +354,7 @@ const contact = () => {
         ><view v-if="!isAdmin" class="heart" :class="{ active: favorite }" @click="toggle"
           >{{ favorite ? "♥" : "♡"
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
-        ></view
+        ><button class="share-button" open-type="share">分享</button></view
       ><view class="title">{{ item.title || item.community }}</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
@@ -425,6 +445,28 @@ const contact = () => {
 .detail-page {
   padding-bottom: 150rpx;
 }
+.media-loading {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background: #edf1e9;
+  color: #7c8878;
+  font-size: 24rpx;
+}
+.share-button {
+  flex: none;
+  margin: 0 0 0 12rpx;
+  padding: 0 16rpx;
+  border: 1rpx solid #dce6d9;
+  border-radius: 12rpx;
+  background: #f6f9f3;
+  color: #52634f;
+  font-size: 21rpx;
+  line-height: 54rpx;
+}
+.share-button::after { border: 0; }
 .detail-cover {
   height: 420rpx;
   border-radius: 28rpx;

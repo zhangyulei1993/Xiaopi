@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { API_ORIGIN, request, resolveAssetUrl } from "../../api/client";
 import {
   createProperty,
+  deleteProperty,
   getPublicConfig,
   listProperties,
   replacePropertyMedia,
@@ -83,6 +84,8 @@ const roomCount = ref("一室"),
   roomType = ref("单间"),
   toiletType = ref("独卫"),
   bayWindow = ref("带飘窗");
+const buildingNo = ref("");
+const roomNo = ref("");
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
   amenityOptions = [
     "冰箱",
@@ -334,6 +337,20 @@ const sectionReady = computed(() => [
 const completionCount = computed(
   () => sectionReady.value.filter(Boolean).length,
 );
+const generatedTitle = computed(() => {
+  const community = String(form.community || "").trim();
+  return community ? `${community} · ${roomCount.value}${hallCount.value}` : "等待选择小区";
+});
+const locationWithUnit = computed(() => {
+  const location = String(form.location || "").trim();
+  const unit = [buildingNo.value.trim(), roomNo.value.trim()].filter(Boolean).join(" ");
+  return [location, unit].filter(Boolean).join(" · ");
+});
+watch([() => form.community, roomCount, hallCount], () => {
+  form.title = String(form.community || "").trim()
+    ? generatedTitle.value
+    : "";
+}, { immediate: true });
 const syncLayout = () => {
   form.layout = `${roomCount.value}${hallCount.value} · ${rentType.value} · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
   form.rentType = rentType.value;
@@ -654,9 +671,9 @@ const save = async (openPreview = false) => {
     const details = String(form.description || "").trim();
     const payload = {
       ...form,
-      title: form.title?.trim(),
+      title: generatedTitle.value,
       community: form.community?.trim(),
-      location: form.location?.trim(),
+      location: locationWithUnit.value,
       description: `配套设施：${amenities.value.join("、")}\n${details}`.trim(),
     };
     const property = id.value
@@ -712,6 +729,28 @@ const save = async (openPreview = false) => {
     uploadProgress.value = "";
   }
 };
+const deleteDraft = () => {
+  if (!id.value || currentStatus.value !== "draft") return;
+  uni.showModal({
+    title: "删除草稿",
+    content: "草稿及其已上传的图片、视频将被永久删除，无法恢复。",
+    confirmText: "删除",
+    confirmColor: "#c45843",
+    success: async (result) => {
+      if (!result.confirm || !id.value) return;
+      try {
+        await deleteProperty(id.value);
+        uni.showToast({ title: "草稿已删除" });
+        setTimeout(() => uni.navigateBack(), 450);
+      } catch (error) {
+        uni.showToast({
+          title: error instanceof Error ? error.message : "删除失败",
+          icon: "none",
+        });
+      }
+    },
+  });
+};
 const mediaUrl = resolveAssetUrl;
 </script>
 <template>
@@ -746,18 +785,18 @@ const mediaUrl = resolveAssetUrl;
           ><view
             ><strong>基础信息</strong></view
           ></view
-        ><view class="field"
-          ><text>房源标题 *</text
-          ><input
-            v-model.trim="form.title"
-            maxlength="40"
-            placeholder="例如：金融港地铁口采光一居室" /></view
+        ><view class="field auto-title"
+          ><text>房源标题</text
+          ><strong>{{ generatedTitle }}</strong><small>由小区名称和房型自动生成</small></view
         ><view class="field"
           ><text>小区名称 *</text
           ><input
             v-model.trim="form.community"
             maxlength="40"
             placeholder="请输入真实小区名称" /></view
+        ><view class="unit-row"
+          ><view class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋" /></view
+          ><view class="field"><text>房号</text><input v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /></view></view
         ><view class="field"
           ><text>位置描述 *</text
           ><input
@@ -1053,7 +1092,7 @@ const mediaUrl = resolveAssetUrl;
             ><strong>＋ 视频</strong><small>{{ videoCount }}/1</small></view
           ></view
         ></view
-      ><view v-if="activeSection === 3" class="media-limit-hint"
+        ><view v-if="activeSection === 3" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
@@ -1072,6 +1111,7 @@ const mediaUrl = resolveAssetUrl;
             下一步 · {{ sectionSteps[activeSection + 1] }}
           </button></view
         ><view v-else class="save-actions"
+          ><button v-if="id && currentStatus === 'draft'" class="delete-draft" :disabled="saving" @click="deleteDraft">删除草稿</button
           ><button :disabled="saving" @click="save(false)">保存草稿</button
           ><button
             class="primary"
@@ -1252,11 +1292,32 @@ const mediaUrl = resolveAssetUrl;
   color: #073b3a;
   font-size: 27rpx;
 }
+.auto-title {
+  background: #f1f7f4;
+}
+.auto-title strong {
+  display: block;
+  overflow: hidden;
+  color: #173f3c;
+  font-size: 28rpx;
+  font-weight: 750;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auto-title small {
+  display: block;
+  margin-top: 8rpx;
+  color: #7d9992;
+  font-size: 20rpx;
+}
 .rent-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14rpx;
 }
+.unit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; }
+.unit-row .field { margin-top: 14rpx; }
 .detail-row{margin-top:14rpx}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx;margin-top:16rpx}.detail-grid .field{margin-top:0}.detail-grid .metro-field{grid-column:span 2}
 .channel-scope {
   margin-top: 16rpx;
@@ -1448,6 +1509,7 @@ const mediaUrl = resolveAssetUrl;
   color: #0e8177;
   font-size: 20rpx;
 }
+.delete-draft { color: #bd5a45 !important; background: #fff4f1 !important; }
 .rent-input {
   display: flex;
   align-items: center;

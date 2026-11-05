@@ -99,6 +99,27 @@ func (s *MySQL) UpdateProperty(ctx context.Context, p domain.Property) error {
 	return err
 }
 
+// DeleteProperty is only called for drafts by the HTTP layer. Media rows are
+// removed in the same transaction so a future property cannot inherit them.
+func (s *MySQL) DeleteProperty(ctx context.Context, propertyID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM property_media WHERE property_id=?`, propertyID); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM properties WHERE id=? AND status='draft'`, propertyID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return sql.ErrNoRows
+	}
+	return tx.Commit()
+}
+
 func (s *MySQL) ListPropertyLeads(ctx context.Context) ([]domain.PropertyLead, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,source_name,source_phone,community,location,layout,expected_rent_monthly,note,follow_up_note,status,COALESCE(converted_property_id,''),created_at,updated_at FROM property_leads ORDER BY created_at DESC`)
 	if err != nil {

@@ -24,6 +24,7 @@ type Store interface {
 	ListProperties(context.Context) ([]domain.Property, error)
 	CreateProperty(context.Context, domain.Property) error
 	UpdateProperty(context.Context, domain.Property) error
+	DeleteProperty(context.Context, string) error
 	ListPropertyLeads(context.Context) ([]domain.PropertyLead, error)
 	CreatePropertyLead(context.Context, domain.PropertyLead) error
 	UpdatePropertyLeadFollowUp(context.Context, string, string, string) error
@@ -82,7 +83,7 @@ func NewServerWithConfig(dataStore Store, config Config) *Server {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
+	mux.Handle("/uploads/", staticMediaCache(http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads")))))
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
@@ -109,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))
+	mux.HandleFunc("DELETE /api/v1/properties/{propertyID}", s.requireRoles(s.deleteProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/status", s.requireRoles(s.updatePropertyStatus, roleAdmin))
 	mux.HandleFunc("POST /api/v1/property-leads/convert", s.requireRoles(s.convertPropertyLead, roleAdmin))
 	mux.HandleFunc("POST /api/v1/media/upload", s.requireRoles(s.uploadMedia, roleAdmin))
@@ -128,6 +130,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/footprints", s.requireRoles(s.listFootprints, roleUser))
 	mux.HandleFunc("DELETE /api/v1/footprints", s.requireRoles(s.clearFootprints, roleUser))
 	return logging(cors(mux))
+}
+
+// Uploaded filenames are content-addressed by a timestamp. Long browser/CDN caching
+// is therefore safe and avoids re-downloading the same listing media on every visit.
+func staticMediaCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) logOperation(ctx context.Context, operator, targetType, targetID, action, detail string) {
@@ -569,6 +582,46 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": p})
+}
+
+// deleteProperty deliberately permits deleting drafts only. Published and offline
+// listings may have appointments, favorites, or audit history and must be managed
+// through their status instead of being silently destroyed.
+func (s *Server) deleteProperty(w http.ResponseWriter, r *http.Request) {
+	propertyID := strings.TrimSpace(r.PathValue("propertyID"))
+	if propertyID == "" || s.store == nil {
+		writeError(w, http.StatusBadRequest, "propertyId is required")
+		return
+	}
+	items, err := s.store.ListProperties(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load property")
+		return
+	}
+	var property *domain.Property
+	for index := range items {
+		if items[index].ID == propertyID {
+			property = &items[index]
+			break
+		}
+	}
+	if property == nil {
+		writeError(w, http.StatusNotFound, "房源不存在")
+		return
+	}
+	if property.Status != domain.PropertyDraft {
+		writeError(w, http.StatusConflict, "仅草稿房源可删除，已发布房源请使用下架")
+		return
+	}
+	if err := s.store.DeleteProperty(r.Context(), propertyID); err != nil {
+		writeError(w, http.StatusInternalServerError, "删除房源失败")
+		return
+	}
+	for _, media := range property.Media {
+		s.removeStoredUpload(media.URL)
+	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", propertyID, "删除草稿房源", property.Title)
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
 }
 
 func (s *Server) listPropertyLeads(w http.ResponseWriter, r *http.Request) {

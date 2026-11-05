@@ -41,6 +41,8 @@ export const updateProperty = (property: Partial<Property>) =>
     method: "PATCH",
     data: property,
   });
+export const deleteProperty = (propertyId: string) =>
+  request(`/v1/properties/${encodeURIComponent(propertyId)}`, { method: "DELETE" });
 export const replacePropertyMedia = (propertyId: string, mediaIds: string[]) =>
   request("/v1/properties/media", {
     method: "PATCH",

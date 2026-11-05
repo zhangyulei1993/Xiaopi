@@ -43,6 +43,7 @@ func (f *fakeStore) CreateProperty(_ context.Context, property domain.Property) 
 	return nil
 }
 func (*fakeStore) UpdateProperty(context.Context, domain.Property) error { return nil }
+func (*fakeStore) DeleteProperty(context.Context, string) error          { return nil }
 func (f *fakeStore) ListPropertyLeads(context.Context) ([]domain.PropertyLead, error) {
 	return f.leads, nil
 }
