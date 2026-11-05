@@ -26,6 +26,7 @@ const selectedArea = ref("全部");
 const selectedPrice = ref<number | null>(null);
 const isAdmin = ref(false);
 const kindOptions = ["推荐", "整租", "合租", "一居", "两居", "三居+"];
+const quickKinds = ["整租", "合租", "一居", "两居", "三居+"];
 const channelStyle = (icon: string, index: number) => {
   const legacy: Record<string, string> = { "🏢": "work", "🌳": "campus", "🌆": "life" };
   return legacy[icon] || ["commute", "campus", "work", "life"].includes(icon) ? (legacy[icon] || icon) : ["commute", "campus", "work", "life"][index % 4];
@@ -65,6 +66,7 @@ const browseFiltered = () => {
   uni.setStorageSync("xiaopi_property_filter", JSON.stringify({
     area: selectedArea.value,
     priceIndex: selectedPrice.value === null ? 0 : selectedPrice.value + 1,
+    kind: activeKind.value === "推荐" ? "" : activeKind.value,
   }));
   browse();
 };
@@ -88,6 +90,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     </view>
     <scroll-view scroll-x class="area-scroll" :show-scrollbar="false"><view class="area-row"><text :class="{ selected: selectedArea === '全部' }" @click="selectedArea = '全部'"><image :src="pinIcon" mode="aspectFit" />附近</text><text v-for="location in config.locations" :key="location.label" :class="{ selected: selectedArea === location.label }" @click="selectedArea = location.label">{{ location.label }}</text></view></scroll-view>
     <scroll-view scroll-x class="price-scroll" :show-scrollbar="false"><view class="price-row"><b>租金预算</b><text v-for="(price, index) in priceRanges" :key="price.label" :class="{ selected: selectedPrice === index }" @click="selectedPrice = selectedPrice === index ? null : index">{{ price.label }}</text></view></scroll-view>
+    <scroll-view scroll-x class="quick-kind-scroll" :show-scrollbar="false"><view class="quick-kind-row"><text class="quick-kind-label">住法</text><text v-for="kind in quickKinds" :key="kind" :class="{ active: activeKind === kind }" @click="activeKind = activeKind === kind ? '推荐' : kind">{{ kind }}</text></view></scroll-view>
 
     <view class="section-head"><strong>精选频道</strong><text @click="browse">全部频道 <b>›</b></text></view>
     <scroll-view scroll-x class="channel-scroll" :show-scrollbar="false"><view class="channels"><view v-for="(channel, index) in config.featuredChannels" :key="channel.title" class="channel" :class="`tone-${channelStyle(channel.icon, index)}`" @click="openChannel(channel)"><view class="channel-mark" :class="`mark-${channelStyle(channel.icon, index)}`"><view class="channel-glyph"></view></view><view class="channel-title">{{ channel.title }}</view><view class="channel-subtitle">{{ channel.subtitle || "发现附近好房" }}</view></view></view></scroll-view>
@@ -114,4 +117,5 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 
 /* Keep the primary CTA in the document flow: it should never cover a channel or heading. */
 .home-page{padding-bottom:42rpx}.request-fab{position:static;display:flex;align-items:center;justify-content:center;gap:8rpx;width:max-content;margin:28rpx 32rpx 0;padding:18rpx 22rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:999rpx;background:#5e6d2e;color:#fff;box-shadow:0 10rpx 22rpx rgba(58,65,26,.18);font-size:25rpx;font-weight:700;line-height:1.2}.request-fab image{width:30rpx;height:30rpx}.recommend-head{margin-top:46rpx}.channel{flex:none}.channel-title,.channel-subtitle{max-width:100%}
+.quick-kind-scroll{width:100%;white-space:nowrap}.quick-kind-row{display:inline-flex;align-items:center;gap:10rpx;padding:18rpx 30rpx 2rpx}.quick-kind-row text{padding:11rpx 18rpx;border:1rpx solid #e8e4db;border-radius:14rpx;background:#fffaf4;color:#697363;font-size:22rpx;line-height:1}.quick-kind-row .quick-kind-label{border:0;background:transparent;color:#4b583f;font-size:23rpx;font-weight:800}.quick-kind-row text.active{border-color:#5e6d2e;background:#e6ecd7;color:#40543f;font-weight:800}
 </style>

@@ -63,6 +63,8 @@ const load = async (id = "") => {
 onLoad((query) => load(String(query?.id || "")));
 const mediaUrl = resolveAssetUrl;
 const mediaItems = computed(() => item.value?.media || []);
+const mediaLabel = (media: { type: string }, index: number) =>
+  media.type === "video" ? "视频" : `实拍 ${index + 1}`;
 const isAdmin = computed(() => hasRole("admin"));
 const priceText = computed(() =>
   Number(item.value?.rentMonthly) > 0 ? String(item.value?.rentMonthly) : "待补充",
@@ -323,7 +325,7 @@ const contact = () => {
         class="media-thumb"
         :class="{ active: activeMediaIndex === index, video: media.type === 'video' }"
         @click="selectMedia(index)"
-        ><image v-if="media.type === 'image'" :src="mediaUrl(media.url)" mode="aspectFill" /><text v-else>视频</text></view></view
+        ><image v-if="media.type === 'image'" :src="mediaUrl(media.url)" mode="aspectFill" /><text v-else>视频</text><small>{{ mediaLabel(media, index) }}</small></view></view
       ></scroll-view
     ><view class="card overview"
       ><view v-if="isAdminPreview" class="admin-preview-tag">{{ adminPreviewLabel }}</view
@@ -335,12 +337,14 @@ const contact = () => {
         ></view
       ><view class="title">{{ item.title || item.community }}</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
-      ><view class="key-facts"><view><small>户型</small><strong>{{ item.layout || "待补充" }}</strong></view
-        ><view><small>费用</small><strong>{{ item.feeText || "待补充" }}</strong></view
-        ><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
-        ><view><small>入住</small><strong>{{ item.availableDate || "待确认" }}</strong></view
-        ><view class="wide"><small>小区</small><strong>{{ item.community || "待补充" }}</strong></view></view
+      ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
+        ><view><small>户型</small><strong>{{ item.layout || "待补充" }}</strong></view
+        ><view><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
+        ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
+        ><view><small>电梯</small><strong>{{ item.elevator || "待补充" }}</strong></view
+        ><view><small>入住</small><strong>{{ item.availableDate || "待确认" }}</strong></view></view
       ></view
+    ><view v-if="!isAdmin" class="card service-card"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>{{ item.feeText || "咨询房源、确认看房时间与费用明细" }}</text></view><view class="service-status">在线服务</view></view
     ><view v-if="item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate" class="card detail-info"
       ><view class="title small">入住与房屋信息</view
       ><view class="detail-info-grid"
@@ -675,4 +679,5 @@ const contact = () => {
 .detail-kicker { margin: 6rpx 4rpx 18rpx; color: #7b8579; font-size: 23rpx; }.media-strip { margin: 14rpx 0 4rpx; white-space: nowrap; }.media-strip-row { display: inline-flex; gap: 12rpx; padding: 0 2rpx; }.media-thumb { width: 104rpx; height: 76rpx; overflow: hidden; border: 2rpx solid transparent; border-radius: 12rpx; background: #e8ebe3; box-sizing: border-box; }.media-thumb image { width: 100%; height: 100%; }.media-thumb.video { display: flex; align-items: center; justify-content: center; background: #40543f; color: #fff; font-size: 20rpx; }.media-thumb.active { border-color: #536a45; box-shadow: 0 0 0 2rpx #dce7d5; }.admin-preview-tag { display: inline-block; margin-bottom: 14rpx; padding: 7rpx 12rpx; border-radius: 8rpx; background: #f8eadf; color: #b55b37; font-size: 20rpx; font-weight: 650; }.overview .price.pending { color: #73826d; font-size: 39rpx; }.overview .price.pending small { color: #8d9789; }.key-facts,.detail-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }.key-facts > view,.detail-info-grid>view { min-width: 0; padding: 16rpx; border-radius: 14rpx; background: #eeece5; }.key-facts > .wide,.detail-info-grid>.wide { grid-column: span 2; }.key-facts strong,.detail-info-grid strong { white-space: normal; text-overflow: clip; }.key-facts small,.detail-info-grid small { margin-top: 0; }.detail-info .title{margin-bottom:20rpx}.detail-info-grid small{display:block;color:#8a9087;font-size:19rpx}.detail-info-grid strong{display:block;margin-top:7rpx;color:#384438;font-size:24rpx;line-height:1.4}.location-heading { margin-bottom: 8rpx; }
 .overview .price .price-unit{font-size:23rpx}.overview .price.pending .price-unit{color:#8d9789}
 .detail-page-head{margin:8rpx 4rpx 18rpx}.detail-page-head view{color:#29382d;font-size:40rpx;font-weight:800;line-height:1.25;letter-spacing:-1rpx}.detail-page-head text{display:block;margin-top:8rpx;color:#7b8579;font-size:23rpx;line-height:1.45}
+.media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}
 </style>

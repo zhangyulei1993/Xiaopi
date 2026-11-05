@@ -18,6 +18,7 @@ const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
   keyword = ref(""),
   selectedArea = ref("全部"),
+  selectedKind = ref(""),
   currentRole = ref("");
 const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
@@ -45,6 +46,12 @@ const areas = computed(() =>
     : [{ label: "全部", keyword: "" }],
 );
 const isAdmin = computed(() => currentRole.value === "admin");
+const kindOptions = ["整租", "合租", "一居", "两居", "三居+"];
+const kindMatched = (item: Property) => {
+  if (!selectedKind.value) return true;
+  const text = `${item.title || ""} ${item.layout || ""} ${item.rentType || ""}`;
+  return text.includes(selectedKind.value);
+};
 const activeAreaName = computed(() => selectedArea.value !== "全部" ? selectedArea.value : channelFilter.value?.title || keyword.value.trim());
 const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase(),
@@ -74,6 +81,7 @@ const filteredProperties = computed(() => {
           item.location?.includes(channelFilter.value.keyword));
     return (
       channelMatched &&
+      kindMatched(item) &&
       (!showFavoritesOnly.value || favoriteIDs.value.includes(item.id)) &&
       (!location?.keyword || item.location?.includes(location.keyword)) &&
       (!price.min || item.rentMonthly >= price.min) &&
@@ -118,6 +126,7 @@ const load = async () => {
           if (typeof filter.priceIndex === "number")
             selectedPrice.value = Math.max(0, Math.min(priceRanges.length - 1, filter.priceIndex));
           if (typeof filter.keyword === "string") keyword.value = filter.keyword;
+          if (typeof filter.kind === "string" && kindOptions.includes(filter.kind)) selectedKind.value = filter.kind;
           if (
             typeof filter.latitude === "number" &&
             typeof filter.longitude === "number" &&
@@ -233,6 +242,13 @@ const subscribeArea = () => {
           :class="{ active: selectedPrice === index }"
           @click="selectedPrice = index"
           >{{ price.label }}</text
+        ></scroll-view
+      ></view
+    ><view class="filter-block"
+      ><view class="filter-label">住法</view
+      ><scroll-view scroll-x class="chips"
+        ><text :class="{ active: !selectedKind }" @click="selectedKind = ''">不限</text
+        ><text v-for="kind in kindOptions" :key="kind" :class="{ active: selectedKind === kind }" @click="selectedKind = selectedKind === kind ? '' : kind">{{ kind }}</text
         ></scroll-view
       ></view
     ><view v-if="loading" class="state card">正在加载房源...</view
