@@ -529,7 +529,10 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 func visibleProperties(items []domain.Property, showAll bool) []domain.Property {
 	result := make([]domain.Property, 0, len(items))
 	for _, item := range items {
-		if showAll || item.Status == domain.PropertyPublished || item.Status == domain.PropertyAvailable {
+		// "已发布" is an internal workflow state. Only listings explicitly
+		// marked as 可租 may leave the management boundary and be returned to
+		// ordinary visitors.
+		if showAll || item.Status == domain.PropertyAvailable {
 			result = append(result, item)
 		}
 	}

@@ -40,7 +40,7 @@ const channelStyle = (icon: string, index: number) => {
 const homeProperties = computed(() => properties.value.filter((item) => {
   // 首页是找房入口，不是运营工作台。即使管理员登录时接口返回全量
   // 房源，也绝不能把草稿、已租或下架房源伪装成“可租”展示给浏览流。
-  if (!["published", "available"].includes(item.status)) return false;
+  if (item.status !== "available") return false;
   const subject = `${item.title || ""} ${item.layout || ""} ${item.location || ""}`;
   const range = selectedPrice.value === null ? null : priceRanges[selectedPrice.value];
   const kindMatched = matchesKind(item, activeKind.value);

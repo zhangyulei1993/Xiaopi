@@ -438,13 +438,14 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	dataStore := &fakeStore{properties: []domain.Property{
 		{ID: "draft", Status: domain.PropertyDraft},
 		{ID: "published", Status: domain.PropertyPublished},
+		{ID: "available", Status: domain.PropertyAvailable},
 	}}
 	server := testServer(dataStore)
 	handler := server.Handler()
 
 	publicResponse := performRequest(t, handler, http.MethodGet, "/api/v1/properties", nil, "")
 	publicItems := responseData[[]domain.Property](t, publicResponse)
-	if len(publicItems) != 1 || publicItems[0].ID != "published" {
+	if len(publicItems) != 1 || publicItems[0].ID != "available" {
 		t.Fatalf("public response leaked unpublished properties: %#v", publicItems)
 	}
 
@@ -454,7 +455,7 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	}
 	adminResponse := performRequest(t, handler, http.MethodGet, "/api/v1/properties", nil, adminToken)
 	adminItems := responseData[[]domain.Property](t, adminResponse)
-	if len(adminItems) != 2 {
+	if len(adminItems) != 3 {
 		t.Fatalf("admin expected all properties, got %#v", adminItems)
 	}
 }
