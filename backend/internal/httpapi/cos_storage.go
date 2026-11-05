@@ -34,7 +34,7 @@ func (s *Server) putCOSObject(ctx context.Context, key, contentType string, body
 	_, err = client.Object.Put(ctx, key, body, &cos.ObjectPutOptions{ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
 		ContentType:  contentType,
 		CacheControl: "public, max-age=31536000, immutable",
-	}})
+	}, ACLHeaderOptions: &cos.ACLHeaderOptions{XCosACL: "public-read"}})
 	if err != nil {
 		return "", err
 	}
