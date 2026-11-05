@@ -23,11 +23,12 @@ docker compose -f docker/docker-compose.yml up -d
 ## 小程序
 
 ```bash
-cd miniapp
-./node_modules/.bin/uni build -p mp-weixin --mode development --emptyOutDir
+# 在 develop 工作区的仓库根目录执行；会拒绝从其他分支/工作区构建。
+./scripts/build-miniapp-develop.sh
 ```
 
-微信开发者工具导入 `miniapp/dist/mp-weixin`。
+微信开发者工具只导入脚本最后输出的绝对路径。不要导入其他 worktree
+（例如 `xiaopi/miniapp/dist/mp-weixin`）中的构建目录。
 
 ## 管理后台
 
