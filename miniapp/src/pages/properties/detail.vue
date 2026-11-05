@@ -469,9 +469,9 @@ const contact = () => {
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool" @click="editProperty">编辑房源</button><button v-if="item.status !== 'offline'" class="admin-detail-tool" open-type="share">分享给他人</button><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
-      ><view class="reserve reserve-secondary" @click="reserve">预约看房</view
-      ><button class="share-action" open-type="share"><text>↗</text><small>分享</small></button
-      ><view class="reserve contact-primary" @click="contact"><text>☎</text> 联系小皮</view></view
+      ><button class="user-share" open-type="share"><text>↗</text><small>分享</small></button
+      ><view class="user-contact" @click="contact"><text>☎</text><small>联系小皮</small></view
+      ><view class="reserve user-reserve-primary" @click="reserve">预约看房</view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
 </template>
@@ -775,4 +775,14 @@ const contact = () => {
 .admin-detail-tool + .admin-detail-tool::before { position:absolute; top:8rpx; bottom:8rpx; left:0; width:1rpx; background:#e0e4dc; content:""; }
 .admin-detail-tool.delete { color:#b96d57; }
 .admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
+
+/* Tenant detail actions: share is light, direct contact is secondary, viewing is the primary conversion. */
+.user-action-bar { grid-template-columns:80rpx 174rpx minmax(0,1fr); gap:12rpx; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
+.user-share,.user-contact { display:flex; min-width:0; align-items:center; justify-content:center; gap:7rpx; margin:0; padding:0; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#5a6955; }
+.user-share { flex-direction:column; gap:1rpx; }
+.user-share::after { border:0; }
+.user-share text { font-size:29rpx; line-height:1; }.user-share small { font-size:18rpx; line-height:1.2; }
+.user-contact { background:#f1f4ed; color:#4b5e45; font-size:24rpx; font-weight:700; }.user-contact text { font-size:25rpx; line-height:1; }.user-contact small { overflow:hidden; font-size:22rpx; line-height:1.2; white-space:nowrap; }
+.user-reserve-primary { min-height:82rpx; border-radius:15rpx; background:#40543f; color:#fff; font-size:27rpx; letter-spacing:.3rpx; }
+.user-share:active,.user-contact:active,.user-reserve-primary:active { opacity:.8; transform:scale(.985); }
 </style>
