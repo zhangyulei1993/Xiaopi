@@ -379,6 +379,12 @@ watch([() => form.community, roomCount, hallCount, rentType, buildingNo, unitNo,
 const selectedBuildingRule = computed(() =>
   buildingRules.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
 );
+const hasStructureRule = computed(() => Boolean(
+  selectedBuildingRule.value &&
+  selectedBuildingRule.value.unitCount > 0 &&
+  selectedBuildingRule.value.floorCount > 0 &&
+  selectedBuildingRule.value.householdsPerFloor > 0,
+));
 const unitOptions = computed(() => {
   const total = selectedBuildingRule.value?.unitCount || 0;
   return Array.from({ length: total }, (_, index) => String(index + 1));
@@ -921,13 +927,13 @@ const mediaUrl = resolveAssetUrl;
           ><view class="unit-row"
             ><picker v-if="buildingRules.length" :range="buildingRules" range-key="buildingNo" @change="selectBuildingRule"><view class="field picker-field"><text>楼栋</text><strong>{{ buildingNo || "选择楼栋" }}</strong></view></picker
             ><view v-else class="field"><text>楼栋</text><input v-model.trim="buildingNo" maxlength="20" placeholder="如：3栋" /></view
-            ><view class="field"><text>房号</text><input v-if="!selectedBuildingRule" v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /><strong v-else>{{ generatedRoomNo || roomNo || "请选择" }}</strong></view></view
-          ><view v-if="selectedBuildingRule" class="structure-picker-grid"
+            ><view class="field"><text>房号</text><input v-if="!hasStructureRule" v-model.trim="roomNo" maxlength="20" placeholder="如：1203" /><strong v-else>{{ generatedRoomNo || roomNo || "请选择" }}</strong></view></view
+          ><view v-if="hasStructureRule" class="structure-picker-grid"
             ><picker :range="unitOptions" @change="chooseUnit"><view><small>单元</small><strong>{{ unitNo ? `${unitNo}单元` : "选择" }}</strong></view></picker
             ><picker :range="floorOptions" :disabled="!unitNo" @change="chooseFloor"><view><small>楼层</small><strong>{{ selectedFloor ? `${selectedFloor}层` : "选择" }}</strong></view></picker
             ><picker :range="householdOptions" :disabled="!selectedFloor" @change="chooseHousehold"><view><small>户号</small><strong>{{ roomNo ? `${roomNo}室` : "选择" }}</strong></view></picker></view
           ><view v-else class="rule-setup"
-            ><view class="rule-setup-head"><text>还没有楼栋规则</text><small>配置后即可自动选择单元、楼层和房号</small></view
+            ><view class="rule-setup-head"><text>{{ buildingRules.length ? "该栋待补结构规则" : "还没有楼栋规则" }}</text><small>配置后即可自动选择单元、楼层和房号</small></view
             ><view class="rule-inputs"><view><small>单元数</small><input v-model.number="ruleDraft.unitCount" type="number" /></view><view><small>起始层</small><input v-model.number="ruleDraft.floorStart" type="number" /></view><view><small>总层数</small><input v-model.number="ruleDraft.floorCount" type="number" /></view><view><small>每层户数</small><input v-model.number="ruleDraft.householdsPerFloor" type="number" /></view></view
             ><button :loading="ruleSaving" :disabled="!buildingNo || ruleSaving" @click="saveCurrentBuildingRule">保存该栋规则</button></view
           ></view

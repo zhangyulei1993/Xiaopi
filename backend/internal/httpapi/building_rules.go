@@ -29,8 +29,13 @@ func (s *Server) upsertBuildingRule(w http.ResponseWriter, r *http.Request) {
 	}
 	input.Community = strings.TrimSpace(input.Community)
 	input.BuildingNo = strings.TrimSpace(input.BuildingNo)
-	if input.Community == "" || input.BuildingNo == "" || input.UnitCount < 1 || input.UnitCount > 20 || input.FloorCount < 1 || input.FloorCount > 99 || input.HouseholdsPerFloor < 1 || input.HouseholdsPerFloor > 20 {
-		writeError(w, http.StatusBadRequest, "请填写有效的小区、楼栋、单元数、层数和每层户数")
+	if input.Community == "" || input.BuildingNo == "" || input.UnitCount < 0 || input.UnitCount > 20 || input.FloorCount < 0 || input.FloorCount > 99 || input.HouseholdsPerFloor < 0 || input.HouseholdsPerFloor > 20 {
+		writeError(w, http.StatusBadRequest, "请填写有效的小区和楼栋规则")
+		return
+	}
+	configured := input.UnitCount > 0 || input.FloorCount > 0 || input.HouseholdsPerFloor > 0
+	if configured && (input.UnitCount < 1 || input.FloorCount < 1 || input.HouseholdsPerFloor < 1) {
+		writeError(w, http.StatusBadRequest, "单元数、层数和每层户数需完整填写")
 		return
 	}
 	if input.FloorStart == 0 {
