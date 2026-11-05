@@ -194,7 +194,7 @@ const call = () => callPhone(contactPhone.value);
       rgba(244, 217, 161, 0.4),
       transparent 180rpx
     ),
-    linear-gradient(140deg, #173f3c, #287168);
+    linear-gradient(140deg, #29382d, #536a45);
   color: #fff;
 }
 .request-hero > text {
@@ -224,7 +224,7 @@ const call = () => callPhone(contactPhone.value);
 .field > text {
   display: block;
   margin-bottom: 14rpx;
-  color: #315f5a;
+  color: #52644c;
   font-size: 25rpx;
   font-weight: 700;
 }
@@ -232,7 +232,7 @@ const call = () => callPhone(contactPhone.value);
 .field textarea,
 .picker {
   width: 100%;
-  color: #073b3a;
+  color: #29382d;
   font-size: 28rpx;
   box-sizing: border-box;
 }
@@ -253,7 +253,7 @@ const call = () => callPhone(contactPhone.value);
 }
 .budget text,
 .picker text {
-  color: #8aa7a0;
+  color: #879183;
 }
 .picker {
   display: flex;
@@ -261,17 +261,19 @@ const call = () => callPhone(contactPhone.value);
 }
 .privacy {
   padding: 0 12rpx;
-  color: #8aa7a0;
+  color: #879183;
   font-size: 21rpx;
   line-height: 1.6;
 }
 .contact {
   text-align: center;
   margin-top: 28rpx;
-  color: #0e8177;
+  color: #40543f;
   font-size: 26rpx;
 }
 .phone-bind-mask{position:fixed;z-index:20;inset:0;display:flex;align-items:flex-end;background:rgba(27,34,27,.42)}.phone-bind-sheet{width:100%;padding:42rpx 36rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:34rpx 34rpx 0 0;background:#fff;text-align:center}.phone-bind-mark{display:grid;place-items:center;width:66rpx;height:66rpx;margin:0 auto 18rpx;border-radius:22rpx;background:#e6edd7;color:#40543f;font-size:32rpx;font-weight:800}.phone-bind-sheet strong,.phone-bind-sheet text{display:block}.phone-bind-sheet strong{font-size:34rpx}.phone-bind-sheet text{margin:14rpx auto 24rpx;color:#7b8579;font-size:24rpx;line-height:1.6}.phone-bind-sheet button{border:0;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx}.phone-bind-sheet button::after{border:0}.phone-bind-sheet>view:last-child{margin-top:20rpx;color:#929a91;font-size:23rpx}
 .request-hero{margin-bottom:28rpx;padding:42rpx 34rpx}.request-hero>view{line-height:1.28}.form{padding:12rpx 28rpx}.field{padding:28rpx 0}.privacy{margin-top:8rpx;line-height:1.7}.contact{margin-top:32rpx;padding-bottom:12rpx}
 .request-hero>text{font-size:24rpx;letter-spacing:.5rpx}.request-hero>view{font-size:42rpx;letter-spacing:-1rpx}.request-hero small{line-height:1.65}.field>text{margin-bottom:16rpx;font-size:26rpx;line-height:1.25}.field input,.field textarea,.picker{font-size:29rpx;line-height:1.45}.budget input{min-height:72rpx;padding:0 16rpx}.picker{min-height:50rpx;align-items:center}.privacy{font-size:22rpx}.button{margin-top:24rpx;min-height:96rpx;line-height:96rpx}
+/* Match the warm, dependable visual system used by listings and profile. */
+.page{min-height:100vh;padding-bottom:calc(56rpx + env(safe-area-inset-bottom));background:#f7f6f1}.request-hero{border-radius:26rpx;background:radial-gradient(circle at 90% 10%,rgba(231,237,207,.18),transparent 190rpx),linear-gradient(140deg,#354b35,#50684d)}.request-hero>text{color:#e7edcf}.request-hero small{color:rgba(255,255,255,.7)}.form{border-color:#ebe8e1;border-radius:24rpx}.field{border-color:#ecebe5}.field>text{color:#52644c}.field input,.field textarea,.picker{color:#29382d}.budget input{background:#f2f4ed}.budget text,.picker text{color:#879183}.privacy{color:#879087}.button{border-radius:16rpx;background:#40543f;font-weight:750}.contact{color:#536a45;font-weight:650}.phone-bind-mark{background:#e7edcf;color:#40543f}.phone-bind-sheet button{background:#40543f}
 </style>

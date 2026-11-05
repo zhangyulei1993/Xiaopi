@@ -90,16 +90,16 @@ const submit = async () => {
 </template>
 
 <style scoped>
-.tip { color: #4c8880; background: #e5faf5; line-height: 1.7; }
+.page{min-height:100vh;padding-bottom:calc(52rpx + env(safe-area-inset-bottom))}.tip { color:#4f604a; background:#eef2e7; border-color:#e1e7d8; line-height:1.7; }
 .small { font-size: 34rpx; margin-bottom: 10rpx; }
-.field { display: flex; align-items: center; padding: 24rpx 0; border-bottom: 1rpx solid #edf4f1; }
-.field text { width: 150rpx; color: #57857e; }
+.field { display:flex;align-items:center;min-height:94rpx;padding:22rpx 0;border-bottom:1rpx solid #ecebe5;box-sizing:border-box; }
+.field text { width:150rpx;color:#5e6d59; }
 .field input { flex: 1; }
 .column { display: block; }
 .column textarea { width: 100%; height: 170rpx; margin-top: 18rpx; }
-.button { width: 100%; border: 0; font-size: 30rpx; line-height: 1.4; }
+.button { width:100%;border:0;background:#40543f;font-size:29rpx;font-weight:700;line-height:1.4; }
 .button::after { border: 0; }
 .checking { padding-top: 180rpx; text-align: center; }
 .tip{margin-bottom:24rpx;padding:30rpx;line-height:1.72}.tip .muted{margin-top:10rpx;line-height:1.65}.field{padding:27rpx 0}.field:first-child{padding-top:6rpx}.column{padding-bottom:8rpx}.button{margin-top:28rpx;padding-top:24rpx;padding-bottom:24rpx}
-.small{font-size:32rpx;line-height:1.3}.field text{font-size:25rpx;font-weight:600}.field input{font-size:27rpx;line-height:1.4}.column textarea{font-size:27rpx;line-height:1.55}.card>.field:last-child{border-bottom:0}.button{font-size:30rpx;line-height:1.35}
+.small{font-size:32rpx;line-height:1.3}.field text{font-size:25rpx;font-weight:650}.field input{font-size:27rpx;line-height:1.4}.column textarea{font-size:27rpx;line-height:1.55}.card>.field:last-child{border-bottom:0}.button{font-size:29rpx;line-height:1.35}.checking{color:#7f897e}
 </style>

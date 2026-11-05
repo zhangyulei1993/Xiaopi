@@ -298,8 +298,8 @@ const copyProperty = async (property: Property) => {
   margin-bottom: 24rpx;
 }
 .refresh {
-  color: #0e8177;
-  background: #e1f7f1;
+  color: #40543f;
+  background: #e9eedc;
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
 }
@@ -322,12 +322,12 @@ const copyProperty = async (property: Property) => {
   display: block;
 }
 .summary strong {
-  color: #173f3c;
+  color: #29382d;
   font-size: 38rpx;
 }
 .summary text {
   margin-top: 5rpx;
-  color: #78a39d;
+  color: #7e887d;
   font-size: 21rpx;
 }
 .tabs {
@@ -346,7 +346,7 @@ const copyProperty = async (property: Property) => {
 .tabs .active {
   background: #fff;
   border-radius: 999rpx;
-  color: #0e8177;
+  color: #40543f;
   font-weight: 700;
 }
 .new-property {
@@ -356,7 +356,7 @@ const copyProperty = async (property: Property) => {
   margin-bottom: 24rpx;
   padding: 24rpx 28rpx;
   border-radius: 24rpx;
-  background: linear-gradient(135deg, #173f3c, #287168);
+  background: linear-gradient(135deg, #29382d, #536a45);
   color: #fff;
 }
 .new-property > text:first-child {
@@ -394,8 +394,8 @@ const copyProperty = async (property: Property) => {
 }
 .status {
   flex: none;
-  background: #e8f8f3;
-  color: #0e8177;
+  background: #eef2e7;
+  color: #40543f;
   padding: 8rpx 14rpx;
   border-radius: 999rpx;
   font-size: 21rpx;
@@ -436,7 +436,7 @@ const copyProperty = async (property: Property) => {
   margin-top: 18rpx;
   padding: 18rpx;
   background: #f6fbf9;
-  color: #57857e;
+  color: #64705f;
   border-radius: 16rpx;
 }
 .actions {
@@ -447,8 +447,8 @@ const copyProperty = async (property: Property) => {
 .actions button {
   flex: 1;
   margin: 0;
-  background: #eff8f5;
-  color: #0e8177;
+  background: #f2f4ed;
+  color: #40543f;
   border-radius: 999rpx;
   font-size: 24rpx;
 }
@@ -456,7 +456,7 @@ const copyProperty = async (property: Property) => {
   border: 0;
 }
 .actions .primary {
-  background: #0e8177;
+  background: #40543f;
   color: #fff;
 }
 .actions .danger {

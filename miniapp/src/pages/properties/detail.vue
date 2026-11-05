@@ -235,7 +235,7 @@ const propertyMarkers = computed(() =>
             display: "ALWAYS",
             padding: 6,
             borderRadius: 6,
-            color: "#173f3c",
+            color: "#29382d",
             bgColor: "#ffffff",
           },
         },
@@ -487,7 +487,7 @@ const contact = () => {
 .state {
   text-align: center;
   padding-top: 180rpx;
-  color: #78a39d;
+  color: #7e887d;
 }
 .detail-page {
   padding-bottom: 150rpx;
@@ -555,7 +555,7 @@ const contact = () => {
   display: block;
 }
 .location-heading strong {
-  color: #173f3c;
+  color: #29382d;
   font-size: 32rpx;
 }
 .nearby-card {
@@ -575,11 +575,11 @@ const contact = () => {
 .nearby-item small {
   display: block;
   margin-top: 6rpx;
-  color: #78a39d;
+  color: #7e887d;
   font-size: 22rpx;
 }
 .nearby-heading > text {
-  color: #0e8177;
+  color: #40543f;
   font-size: 23rpx;
 }
 .nearby-item {
@@ -591,7 +591,7 @@ const contact = () => {
   min-width: 0;
 }
 .nearby-item strong {
-  color: #173f3c;
+  color: #29382d;
   font-size: 27rpx;
 }
 .nearby-price {
@@ -604,12 +604,12 @@ const contact = () => {
 }
 .location-heading small {
   margin-top: 8rpx;
-  color: #78a39d;
+  color: #7e887d;
   font-size: 21rpx;
 }
 .location-heading > text {
   flex: none;
-  color: #0e8177;
+  color: #40543f;
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -623,8 +623,8 @@ const contact = () => {
   margin: 18rpx 0 0;
   border: 0;
   border-radius: 14rpx;
-  background: #edf5f2;
-  color: #0e8177;
+  background: #eef2e7;
+  color: #40543f;
   font-size: 25rpx;
   font-weight: 700;
 }
@@ -660,7 +660,7 @@ const contact = () => {
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
   background: #e9faf5;
-  color: #0f8177;
+  color: #40543f;
 }
 .row {
   display: flex;
@@ -670,7 +670,7 @@ const contact = () => {
   color: #6e9a93;
 }
 .row text:last-child {
-  color: #073b3a;
+  color: #29382d;
 }
 .amenity-card {
   padding-bottom: 32rpx;
@@ -714,7 +714,7 @@ const contact = () => {
 }
 .desc {
   line-height: 1.8;
-  color: #57857e;
+  color: #64705f;
 }
 .action-bar {
   position: fixed;
@@ -735,7 +735,7 @@ const contact = () => {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  color: #315f5a;
+  color: #52644c;
 }
 .contact-action text {
   font-size: 31rpx;
@@ -749,7 +749,7 @@ const contact = () => {
   justify-content: center;
   min-height: 84rpx;
   border-radius: 999rpx;
-  background: #0e8177;
+  background: #40543f;
   color: #fff;
   font-size: 30rpx;
   font-weight: 700;
@@ -793,5 +793,7 @@ const contact = () => {
 .user-contact { background:#f1f4ed; color:#4b5e45; font-size:24rpx; font-weight:700; }.user-contact text { font-size:25rpx; line-height:1; }.user-contact small { overflow:hidden; font-size:22rpx; line-height:1.2; white-space:nowrap; }
 .user-reserve-primary { min-height:82rpx; border-radius:15rpx; background:#40543f; color:#fff; font-size:27rpx; letter-spacing:.3rpx; }
 .user-share:active,.user-contact:active,.user-reserve-primary:active { opacity:.8; transform:scale(.985); }
-.transfer-tag { display:inline-block; margin-top:12rpx; padding:7rpx 12rpx; border-radius:8rpx; background:#edf8f4; color:#0e8177; font-size:20rpx; font-weight:700; }
+.transfer-tag { display:inline-block; margin-top:12rpx; padding:7rpx 12rpx; border-radius:8rpx; background:#edf0dc; color:#536a45; font-size:20rpx; font-weight:700; }
+/* Final palette and rhythm pass: remove legacy teal without changing detail flow. */
+.state{color:#7e887d}.detail-cover,.media-image,.media-video{background:#e4e7de}.location-heading strong,.nearby-item strong{color:#29382d}.location-heading small,.nearby-heading small,.nearby-item small{color:#7e887d}.nearby-heading>text,.nearby-price strong{color:#d76440}.navigate-button{background:#edf1e8;color:#536a45}.tags{gap:10rpx}.tags text{padding:8rpx 13rpx;background:#edf0dc;color:#536a45;font-size:21rpx}.row{color:#7e887d}.row text:last-child{color:#29382d}.amenity-icon{border-color:#dfe7d8;background:#edf1e8;box-shadow:none}.amenity-name{color:#40543f}.desc{color:#64705f}.heart{color:#657162}.heart.active{color:#d76440}
 </style>

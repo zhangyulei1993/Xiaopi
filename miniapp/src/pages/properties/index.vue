@@ -389,13 +389,13 @@ const subscribeArea = () => {
 /* Legacy declarations below are intentionally reset by the canonical listing layer. */
 .location {
   font-size: 36rpx;
-  color: #173f3c;
+  color: #29382d;
   margin: 28rpx 0 22rpx;
   font-weight: 800;
 }
 .location text {
   float: right;
-  color: #0e8177;
+  color: #40543f;
   font-size: 24rpx;
   font-weight: 500;
 }
@@ -403,12 +403,12 @@ const subscribeArea = () => {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  color: #8aa7a0;
+  color: #879183;
   margin-bottom: 20rpx;
 }
 .search input {
   flex: 1;
-  color: #073b3a;
+  color: #29382d;
 }
 .clear {
   padding: 6rpx 14rpx;
@@ -455,7 +455,7 @@ const subscribeArea = () => {
 }
 .chips .active {
   background: #d9f7ef;
-  color: #0f8177;
+  color: #40543f;
   font-weight: 700;
 }
 .grid {
@@ -490,7 +490,7 @@ const subscribeArea = () => {
   color: #fff;
   font-size: 20rpx;
   padding: 7rpx 13rpx;
-  background: #0e8177;
+  background: #40543f;
   border-radius: 999rpx;
 }
 .favorite {
@@ -538,7 +538,7 @@ const subscribeArea = () => {
 .empty-match {
   padding: 76rpx 30rpx;
   text-align: center;
-  color: #78a39d;
+  color: #7e887d;
 }
 .empty-icon {
   font-size: 70rpx;
@@ -547,14 +547,14 @@ const subscribeArea = () => {
   margin: 12rpx 0;
   font-size: 31rpx;
   font-weight: 700;
-  color: #173f3c;
+  color: #29382d;
 }
 .request-button {
   display: inline-block;
   margin-top: 28rpx;
   padding: 18rpx 32rpx;
   border-radius: 999rpx;
-  background: #0e8177;
+  background: #40543f;
   color: #fff;
 }
 .request-banner {
@@ -565,7 +565,7 @@ const subscribeArea = () => {
   margin: 28rpx 0 8rpx;
   padding: 28rpx;
   border-radius: 28rpx;
-  background: linear-gradient(135deg, #173f3c, #287168);
+  background: linear-gradient(135deg, #29382d, #536a45);
   color: #fff;
 }
 .request-banner strong,
