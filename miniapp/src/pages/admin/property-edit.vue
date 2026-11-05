@@ -1385,7 +1385,7 @@ const mediaUrl = resolveAssetUrl;
           >
             下一步 · {{ sectionSteps[activeSection + 1] }}
           </button></view
-        ><view v-else class="save-actions"
+        ><view v-else class="save-actions" :class="{ 'three-actions': id && currentStatus === 'draft' }"
           ><button v-if="id && currentStatus === 'draft'" class="delete-draft" :disabled="saving" @click="deleteDraft">删除草稿</button
           ><button :disabled="saving" @click="save(false)">保存草稿</button
           ><button
@@ -2182,7 +2182,7 @@ const mediaUrl = resolveAssetUrl;
   text-align: center;
 }
 .save-space {
-  height: 150rpx;
+  height: 170rpx;
 }
 .save-bar {
   position: fixed;
@@ -2202,8 +2202,11 @@ const mediaUrl = resolveAssetUrl;
 }
 .save-actions {
   display: grid;
-  grid-template-columns: 0.8fr 1.2fr;
-  gap: 14rpx;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10rpx;
+}
+.save-actions.three-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .step-actions {
   display: grid;
@@ -2251,7 +2254,9 @@ const mediaUrl = resolveAssetUrl;
   border-radius: 16rpx;
   background: #edf6f3;
   color: #0e8177;
-  font-size: 27rpx;
+  padding: 0 8rpx;
+  font-size: 22rpx;
+  white-space: nowrap;
 }
 .save-actions button::after {
   border: 0;
