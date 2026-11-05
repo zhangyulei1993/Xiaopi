@@ -196,6 +196,14 @@ const serviceLabels = (item: Property) => {
     .filter((label, index) => index === 0 || source.includes(label))
     .slice(0, 2);
 };
+const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
+const listingSubtitle = (item: Property) => {
+  const title = compact(item.title || item.community);
+  const layout = String(item.layout || "户型待补充").trim();
+  const layoutCore = layout.split(" · ")[0].trim();
+  const hasLayoutInTitle = Boolean(layoutCore && title.includes(compact(layoutCore)));
+  return [hasLayoutInTitle ? "" : layout, item.location || "位置待补充"].filter(Boolean).join(" · ");
+};
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
     uni.navigateTo({ url: "/pages/auth/login" });
@@ -333,7 +341,7 @@ const subscribeArea = () => {
           ><view class="property-copy"
           ><view class="title small">{{ item.title || item.community }}</view
           ><view class="muted summary"
-            >{{ item.layout || "户型待补充" }} · {{ item.location || "位置待补充" }}</view
+            >{{ listingSubtitle(item) }}</view
           ><view v-if="serviceLabels(item).length > 1" class="service-tags"><text v-for="label in serviceLabels(item).slice(1)" :key="label">{{ label }}</text></view
           ><view class="price"
             >{{ item.rentMonthly }} <text class="price-unit">元/月</text></view
