@@ -155,9 +155,6 @@ const paymentCycle = ref("付一");
 const noAgentFee = ref(true);
 const transferMonthOptions = [1, 2, 3, 6, 12];
 const transferDepositMultiplier = ref(1);
-const transferRemainingRent = computed(() =>
-  Math.max(0, Number(form.rentMonthly) || 0) * Math.max(0, Number(form.remainingLeaseMonths) || 0),
-);
 const transferDepositAmount = computed(() =>
   Math.max(0, Number(form.rentMonthly) || 0) * transferDepositMultiplier.value,
 );
@@ -202,7 +199,8 @@ const requiredReady = computed(() =>
     form.layout?.trim() &&
     geoReady.value &&
     Number(form.rentMonthly) > 0 &&
-    Boolean(form.depositPayment?.trim()),
+    Boolean(form.depositPayment?.trim()) &&
+    (form.listingSource !== "转租" || Number(form.remainingLeaseMonths) > 0),
   ),
 );
 const sectionSteps = ["位置门牌", "户型出租", "环境配套", "租金入住", "素材发布"];
@@ -282,19 +280,16 @@ const propertyDistance = computed(() =>
 );
 const selectNearestChannel = (latitude: number, longitude: number) => {
   if (!latitude || !longitude || !channels.value.length) return;
-  const nearestIndex = channels.value.reduce((bestIndex, channel, index) => {
-    const best = channels.value[bestIndex];
-    const bestDistance = Number(best?.latitude) && Number(best?.longitude)
-      ? distanceKm(latitude, longitude, Number(best.latitude), Number(best.longitude))
-      : Number.POSITIVE_INFINITY;
-    const candidateDistance = Number(channel.latitude) && Number(channel.longitude)
-      ? distanceKm(latitude, longitude, Number(channel.latitude), Number(channel.longitude))
-      : Number.POSITIVE_INFINITY;
-    return candidateDistance < bestDistance ? index : bestIndex;
-  }, 0);
-  if (Number.isFinite(Number(channels.value[nearestIndex]?.latitude)) && Number(channels.value[nearestIndex]?.latitude)) {
-    selectedChannelIndex.value = nearestIndex;
-  }
+  const candidates = channels.value
+    .map((channel, index) => ({ channel, index }))
+    .filter(({ channel }) => Number.isFinite(Number(channel.latitude)) && Number.isFinite(Number(channel.longitude)) && Number(channel.latitude) !== 0 && Number(channel.longitude) !== 0);
+  if (!candidates.length) return;
+  selectedChannelIndex.value = candidates.reduce((nearest, candidate) =>
+    distanceKm(latitude, longitude, Number(candidate.channel.latitude), Number(candidate.channel.longitude)) <
+    distanceKm(latitude, longitude, Number(nearest.channel.latitude), Number(nearest.channel.longitude))
+      ? candidate
+      : nearest,
+  ).index;
 };
 const selectedChannelDistance = computed(() =>
   geoReady.value
@@ -696,6 +691,7 @@ const loadProperty = async () => {
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
     parseLayout(property.layout);
+    if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
     titleParts.value = ["community", "unit", "layout", "rentType"];
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
@@ -1323,7 +1319,7 @@ const mediaUrl = resolveAssetUrl;
           ><view class="field option-field"
             ><text>中介费</text><checkbox-group @change="toggleNoAgentFee"><label><checkbox value="no-agent-fee" :checked="noAgentFee" color="#0e8177" />无中介费</label></checkbox-group></view></view
         ><view class="term-block"><text>押付方式 *</text><view class="payment-options"><view class="payment-fixed">押一</view><view v-for="cycle in paymentCycles" :key="cycle" :class="{ active: paymentCycle === cycle }" @click="setPaymentCycle(cycle)">{{ cycle }}</view></view></view
-        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>按月填写即可，线下再确认具体合同与交接</small></view><text>转租</text></view><view class="transfer-choice"><text>剩余租期</text><view><button v-for="months in transferMonthOptions" :key="months" :class="{ active: form.remainingLeaseMonths === months }" @click="setTransferMonths(months)">{{ months }}个月</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><view><small>剩余租金</small><strong>¥{{ transferRemainingRent }}</strong></view><view><small>承接押金</small><strong>{{ transferDepositMultiplier ? `¥${transferDepositAmount}` : '无需承接' }}</strong></view></view></view
+        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>只记录剩余月数与押金，具体费用线下沟通</small></view><text>转租</text></view><view class="transfer-choice"><text>剩余租期</text><view><button v-for="months in transferMonthOptions" :key="months" :class="{ active: form.remainingLeaseMonths === months }" @click="setTransferMonths(months)">{{ months }}个月</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><small>当前选择</small><strong>剩余 {{ form.remainingLeaseMonths || 0 }} 个月 · {{ transferDepositMultiplier ? `承接押金 ¥${transferDepositAmount}` : '无需承接押金' }}</strong></view></view
         ><view class="rent-row detail-row"
           ><view class="field"
             ><text>可入住日期</text
@@ -1723,11 +1719,10 @@ const mediaUrl = resolveAssetUrl;
 .transfer-choice button { min-width:0;height:54rpx;line-height:54rpx;margin:0;padding:0 12rpx;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#607d76;font-size:19rpx;font-weight:700; }
 .transfer-choice button::after { border:0; }
 .transfer-choice button.active { border-color:#0e8177;background:#0e8177;color:#fff; }
-.transfer-summary { display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:18rpx; }
-.transfer-summary>view { padding:14rpx;border-radius:12rpx;background:#fff; }
+.transfer-summary { margin-top:18rpx;padding:14rpx 16rpx;border-radius:12rpx;background:#fff; }
 .transfer-summary small,.transfer-summary strong { display:block; }
 .transfer-summary small { color:#78938e;font-size:19rpx; }
-.transfer-summary strong { margin-top:5rpx;color:#315f5a;font-size:25rpx; }
+.transfer-summary strong { margin-top:5rpx;color:#315f5a;font-size:23rpx;line-height:1.4; }
 .payment-options { display:grid;grid-template-columns:repeat(5,1fr);gap:10rpx; }
 .payment-options>view { display:flex;min-height:58rpx;align-items:center;justify-content:center;border:1rpx solid #dce9e4;border-radius:10rpx;background:#fff;color:#5d7973;font-size:21rpx;font-weight:700; }
 .payment-options .payment-fixed { border-color:#cfe6df;background:#edf8f4;color:#0e8177; }

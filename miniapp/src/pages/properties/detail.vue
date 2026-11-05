@@ -420,7 +420,6 @@ const contact = () => {
       ><view class="detail-info-grid"
         ><view v-if="item.depositPayment"><small>押付方式</small><strong>{{ item.depositPayment }}</strong></view
         ><view v-if="item.listingSource === '转租'"><small>剩余租期</small><strong>{{ item.remainingLeaseMonths || 0 }} 个月</strong></view
-        ><view v-if="item.listingSource === '转租'"><small>剩余租金</small><strong>¥{{ (item.rentMonthly || 0) * (item.remainingLeaseMonths || 0) }}</strong></view
         ><view v-if="item.listingSource === '转租'"><small>承接押金</small><strong>{{ item.transferDeposit ? `¥${item.transferDeposit}` : '无需承接' }}</strong></view
         ><view v-if="item.utilitiesText"><small>水电杂费</small><strong>{{ item.utilitiesText }}</strong></view
         ><view v-if="item.floorInfo"><small>楼层</small><strong>{{ item.floorInfo }}</strong></view
