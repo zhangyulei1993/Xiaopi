@@ -35,7 +35,7 @@ onLoad(async (query) => {
   const config = await getPublicConfig().catch(() => null);
 	areaTemplateID.value = (await getSubscriptionTemplates().catch(() => null))?.areaListing || "";
   contactPhone.value = config?.contactPhone || "";
-  pagePresentation.value = config?.pagePresentations?.requests || pagePresentation.value;
+  pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.requests || {}) };
 	if (getSession()?.role === "user") {
 		const profile = await getWechatUserProfile().catch(() => null);
 		if (profile?.phone) {

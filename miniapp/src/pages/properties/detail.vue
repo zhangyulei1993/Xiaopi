@@ -49,7 +49,7 @@ const load = async (id = "") => {
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
     if (getSession()?.role === "user")
-      favorite.value = (await listFavorites().catch(() => [])).includes(id);
+      favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
   } catch (error) {
     loadFailed.value = true;
     uni.showToast({
@@ -105,10 +105,11 @@ const selectMedia = (index: number) => {
 };
 const readVideoMetadata = (
   index: number,
-  event: { detail?: { width?: number; height?: number } },
+  event: { detail?: { width?: number; height?: number } } | Event,
 ) => {
-  const width = Number(event.detail?.width);
-  const height = Number(event.detail?.height);
+  const detail = "detail" in event ? event.detail : undefined;
+  const width = Number(detail?.width);
+  const height = Number(detail?.height);
   if (!width || !height) return;
   videoDimensions.value = {
     ...videoDimensions.value,

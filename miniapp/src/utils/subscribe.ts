@@ -2,7 +2,7 @@ export const requestMessageSubscription = (templateId: string) => new Promise<bo
   if (!templateId) { resolve(false); return; }
   uni.requestSubscribeMessage({
     tmplIds: [templateId],
-    success: (result) => resolve(String((result as Record<string, unknown>)[templateId]) === "accept"),
+    success: (result) => resolve(String((result as unknown as Record<string, unknown>)[templateId]) === "accept"),
     fail: () => resolve(false),
   });
 });

@@ -105,7 +105,7 @@ const load = async () => {
     ]);
     properties.value = items;
     configuredLocations.value = config?.locations || [];
-    pagePresentation.value = config?.pagePresentations?.properties || pagePresentation.value;
+    pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
     const pending = String(uni.getStorageSync("xiaopi_property_filter") || "");
