@@ -48,6 +48,11 @@ onShow(async () => {
     savedNickname.value = profile.nickname || "";
     avatarUrl.value = profile.avatarUrl || "";
     phone.value = profile.phone || phone.value;
+    const croppedAvatar = String(uni.getStorageSync("xiaopi-avatar-crop-result") || "");
+    if (croppedAvatar) {
+      uni.removeStorageSync("xiaopi-avatar-crop-result");
+      uploadAvatar(croppedAvatar);
+    }
     if (refreshed.role === "admin") {
       const [properties, leads, requests, interests] = await Promise.all([
         request<Property[]>("/v1/properties").catch(() => []),
@@ -73,7 +78,17 @@ onShow(async () => {
   }
 });
 
-const login = () => uni.navigateTo({ url: "/pages/auth/login" });
+const login = (reason = "account") => uni.navigateTo({ url: `/pages/auth/login?reason=${encodeURIComponent(reason)}` });
+const requireLogin = (title: string, content: string) => {
+  if (isLoggedIn.value) return true;
+  uni.showModal({
+    title,
+    content,
+    confirmText: "微信登录",
+    success: (result) => result.confirm && login(title.includes("关注") ? "favorites" : "footprints"),
+  });
+  return false;
+};
 const saveNickname = async () => {
   if (!isLoggedIn.value || isSavingProfile.value) return;
   const nextNickname = nickname.value.trim();
@@ -95,10 +110,11 @@ const publish = () => uni.navigateTo({ url: "/pages/publish/index" });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
 const favorites = () => {
+  if (!requireLogin("登录后查看关注", "关注记录会同步到你的微信账号")) return;
   uni.setStorageSync("xiaopi_show_favorites", true);
   browse();
 };
-const footprints = () => uni.navigateTo({ url: "/pages/footprints/index" });
+const footprints = () => requireLogin("登录后查看足迹", "登录后可查看最近浏览过的房源") && uni.navigateTo({ url: "/pages/footprints/index" });
 const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
 const openAdminTab = (tab: "properties" | "leads" | "requests" | "interests") => {
   uni.setStorageSync("xiaopi_admin_tab", tab);
@@ -107,8 +123,7 @@ const openAdminTab = (tab: "properties" | "leads" | "requests" | "interests") =>
 const editProperty = () =>
   uni.navigateTo({ url: "/pages/admin/property-edit" });
 
-const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
-  const path = event.detail.avatarUrl;
+const uploadAvatar = (path: string) => {
   if (!path || isUploadingAvatar.value) return;
   isUploadingAvatar.value = true;
   uni.uploadFile({
@@ -138,6 +153,18 @@ const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
     },
     fail: () => uni.showToast({ title: "头像上传失败", icon: "none" }),
     complete: () => (isUploadingAvatar.value = false),
+  });
+};
+const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
+  const path = event.detail.avatarUrl;
+  if (!path || isUploadingAvatar.value) return;
+  uni.getImageInfo({
+    src: path,
+    success: (image) => {
+      uni.setStorageSync("xiaopi-avatar-crop-source", { path, width: image.width, height: image.height });
+      uni.navigateTo({ url: "/pages/auth/avatar-crop" });
+    },
+    fail: () => uni.showToast({ title: "头像读取失败", icon: "none" }),
   });
 };
 
@@ -197,9 +224,9 @@ const logout = () => {
       <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : "微信一键登录" }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
-    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><strong>全部房源</strong><text>继续看看好房</text></view><view @click="favorites"><i class="shortcut-icon favorite"></i><strong>我的关注</strong><text>收藏的房源</text></view><view v-if="isLoggedIn" @click="footprints"><i class="shortcut-icon footprint"></i><strong>浏览足迹</strong><text>最近看过</text></view><view @click="requestHome"><i class="shortcut-icon request"></i><strong>找房需求</strong><text>告诉我们想法</text></view></view>
+    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><strong>全部房源</strong><text>无需登录</text></view><view @click="favorites"><i class="shortcut-icon favorite"></i><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : "登录后查看" }}</text></view><view @click="footprints"><i class="shortcut-icon footprint"></i><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : "登录后查看" }}</text></view><view @click="requestHome"><i class="shortcut-icon request"></i><strong>找房需求</strong><text>提交时登录</text></view></view>
     </view>
-    <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>有房源想推荐？</strong><text>提交房源线索</text></view><text>›</text></view>
+    <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>有房源想推荐？</strong><text>无需登录，提交后电话核验</text></view><text>›</text></view>
 
     <view v-if="isAdmin" class="admin-identity">
       <button class="admin-avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isUploadingAvatar" @chooseavatar="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>管</text></button>

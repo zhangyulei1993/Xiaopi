@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { getSession, saveSession } from '../../auth/session'
 import { API_ORIGIN } from '../../api/client'
@@ -14,12 +14,21 @@ const accessCode = ref('')
 const nickname = ref('')
 const avatarUrl = ref('')
 const showProfileSetup = ref(false)
+const loginReason = ref('登录后可同步关注、足迹与找房进度')
 const brandName = ref('小皮租房')
 const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
 
-onLoad(async () => {
+onLoad(async (query) => {
   const config = await loadPresentation()
   brandName.value = config?.heroTitle || brandName.value
+  const reason = String(query?.reason || '')
+  loginReason.value = reason === 'favorites' ? '登录后查看并同步你的关注房源' : reason === 'footprints' ? '登录后查看最近浏览过的房源' : loginReason.value
+})
+onShow(() => {
+  const croppedAvatar = String(uni.getStorageSync('xiaopi-avatar-crop-result') || '')
+  if (!croppedAvatar) return
+  uni.removeStorageSync('xiaopi-avatar-crop-result')
+  uploadAvatar(croppedAvatar)
 })
 
 const showLoginError = (message = '登录失败，请稍后重试') => {
@@ -88,8 +97,7 @@ const loginTemporarily = async () => {
   }
 }
 
-const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
-  const path = event.detail.avatarUrl
+const uploadAvatar = (path: string) => {
   if (!path || isUploadingAvatar.value) return
   isUploadingAvatar.value = true
   uni.uploadFile({
@@ -111,6 +119,18 @@ const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
     },
     fail: () => uni.showToast({ title: '头像上传失败', icon: 'none' }),
     complete: () => { isUploadingAvatar.value = false },
+  })
+}
+const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
+  const path = event.detail.avatarUrl
+  if (!path || isUploadingAvatar.value) return
+  uni.getImageInfo({
+    src: path,
+    success: (image) => {
+      uni.setStorageSync('xiaopi-avatar-crop-source', { path, width: image.width, height: image.height })
+      uni.navigateTo({ url: '/pages/auth/avatar-crop' })
+    },
+    fail: () => uni.showToast({ title: '头像读取失败', icon: 'none' }),
   })
 }
 
@@ -137,7 +157,7 @@ const saveProfileAndEnter = async () => {
   <view class="page" :style="pageStyle">
     <view class="login-hero"><view class="brand-mark"><text>小</text><i></i></view><view class="hero-kicker">{{ brandName }}</view><view class="hero-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
     <view class="card login-card">
-      <view class="login-title"><view><strong>{{ presentation.title }}</strong><text>微信账号安全登录</text></view><i>可信房源</i></view>
+      <view class="login-title"><view><strong>微信登录</strong><text>{{ loginReason }}</text></view><i>可信房源</i></view>
       <button class="wechat-button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginWithWechat"><text>微</text><view><strong>微信一键登录</strong><small>推荐使用</small></view><b>›</b></button>
       <view class="divider"><text>测试访问</text></view>
       <view class="temporary-form">

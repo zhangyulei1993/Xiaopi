@@ -10,6 +10,7 @@
     { "path": "pages/admin/index", "style": { "navigationBarTitleText": "小皮工作台" } },
     { "path": "pages/admin/property-edit", "style": { "navigationBarTitleText": "编辑房源" } },
     { "path": "pages/admin/image-crop", "style": { "navigationBarTitleText": "调整图片展示" } },
+    { "path": "pages/auth/avatar-crop", "style": { "navigationBarTitleText": "调整头像" } },
     { "path": "pages/auth/login", "style": { "navigationBarTitleText": "微信登录" } }
   ],
   "tabBar": { "color": "#7d867a", "selectedColor": "#40543f", "backgroundColor": "#fffdf9", "borderStyle": "white", "list": [
