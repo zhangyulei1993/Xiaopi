@@ -49,6 +49,10 @@ function switchConfigAudience(value: ConfigAudience) {
   previewSelectedPropertyID.value = ''
   previewOverlay.value = 'page'
 }
+function openOperatorListingConfig() {
+  configAudience.value = 'operator'
+  previewOverlay.value = 'page'
+}
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
 const adminCandidate = ref<WechatUser | null>(null)
@@ -835,6 +839,14 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <header><strong>非客户视角：管理员固定查看标签</strong><span>管理员列表和详情统一按此规则展示；门牌会直接显示为“5栋3单元101室”，不受客户卡片的单套勾选影响。</span></header>
                   <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`admin-listing-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key)" @click="toggleAdminListingField(field.key, !publicConfig.listingTitle.adminEnabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
                   <div class="listing-title-preview"><span>管理员固定标签</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                </div>
+              </section>
+              <section v-else-if="configAudience === 'customer' && (configPage === 'properties' || configPage === 'propertyDetail')" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '客户房源列表展示' : '客户房源详情展示' }}</h2><p>此处展示当前已生效的客户标签规则；客户视角不直接修改规则，避免与运营配置产生冲突。</p></div><el-button type="primary" plain @click="openOperatorListingConfig">切换至非客户视角配置</el-button></div>
+                <div class="share-field-editor listing-title-editor">
+                  <header><strong>客户可见标签</strong><span>小区名称始终作为主标题。每套房源可在运营录入的最后一步，从以下已开放字段中继续取消不展示的标签。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`customer-readonly-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: true }" disabled><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <div class="listing-title-preview"><span>当前客户可选择</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
