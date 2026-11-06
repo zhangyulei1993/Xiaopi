@@ -562,6 +562,7 @@ type publicProperty struct {
 	Title                string                 `json:"title"`
 	Community            string                 `json:"community"`
 	Location             string                 `json:"location"`
+	AreaLabel            string                 `json:"areaLabel"`
 	Latitude             float64                `json:"latitude"`
 	Longitude            float64                `json:"longitude"`
 	Layout               string                 `json:"layout"`
@@ -595,7 +596,7 @@ func publicProperties(items []domain.Property) []publicProperty {
 			continue
 		}
 		result = append(result, publicProperty{
-			ID: item.ID, Title: item.Title, Community: item.Community, Location: item.Location,
+			ID: item.ID, Title: item.Title, Community: item.Community, Location: item.Location, AreaLabel: item.AreaLabel,
 			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout,
 			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType, ListingSource: item.ListingSource, RemainingLeaseMonths: item.RemainingLeaseMonths, TransferDeposit: item.TransferDeposit,
 			AvailableDate: item.AvailableDate, DepositPayment: item.DepositPayment,
