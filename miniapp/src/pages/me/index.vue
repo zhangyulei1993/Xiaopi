@@ -30,6 +30,7 @@ const isLoggingIn = ref(false);
 const adminOverview = ref({ draft: 0, pending: 0, incomplete: 0, interests: 0 });
 const isLoggedIn = computed(() => role.value !== null);
 const isAdmin = computed(() => role.value === "admin");
+const canUseAccessCode = computed(() => role.value !== null && role.value !== "user");
 const avatarDisplay = computed(() =>
   avatarUrl.value ? resolveAssetUrl(avatarUrl.value) : "",
 );
@@ -252,7 +253,7 @@ const logout = () => {
 
     <view v-if="!isAdmin" class="profile" :class="{ guest: !isLoggedIn }" @click="!isLoggedIn && login()">
       <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isUploadingAvatar" @chooseavatar="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><input v-if="isLoggedIn" v-model="nickname" class="nickname-input" type="nickname" maxlength="32" placeholder="点击填写微信昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><view v-else class="title">登录后开始找房</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
-      <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : (isLoggingIn ? "正在登录…" : "点击直接微信登录") }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else-if="!isLoggedIn" class="access-code-entry" @click.stop="openAccessCodeLogin">访问码</text><text v-else class="profile-action">已登录</text></view>
+      <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : (isLoggingIn ? "正在登录…" : "点击直接微信登录") }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
     <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><strong>全部房源</strong><text>无需登录</text></view><view @click="favorites"><i class="shortcut-icon favorite"></i><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : "登录后查看" }}</text></view><view @click="footprints"><i class="shortcut-icon footprint"></i><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : "登录后查看" }}</text></view><view @click="requestHome"><i class="shortcut-icon request"></i><strong>找房需求</strong><text>提交时登录</text></view></view>
@@ -275,7 +276,7 @@ const logout = () => {
       <view @click="openAdminTab('interests')"><view class="action-icon interest-icon">♡</view><strong>用户意向</strong><text>{{ adminOverview.interests }} 条关注记录</text></view>
     </view>
 
-    <button v-if="isLoggedIn" class="logout" @click="logout">退出登录</button>
+    <view v-if="isLoggedIn" class="session-actions"><text v-if="canUseAccessCode" class="role-access-code" @click="openAccessCodeLogin">访问码登录</text><button class="logout" @click="logout">退出登录</button></view>
   </view>
 </template>
 
@@ -366,7 +367,7 @@ const logout = () => {
 }
 
 .logout{margin-top:24rpx;padding-bottom:14rpx;color:#a2695b}
-.profile-copy{min-width:0}.profile .title{line-height:1.3}.role-badge{line-height:1.35}.menu .group-title{padding-bottom:10rpx;font-size:22rpx;letter-spacing:.5rpx}.menu view:not(.group-title){font-size:29rpx;line-height:1.35}.phone-title{font-size:29rpx;line-height:1.3}.phone-card .muted{margin-top:7rpx;line-height:1.5}.logout{font-size:27rpx}.access-code-entry{padding:8rpx 14rpx;border:1rpx solid rgba(231,237,207,.28);border-radius:10rpx;color:#e7edcf;font-size:19rpx}
+.profile-copy{min-width:0}.profile .title{line-height:1.3}.role-badge{line-height:1.35}.menu .group-title{padding-bottom:10rpx;font-size:22rpx;letter-spacing:.5rpx}.menu view:not(.group-title){font-size:29rpx;line-height:1.35}.phone-title{font-size:29rpx;line-height:1.3}.phone-card .muted{margin-top:7rpx;line-height:1.5}.logout{font-size:27rpx}.session-actions{display:flex;align-items:center;justify-content:center;gap:28rpx;margin-top:24rpx}.session-actions .logout{width:auto;margin:0;padding:0 12rpx}.role-access-code{padding:8rpx 12rpx;color:#8b9488;font-size:20rpx;line-height:44rpx}
 
 /* The admin state deliberately keeps the same "我的" rhythm as a tenant,
    while surfacing the workspace queues instead of hiding them behind a hero. */
