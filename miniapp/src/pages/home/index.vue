@@ -89,13 +89,13 @@ const coverUrl = (item?: Property) => {
 const primaryLabels = (item: Property) => {
   const fields = isAdmin.value
     ? (config.value.listingTitle?.adminEnabledFields || [])
-    : (item.displayTags || config.value.listingTitle?.enabledFields || []);
+    : (config.value.listingTitle?.enabledFields || []);
   return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
   const fields = isAdmin.value
     ? (config.value.listingTitle?.adminEnabledFields || [])
-    : (item.displayTags || config.value.listingTitle?.enabledFields || []);
+    : (config.value.listingTitle?.enabledFields || []);
   return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const listingTitle = (item: Property) => {

@@ -222,11 +222,11 @@ const coverUrl = (item: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const fields = isAdmin.value ? adminListingTitleFields.value : (item.displayTags || listingTitleFields.value);
+  const fields = isAdmin.value ? adminListingTitleFields.value : listingTitleFields.value;
   return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
-  const fields = isAdmin.value ? adminListingTitleFields.value : (item.displayTags || listingTitleFields.value);
+  const fields = isAdmin.value ? adminListingTitleFields.value : listingTitleFields.value;
   return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const listingTitle = (item: Property) => {

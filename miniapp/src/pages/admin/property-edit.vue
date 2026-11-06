@@ -87,22 +87,8 @@ const form = reactive<Partial<Property>>({
   description: "",
   ownerId: "xiaopi-admin",
 });
-const listingTagOptions = [
-  { key: "unit", label: "门牌" },
-  { key: "floor", label: "楼层" },
-  { key: "layout", label: "户型" },
-  { key: "rentType", label: "整租/合租" },
-  { key: "listingSource", label: "直租/转租" },
-  { key: "fee", label: "有无中介费" },
-  { key: "area", label: "面积" },
-];
-const allowedDisplayTags = ref<string[]>(["floor", "layout", "rentType", "listingSource", "fee", "area"]);
-const selectedDisplayTags = ref<string[]>(["layout", "rentType", "listingSource", "fee"]);
-const toggleDisplayTag = (key: string) => {
-  selectedDisplayTags.value = selectedDisplayTags.value.includes(key)
-    ? selectedDisplayTags.value.filter((item) => item !== key)
-    : [...selectedDisplayTags.value, key];
-};
+const customerDisplayTags = ref<string[]>(["layout", "rentType", "listingSource", "fee"]);
+const adminDisplayTags = ref<string[]>(["unit", "layout", "rentType", "fee"]);
 const roomCount = ref("1"),
   customRoomCount = ref(""),
   hallCount = ref("1"),
@@ -307,10 +293,10 @@ const loadChannels = async () => {
   try {
     const config = await getPublicConfig();
     associationRadiusKm.value = Number(config.relatedPropertyRadiusKm) || 3;
-    allowedDisplayTags.value = (config.listingTitle?.enabledFields || [])
+    customerDisplayTags.value = (config.listingTitle?.enabledFields || [])
       .filter((key) => key !== "community");
-    selectedDisplayTags.value = selectedDisplayTags.value.filter((key) => allowedDisplayTags.value.includes(key));
-    if (!selectedDisplayTags.value.length) selectedDisplayTags.value = allowedDisplayTags.value.filter((key) => ["layout", "rentType", "listingSource", "fee"].includes(key));
+    adminDisplayTags.value = (config.listingTitle?.adminEnabledFields || [])
+      .filter((key) => key !== "community");
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
       if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
@@ -445,21 +431,11 @@ const displayTagValue = (key: string) => {
   if (key === "area") return Number(form.areaSqm) ? `${form.areaSqm}㎡` : "";
   return "";
 };
-const selectedDisplayTagLabels = computed(() => selectedDisplayTags.value
-  .map((key) => displayTagValue(key))
-  .filter(Boolean));
-const isDisplayTagSelected = (key: string) => selectedDisplayTags.value.includes(key);
-const previewPrimaryTags = computed(() => [
-  isDisplayTagSelected("rentType") ? (rentType.value || "整租") : "",
-  isDisplayTagSelected("listingSource") ? (form.listingSource || "直租") : "",
-].filter(Boolean));
-const previewSecondaryTags = computed(() => [
-  isDisplayTagSelected("unit") ? displayTagValue("unit") : "",
-  isDisplayTagSelected("layout") ? displayTagValue("layout") : "",
-  isDisplayTagSelected("floor") ? displayTagValue("floor") : "",
-  isDisplayTagSelected("area") ? displayTagValue("area") : "",
-  isDisplayTagSelected("fee") ? displayTagValue("fee") : "",
-].filter(Boolean));
+const tagLabels = (fields: string[], keys: string[]) => keys.filter((key) => fields.includes(key)).map((key) => displayTagValue(key)).filter(Boolean);
+const previewPrimaryTags = computed(() => tagLabels(customerDisplayTags.value, ["rentType", "listingSource"]));
+const previewSecondaryTags = computed(() => tagLabels(customerDisplayTags.value, ["unit", "layout", "floor", "area", "fee"]));
+const previewAdminPrimaryTags = computed(() => tagLabels(adminDisplayTags.value, ["rentType", "listingSource"]));
+const previewAdminSecondaryTags = computed(() => tagLabels(adminDisplayTags.value, ["unit", "layout", "floor", "area", "fee"]));
 const reviewCoverUrl = computed(() => {
   const pending = orderedImages.value[0]?.path;
   if (pending) return pending;
@@ -716,11 +692,6 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
-    // An empty array is an explicit choice to show no optional list tags;
-    // only legacy records without this field receive the sensible default.
-    selectedDisplayTags.value = Array.isArray(property.displayTags)
-      ? property.displayTags.filter((key) => allowedDisplayTags.value.includes(key))
-      : allowedDisplayTags.value.filter((key) => ["layout", "rentType", "listingSource", "fee"].includes(key));
     paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
     form.listingSource = property.listingSource || "直租";
     transferDepositMultiplier.value = Number(property.transferDeposit) && Number(property.rentMonthly)
@@ -1022,8 +993,11 @@ const save = async (mode: SaveMode = "draft") => {
   uploadProgress.value = "保存房源信息";
   try {
     const details = String(form.description || "").trim();
+    // List tags are now global presentation rules from the admin backend.
+    // Do not carry a legacy per-property displayTags value back into updates.
+    const { displayTags: _legacyDisplayTags, ...propertyFields } = form;
     const payload = {
-      ...form,
+      ...propertyFields,
       title: finalTitle,
       listingSource: form.listingSource || "直租",
       remainingLeaseMonths: form.listingSource === "转租" ? Number(form.remainingLeaseMonths) || 0 : 0,
@@ -1034,7 +1008,6 @@ const save = async (mode: SaveMode = "draft") => {
       buildingNo: buildingNo.value.trim(),
       unitNo: unitNo.value.trim(),
       roomNo: roomNo.value.trim(),
-      displayTags: selectedDisplayTags.value,
       description: `配套设施：${amenities.value.join("、")}\n${details}`.trim(),
     };
     const property = id.value
@@ -1441,8 +1414,7 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
-        ><view><strong>列表展示标签</strong><small>小区名称固定为主标题；仅可选择后台已启用的标签</small></view
-        ><view class="title-part-list"><view v-for="option in listingTagOptions.filter(item => allowedDisplayTags.includes(item.key))" :key="option.key" class="title-part" :class="{ active: selectedDisplayTags.includes(option.key) }" @click="toggleDisplayTag(option.key)"><view class="title-part-name"><text>{{ selectedDisplayTags.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view></view></view>
+        ><view><strong>列表展示规则</strong><small>由后台“小程序配置”的客户与非客户视角统一控制，录入时无需单独选择</small></view
         ><view class="auto-title"><text>主标题预览</text><strong>{{ generatedTitle }}</strong></view></view
       ><view v-if="activeSection === 4" class="final-review"
         ><view class="final-review-head"><view><strong>发布前核对</strong><small>可点上方步骤返回修改</small></view><text>{{ completionCount }}/5</text></view
@@ -1454,7 +1426,7 @@ const mediaUrl = resolveAssetUrl;
         ></view
         ><view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>以下为保存后首页与“房源”页的真实卡片布局</small></view
           ><view class="review-list-card"><text class="review-perspective">普通用户视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small>{{ reviewLocation }}</small><view v-if="previewPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewSecondaryTags.length" class="review-tags review-secondary-tags"><text v-for="label in previewSecondaryTags" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view
-          ><view class="review-list-card admin-review-card"><text class="review-perspective">管理员视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small class="review-admin-doorplate">门牌 {{ displayTagValue("unit") || "待补充" }}</small><small>{{ reviewLocation }}</small><view v-if="previewPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="review-tags review-secondary-tags"><text v-for="label in previewSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view></view
+          ><view class="review-list-card admin-review-card"><text class="review-perspective">管理员视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small class="review-admin-doorplate" v-if="adminDisplayTags.includes('unit')">门牌 {{ displayTagValue("unit") || "待补充" }}</small><small>{{ reviewLocation }}</small><view v-if="previewAdminPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewAdminPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="review-tags review-secondary-tags"><text v-for="label in previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view></view
         ><text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
