@@ -89,7 +89,9 @@ const coverUrl = (item?: Property) => {
 const primaryLabels = (item: Property) => {
   const rentType = item.rentType === "合租" ? "合租" : "整租";
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
-  const fields = item.displayTags || config.value.listingTitle?.enabledFields || [];
+  const fields = isAdmin.value
+    ? (config.value.listingTitle?.adminEnabledFields || [])
+    : (item.displayTags || config.value.listingTitle?.enabledFields || []);
   return [fields.includes("rentType") ? rentType : "", fields.includes("listingSource") ? listingSource : ""].filter(Boolean);
 };
 const feeLabel = (item: Property) => {
@@ -101,16 +103,16 @@ const feeLabel = (item: Property) => {
       : "";
 };
 const secondaryLabels = (item: Property) => {
-  const fields = item.displayTags || config.value.listingTitle?.enabledFields || [];
+  const fields = isAdmin.value
+    ? (config.value.listingTitle?.adminEnabledFields || [])
+    : (item.displayTags || config.value.listingTitle?.enabledFields || []);
   const layoutParts = String(item.layout || "").split(/[·・]/).filter(Boolean);
   const layout = item.rentType === "合租" ? (layoutParts[1] || "") : (layoutParts[0] || "");
-  const doorplate = !isAdmin.value && fields.includes("unit") ? listingDoorplate(item) : "";
+  const doorplate = fields.includes("unit") ? listingDoorplate(item) : "";
   return [doorplate, fields.includes("layout") ? layout : "", fields.includes("floor") ? item.floorInfo : "", fields.includes("area") && item.areaSqm ? `${item.areaSqm}㎡` : "", fields.includes("fee") ? feeLabel(item) : ""].filter(Boolean);
 };
 const listingTitle = (item: Property) => {
-  return isAdmin.value
-    ? String(item.title || item.community || "房源").trim()
-    : publicListingTitle(item, config.value.listingTitle?.enabledFields);
+  return publicListingTitle(item, config.value.listingTitle?.enabledFields);
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -168,7 +170,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="isAdmin && listingDoorplate(item)" class="home-admin-doorplate">门牌 {{ listingDoorplate(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>

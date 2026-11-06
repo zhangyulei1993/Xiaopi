@@ -78,7 +78,7 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ enabledFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'] })
+const defaultListingTitle = () => ({ enabledFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['community', 'unit', 'layout', 'rentType', 'fee'] })
 const listingTitleFieldOptions = [
   { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
   { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'fee', label: '有无中介费' }, { key: 'area', label: '面积' },
@@ -230,6 +230,7 @@ const configErrors = computed(() => {
   if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
   if (!publicConfig.listingTitle.enabledFields.length) errors.push('列表展示至少启用一个字段')
   if (!publicConfig.listingTitle.enabledFields.some(field => field !== 'unit')) errors.push('发布标题至少启用一个非门牌字段')
+  if (!publicConfig.listingTitle.adminEnabledFields.length) errors.push('管理员列表至少启用一个字段')
   return errors
 })
 
@@ -255,6 +256,11 @@ function toggleListingTitleField(key: string, enabled: boolean) {
   const fields = publicConfig.listingTitle.enabledFields
   if (enabled && !fields.includes(key)) fields.push(key)
   if (!enabled) publicConfig.listingTitle.enabledFields = fields.filter(item => item !== key)
+}
+function toggleAdminListingField(key: string, enabled: boolean) {
+  const fields = publicConfig.listingTitle.adminEnabledFields
+  if (enabled && !fields.includes(key)) fields.push(key)
+  if (!enabled) publicConfig.listingTitle.adminEnabledFields = fields.filter(item => item !== key)
 }
 
 function addLocation() {
@@ -766,11 +772,16 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </el-form>
               </section>
               <section v-if="configPage === 'adminPropertyEdit'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户列表标签</h2><p>小区名称固定作为主标题；勾选的内容以标签显示，不再拼接成长标题。关闭门牌标签后，普通用户列表立即隐藏门牌。</p></div></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>房源卡片标签规则</h2><p>客户与管理员分别配置。客户标签可由每套房源在发布前继续取消；管理员标签只由这里统一控制。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
-                  <header><strong>列表标签开关</strong><span>小区名称固定显示为主标题。管理员列表始终显示完整门牌。</span></header>
+                  <header><strong>普通用户视角</strong><span>小区名称为主标题；这些选项决定录入人员在最后核对页可选择哪些公开标签。</span></header>
                   <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
                   <div class="listing-title-preview"><span>已启用标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                </div>
+                <div class="share-field-editor listing-title-editor">
+                  <header><strong>管理员视角</strong><span>管理员列表与详情统一按这里展示，不受单套房源的客户标签选择影响；门牌直接显示为“5栋3单元101室”。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`admin-listing-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key)" @click="toggleAdminListingField(field.key, !publicConfig.listingTitle.adminEnabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <div class="listing-title-preview"><span>管理员标签</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">

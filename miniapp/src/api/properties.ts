@@ -169,6 +169,7 @@ export interface PublicConfig {
   };
   listingTitle?: {
     enabledFields?: string[];
+    adminEnabledFields?: string[];
   };
 }
 

@@ -39,6 +39,7 @@ const selectedPrice = ref(0),
   loadFailed = ref(false),
   workingID = ref("");
 const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
+const adminListingTitleFields = ref<string[]>(["community", "unit", "layout", "rentType", "fee"]);
 const priceRanges = [
   { label: "不限价格", min: 0, max: 0 },
   { label: "≤1500", min: 0, max: 1500 },
@@ -161,6 +162,7 @@ const load = async () => {
     configuredLocations.value = config?.locations || [];
     configuredChannels.value = config?.featuredChannels || [];
     listingTitleFields.value = config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : listingTitleFields.value;
+    adminListingTitleFields.value = config?.listingTitle?.adminEnabledFields?.length ? config.listingTitle.adminEnabledFields : adminListingTitleFields.value;
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
@@ -222,7 +224,7 @@ const coverUrl = (item: Property) => {
 const primaryLabels = (item: Property) => {
   const rentType = item.rentType === "合租" ? "合租" : "整租";
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
-  const fields = item.displayTags || listingTitleFields.value;
+  const fields = isAdmin.value ? adminListingTitleFields.value : (item.displayTags || listingTitleFields.value);
   return [fields.includes("rentType") ? rentType : "", fields.includes("listingSource") ? listingSource : ""].filter(Boolean);
 };
 const feeLabel = (item: Property) => {
@@ -234,16 +236,14 @@ const feeLabel = (item: Property) => {
       : "";
 };
 const secondaryLabels = (item: Property) => {
-  const fields = item.displayTags || listingTitleFields.value;
+  const fields = isAdmin.value ? adminListingTitleFields.value : (item.displayTags || listingTitleFields.value);
   const layoutParts = String(item.layout || "").split(/[·・]/).filter(Boolean);
   const layout = item.rentType === "合租" ? (layoutParts[1] || "") : (layoutParts[0] || "");
-  const doorplate = !isAdmin.value && fields.includes("unit") ? listingDoorplate(item) : "";
+  const doorplate = fields.includes("unit") ? listingDoorplate(item) : "";
   return [doorplate, fields.includes("layout") ? layout : "", fields.includes("floor") ? item.floorInfo : "", fields.includes("area") && item.areaSqm ? `${item.areaSqm}㎡` : "", fields.includes("fee") ? feeLabel(item) : ""].filter(Boolean);
 };
 const listingTitle = (item: Property) => {
-  return isAdmin.value
-    ? String(item.title || item.community || "房源").trim()
-    : publicListingTitle(item, listingTitleFields.value);
+  return publicListingTitle(item, listingTitleFields.value);
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -390,7 +390,6 @@ const subscribeArea = () => {
             ></view
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
-          ><view v-if="isAdmin && listingDoorplate(item)" class="admin-doorplate">门牌 {{ listingDoorplate(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
