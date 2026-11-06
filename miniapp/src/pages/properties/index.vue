@@ -25,6 +25,7 @@ const properties = ref<Property[]>([]),
 const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
   configuredLocations = ref<{ label: string; keyword: string }[]>([]),
+  configuredChannels = ref<Array<{ title: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }>>([]),
   pagePresentation = ref({ title: "找一处合适的家", subtitle: "按地区和预算筛选", backgroundImage: "" }),
   channelFilter = ref<{
     keyword: string;
@@ -76,6 +77,10 @@ const kindMatched = (item: Property) => {
     : text.includes(selectedKind.value);
 };
 const activeAreaName = computed(() => selectedArea.value !== "全部" ? selectedArea.value : channelFilter.value?.title || keyword.value.trim());
+const selectArea = (label: string) => {
+  selectedArea.value = label;
+  channelFilter.value = null;
+};
 const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase(),
     price = priceRanges[selectedPrice.value];
@@ -83,6 +88,13 @@ const filteredProperties = computed(() => {
     const location = areas.value.find(
       (area) => area.label === selectedArea.value,
     );
+    const areaChannel = configuredChannels.value.find((area) => area.title === selectedArea.value);
+    const areaDistance = areaChannel?.latitude && areaChannel?.longitude && item.latitude && item.longitude
+      ? distanceKm(areaChannel.latitude, areaChannel.longitude, item.latitude, item.longitude)
+      : null;
+    const areaMatched = selectedArea.value === "全部" || (areaDistance !== null
+      ? areaDistance <= (areaChannel?.radiusKm || 3)
+      : !location?.keyword || `${item.title || ""} ${item.community || ""} ${item.location || ""}`.includes(location.keyword));
     const channelDistance =
       channelFilter.value &&
       channelFilter.value.latitude &&
@@ -107,7 +119,7 @@ const filteredProperties = computed(() => {
       channelMatched &&
       kindMatched(item) &&
       (!showFavoritesOnly.value || favoriteIDs.value.includes(item.id)) &&
-      (!location?.keyword || item.location?.includes(location.keyword)) &&
+      areaMatched &&
       (!price.min || item.rentMonthly >= price.min) &&
       (!price.max || item.rentMonthly <= price.max) &&
       (!query ||
@@ -137,6 +149,7 @@ const load = async () => {
     ]);
     properties.value = items;
     configuredLocations.value = config?.locations || [];
+    configuredChannels.value = config?.featuredChannels || [];
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
@@ -146,16 +159,19 @@ const load = async () => {
         const parsed: unknown = JSON.parse(pending);
         if (parsed && typeof parsed === "object") {
           const filter = parsed as Record<string, unknown>;
+          const hasCoordinateFilter =
+            typeof filter.latitude === "number" &&
+            typeof filter.longitude === "number" &&
+            typeof filter.radiusKm === "number";
           if (typeof filter.area === "string") selectedArea.value = filter.area;
           if (typeof filter.priceIndex === "number")
             selectedPrice.value = Math.max(0, Math.min(priceRanges.length - 1, filter.priceIndex));
-          if (typeof filter.keyword === "string") keyword.value = filter.keyword;
+          // A configured channel with coordinates is a radius filter. Keeping its
+          // fallback keyword in the search box would apply a second, unrelated
+          // text filter and incorrectly hide properties inside the circle.
+          if (!hasCoordinateFilter && typeof filter.keyword === "string") keyword.value = filter.keyword;
           if (typeof filter.kind === "string" && kindOptions.includes(filter.kind)) selectedKind.value = filter.kind;
-          if (
-            typeof filter.latitude === "number" &&
-            typeof filter.longitude === "number" &&
-            typeof filter.radiusKm === "number"
-          ) {
+          if (hasCoordinateFilter) {
             channelFilter.value = {
               keyword: typeof filter.keyword === "string" ? filter.keyword : "",
               latitude: filter.latitude,
@@ -192,15 +208,18 @@ const coverUrl = (item: Property) => {
   const cover = item.media?.find((media) => media.type === "image")?.url;
   return cover ? resolveAssetUrl(cover) : "";
 };
-const serviceLabels = (item: Property) => {
-  const source = String(item.feeText || "");
+const primaryLabels = (item: Property) => {
+  const rentType = item.rentType === "合租" ? "合租" : "整租";
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
-  const feeLabel = source.includes("无中介费")
+  return [rentType, listingSource];
+};
+const feeLabel = (item: Property) => {
+  const source = String(item.feeText || "");
+  return source.includes("无中介费")
     ? "无中介费"
     : source.includes("有中介费")
       ? "有中介费"
       : "";
-  return [listingSource, feeLabel].filter(Boolean);
 };
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
 const doorplate = (item: Property) => [
@@ -310,7 +329,7 @@ const subscribeArea = () => {
           v-for="area in areas"
           :key="area.label"
           :class="{ active: selectedArea === area.label }"
-          @click="selectedArea = area.label"
+          @click="selectArea(area.label)"
           >{{ area.label }}</text
         ></scroll-view
       ></view
@@ -360,7 +379,7 @@ const subscribeArea = () => {
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
-          ><view v-if="serviceLabels(item).length" class="service-tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view
+          ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="feeLabel(item)" class="service-tags fee-tags"><text>{{ feeLabel(item) }}</text></view></view
           ><view class="price"
             >¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view
           ></view
@@ -676,4 +695,5 @@ const subscribeArea = () => {
 .service-tags{height:34rpx;gap:8rpx;margin-top:10rpx}.service-tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
 .property>.property-copy>.price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.property>.property-copy>.price .price-unit{font-size:19rpx}
 .admin-property{height:auto;min-height:0;padding:14rpx;border-radius:22rpx}.admin-property .property-main{height:208rpx;min-height:208rpx}.admin-property .property-copy{height:208rpx}.admin-card-actions{margin-top:14rpx;padding-top:14rpx}.admin-inline-actions{gap:9rpx}.admin-inline-actions button{min-width:98rpx;min-height:54rpx;border-radius:10rpx;font-size:21rpx;line-height:52rpx}
+.service-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.service-tag-stack .service-tags{height:27rpx;margin:0}.service-tag-stack .service-tags text{padding:4rpx 8rpx;font-size:17rpx;line-height:1.1}.service-tag-stack .fee-tags text{background:#f8eadf;color:#b7644b}
 </style>

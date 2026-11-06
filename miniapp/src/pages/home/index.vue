@@ -37,6 +37,24 @@ const channelStyle = (icon: string, index: number) => {
   const legacy: Record<string, string> = { "🏢": "work", "🌳": "campus", "🌆": "life" };
   return legacy[icon] || ["commute", "campus", "work", "life"].includes(icon) ? (legacy[icon] || icon) : ["commute", "campus", "work", "life"][index % 4];
 };
+const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const matchesArea = (item: Property, label: string) => {
+  if (label === "全部") return true;
+  const location = config.value.locations.find((area) => area.label === label);
+  const channel = config.value.featuredChannels.find((area) => area.title === label);
+  const latitude = location?.latitude || channel?.latitude || 0;
+  const longitude = location?.longitude || channel?.longitude || 0;
+  const radiusKm = location?.radiusKm || channel?.radiusKm || config.value.relatedPropertyRadiusKm || 3;
+  if (latitude && longitude && item.latitude && item.longitude) return distanceKm(latitude, longitude, item.latitude, item.longitude) <= radiusKm;
+  const keyword = location?.keyword || channel?.keyword || label;
+  return `${item.title || ""} ${item.community || ""} ${item.location || ""}`.includes(keyword);
+};
 const homeProperties = computed(() => properties.value.filter((item) => {
   // 首页是找房入口，不是运营工作台。即使管理员登录时接口返回全量
   // 房源，也绝不能把草稿、已租或下架房源伪装成“可租”展示给浏览流。
@@ -44,7 +62,7 @@ const homeProperties = computed(() => properties.value.filter((item) => {
   const subject = `${item.title || ""} ${item.layout || ""} ${item.location || ""}`;
   const range = selectedPrice.value === null ? null : priceRanges[selectedPrice.value];
   const kindMatched = matchesKind(item, activeKind.value);
-  const areaMatched = selectedArea.value === "全部" || subject.includes(selectedArea.value);
+  const areaMatched = matchesArea(item, selectedArea.value);
   const priceMatched = !range || (!range.min || item.rentMonthly >= range.min) && (!range.max || item.rentMonthly <= range.max);
   return kindMatched && areaMatched && priceMatched;
 }));
@@ -54,15 +72,18 @@ const coverUrl = (item?: Property) => {
   const cover = item?.media?.find((media) => media.type === "image")?.url;
   return cover ? resolveAssetUrl(cover) : "";
 };
-const serviceLabels = (item: Property) => {
-  const source = String(item.feeText || "");
+const primaryLabels = (item: Property) => {
+  const rentType = item.rentType === "合租" ? "合租" : "整租";
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
-  const feeLabel = source.includes("无中介费")
+  return [rentType, listingSource];
+};
+const feeLabel = (item: Property) => {
+  const source = String(item.feeText || "");
+  return source.includes("无中介费")
     ? "无中介费"
     : source.includes("有中介费")
       ? "有中介费"
       : "";
-  return [listingSource, feeLabel].filter(Boolean);
 };
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
 const doorplate = (item: Property) => [
@@ -135,7 +156,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view v-if="serviceLabels(item).length" class="tags"><text v-for="label in serviceLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="feeLabel(item)" class="tags fee-tags"><text>{{ feeLabel(item) }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -203,4 +224,5 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing-info .tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
 .listing-price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.listing-price .price-unit{font-size:19rpx}
 .listing:active{opacity:.9;transform:scale(.995)}
+.tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.listing-info .tag-stack .tags{height:27rpx;margin:0}.listing-info .tag-stack .tags text{padding:4rpx 8rpx;font-size:17rpx;line-height:1.1}.listing-info .fee-tags text{background:#f8eadf;color:#b7644b}
 </style>

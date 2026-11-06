@@ -144,7 +144,7 @@ export interface PublicConfig {
   notice: string;
   contactPhone: string;
   relatedPropertyRadiusKm?: number;
-  locations: { label: string; keyword: string }[];
+  locations: { label: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }[];
   featuredChannels: {
     icon: string;
     title: string;
