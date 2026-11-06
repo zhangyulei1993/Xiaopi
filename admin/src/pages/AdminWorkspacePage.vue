@@ -933,7 +933,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="listing-title-preview"><span>当前客户详情标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
                 <div v-else class="listing-title-preview"><span>客户详情当前标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
-                <div v-if="configAudience === 'operator'" class="listing-title-preview"><span>管理员详情附加信息</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '额外显示门牌：5栋3单元101室' : '不额外显示门牌' }}</strong></div>
+                <div v-if="configAudience === 'operator'" class="listing-title-preview"><span>管理员详情附加信息</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '额外显示门牌' : '不额外显示门牌' }}</strong></div>
               </section>
               <section v-if="configAudience === 'customer' && configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>03</span><div><h2>公开分享配置</h2><p>好友分享和朋友圈海报不区分角色，统一采用客户公开标签。</p></div></div>
