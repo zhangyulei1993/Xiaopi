@@ -686,6 +686,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
         <PropertiesPage v-else-if="tab === '房源列表'" :properties="properties" :filtered-properties="filteredProperties" :filter="propertyFilter" :statuses="propertyStatuses" :loading="loading" :normalized-status="normalizedPropertyStatus" :status-label="statusLabel" :cover="propertyCover" @refresh="load" @filter="propertyFilter = $event" @status="setPropertyStatus" />
 
         <template v-else-if="tab === '小程序配置'">
+          <div class="miniapp-config-shell">
+          <div class="miniapp-config-main">
           <section class="page-header">
             <div><span>内容与运营</span><h1>小程序配置中心</h1></div>
           </section>
@@ -812,6 +814,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
               </section>
             </div>
+          </div>
+          </div>
 
             <aside class="config-preview-column">
               <div v-if="configPage === 'home'" class="phone-preview">
