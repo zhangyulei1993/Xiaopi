@@ -695,6 +695,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <div><strong>{{ configDirty ? '存在未发布修改' : '线上配置已同步' }}</strong><span>{{ configLastSavedAt ? `最近发布：${configLastSavedAt}` : '当前内容来自线上配置' }}</span></div>
             </div>
             <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
+            <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
           </section>
           <section class="surface page-config-nav">
             <div class="config-audience-heading"><strong>选择使用视角</strong><span>先按角色筛选，再以真实小程序页面进行配置</span></div>
@@ -794,6 +795,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>分享卡配置</h2><p>配置转发给微信好友时的标题与图片卡片内容，勾选顺序就是展示顺序。</p></div></div>
+                <div class="preview-mode-tabs" aria-label="右侧小程序预览模式">
+                  <span>右侧小程序预览</span>
+                  <div><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">详情页</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">分享卡</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">海报</button></div>
+                </div>
                 <el-form label-position="top" class="basic-config-form"><el-form-item label="标题前缀（选填）"><el-input v-model="publicConfig.shareCard.titlePrefix" maxlength="12" show-word-limit placeholder="例如：精选好房" /></el-form-item></el-form>
                 <div class="share-field-editor">
                   <header><strong>分享标题</strong><span>默认推荐“小区名称 + 户型 / 房间”，不突出合租或分租。</span></header>
@@ -809,12 +814,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </div>
 
             <aside class="config-preview-column">
-              <div class="preview-heading"><div><strong>{{ configPageMeta?.label }} · 小程序页面</strong><small>点击页面中的入口可切换对应配置</small></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
-              <div class="config-preview-actions">
-                <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button>
-                <el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
-              </div>
-              <div v-if="configPage === 'propertyDetail'" class="preview-layer-switch"><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">页面</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">分享效果</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">海报效果</button></div>
               <div v-if="configPage === 'home'" class="phone-preview">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
@@ -845,9 +844,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
                 <div class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
-              <div v-if="configPage === 'propertyDetail'" class="share-card-preview"><span>微信分享标题</span><strong>{{ shareTitlePreview || '请选择分享标题字段' }}</strong><div><b>¥2300/月</b><small>拿铁公寓 · 68㎡ · 中层 · 拎包入住</small></div></div>
               <div v-if="configPage === 'propertyDetail' && previewOverlay !== 'page'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><template v-if="previewOverlay === 'share'"><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || '拿铁公寓 · 精装朝南' }}</strong><div class="share-cover"></div><b>¥2300/月</b><p>拿铁公寓 · {{ previewListingTags.join(' · ') || '真实好房' }}</p><small>小皮租房</small></template><template v-else><span>朋友圈海报预览</span><div class="poster-cover"></div><b>¥2300<span>/月</span></b><strong>拿铁公寓 · 精装朝南</strong><p>{{ previewListingTags.join(' · ') || '真实好房 · 拎包入住' }}</p><i>小皮租房 · 扫码查看房源</i></template></div></div>
-              <p class="preview-note">预览只反映当前选择的页面配置，实际尺寸会随设备自适应。</p>
             </aside>
           </div>
         </template>
