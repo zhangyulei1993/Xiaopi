@@ -45,8 +45,11 @@ type ListingTitleConfig struct {
 	// subset, so operators can prepare choices without exposing every field.
 	CustomerAllowedFields []string `json:"customerAllowedFields"`
 	// EnabledFields applies to customer-facing cards. A listing can only
-	// use the globally configured result; publishers do not choose tags.
+	// use the configured result; publishers do not choose tags.
 	EnabledFields []string `json:"enabledFields"`
+	// CustomerDetailFields independently controls the customer detail page.
+	// It is constrained by CustomerAllowedFields just like list labels.
+	CustomerDetailFields []string `json:"customerDetailFields"`
 	// AdminEnabledFields is the optional doorplate supplement for operator
 	// cards and details. All other labels are shared with the customer view.
 	AdminEnabledFields []string `json:"adminEnabledFields"`
@@ -104,6 +107,7 @@ func DefaultPublicConfig() PublicConfig {
 			// 明确确认风险后开启独立的“门牌标签”。
 			CustomerAllowedFields: []string{"community", "floor", "layout", "rentType", "listingSource", "fee", "area"},
 			EnabledFields:         []string{"community", "layout", "rentType", "fee"},
+			CustomerDetailFields:  []string{"community", "layout", "rentType", "fee"},
 			AdminEnabledFields:    []string{"unit"},
 		},
 	}
@@ -154,6 +158,11 @@ func (config *PublicConfig) Normalize() {
 	}
 	if len(config.ListingTitle.EnabledFields) == 0 {
 		config.ListingTitle.EnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.EnabledFields...)
+	}
+	if len(config.ListingTitle.CustomerDetailFields) == 0 {
+		// Legacy configurations had one public tag list; preserve that result
+		// as the initial detail setting until operations changes it explicitly.
+		config.ListingTitle.CustomerDetailFields = append([]string(nil), config.ListingTitle.EnabledFields...)
 	}
 	if len(config.ListingTitle.CustomerAllowedFields) == 0 {
 		config.ListingTitle.CustomerAllowedFields = append([]string(nil), DefaultPublicConfig().ListingTitle.CustomerAllowedFields...)
@@ -268,6 +277,14 @@ func (config PublicConfig) Validate() error {
 	for _, field := range config.ListingTitle.EnabledFields {
 		if _, exists := allowed[field]; !exists {
 			return errors.New("客户展示标签必须先在客户可选标签中开启")
+		}
+	}
+	if err := validateListingTitleFields(config.ListingTitle.CustomerDetailFields); err != nil {
+		return err
+	}
+	for _, field := range config.ListingTitle.CustomerDetailFields {
+		if _, exists := allowed[field]; !exists {
+			return errors.New("客户详情标签必须先在客户可选标签中开启")
 		}
 	}
 	for _, field := range config.ListingTitle.AdminEnabledFields {

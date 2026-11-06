@@ -170,6 +170,7 @@ export interface PublicConfig {
   listingTitle?: {
     customerAllowedFields?: string[];
     enabledFields?: string[];
+    customerDetailFields?: string[];
     adminEnabledFields?: string[];
   };
 }

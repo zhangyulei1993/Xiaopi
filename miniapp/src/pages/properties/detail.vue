@@ -62,10 +62,12 @@ const load = async (id = "") => {
     mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
-    customerDetailTagFields.value = config?.listingTitle?.enabledFields?.length
-      ? config.listingTitle.enabledFields
-      : ["community", "layout", "rentType", "fee"];
-    customerShareTagFields.value = customerDetailTagFields.value;
+    customerDetailTagFields.value = config?.listingTitle?.customerDetailFields?.length
+      ? config.listingTitle.customerDetailFields
+      : (config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : ["community", "layout", "rentType", "fee"]);
+    customerShareTagFields.value = config?.listingTitle?.customerAllowedFields?.length
+      ? config.listingTitle.customerAllowedFields
+      : customerDetailTagFields.value;
     operatorDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     shareCardConfig.value = {
       titlePrefix: String(config?.shareCard?.titlePrefix || ""),
