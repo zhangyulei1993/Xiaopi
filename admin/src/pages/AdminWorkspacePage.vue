@@ -906,10 +906,15 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>03</span><div><h2>分享卡配置</h2><p>分享不区分角色，展示字段遵循客户视角标签；勾选顺序就是展示顺序。</p></div></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>房源详情标签（共用）</h2><p>详情不单独维护标签，避免和列表出现两套规则；当前结果实时展示在右侧详情效果中。</p></div><el-button plain @click="switchConfigAudience('customer'); selectConfigPage('properties')">配置客户公开标签</el-button></div>
+                <div class="listing-title-preview"><span>当前详情公开标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                <div v-if="configAudience === 'operator'" class="listing-title-preview"><span>管理员详情附加信息</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '额外显示门牌：5栋3单元101室' : '不额外显示门牌' }}</strong></div>
+              </section>
+              <section v-if="configAudience === 'customer' && configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>03</span><div><h2>公开分享配置</h2><p>好友分享和朋友圈海报不区分角色，统一采用客户公开标签。</p></div></div>
                 <div class="preview-mode-tabs" aria-label="右侧小程序预览模式">
-                  <span>右侧小程序预览</span>
-                  <div><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">详情页</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">分享卡</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">海报</button></div>
+                  <span>右侧预览效果</span>
+                  <div><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">详情效果</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">微信分享卡</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">朋友圈海报</button></div>
                 </div>
                 <el-form label-position="top" class="basic-config-form"><el-form-item label="标题前缀（选填）"><el-input v-model="publicConfig.shareCard.titlePrefix" maxlength="12" show-word-limit placeholder="例如：精选好房" /></el-form-item></el-form>
                 <div class="share-field-editor">
