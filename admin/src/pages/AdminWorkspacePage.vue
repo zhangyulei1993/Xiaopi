@@ -32,6 +32,7 @@ const configFailed = ref(false)
 const savedConfigJSON = ref('')
 const configLastSavedAt = ref('')
 const configPage = ref('home')
+const previewOverlay = ref<'page' | 'share' | 'poster'>('page')
 type ConfigAudience = 'customer' | 'operator'
 const configAudience = ref<ConfigAudience>('customer')
 const visiblePagePresentationOptions = computed(() => pagePresentationOptions.filter(page => page.audience === configAudience.value))
@@ -41,10 +42,12 @@ const selectConfigPage = (key: string) => {
   if (!target) return
   if (target.audience !== configAudience.value) configAudience.value = target.audience as ConfigAudience
   configPage.value = target.key
+  previewOverlay.value = 'page'
 }
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
   configPage.value = visiblePagePresentationOptions.value[0]?.key || 'home'
+  previewOverlay.value = 'page'
 }
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
@@ -811,6 +814,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button>
                 <el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
               </div>
+              <div v-if="configPage === 'propertyDetail'" class="preview-layer-switch"><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">页面</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">分享效果</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">海报效果</button></div>
               <div v-if="configPage === 'home'" class="phone-preview">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
@@ -842,6 +846,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
               <div v-if="configPage === 'propertyDetail'" class="share-card-preview"><span>微信分享标题</span><strong>{{ shareTitlePreview || '请选择分享标题字段' }}</strong><div><b>¥2300/月</b><small>拿铁公寓 · 68㎡ · 中层 · 拎包入住</small></div></div>
+              <div v-if="configPage === 'propertyDetail' && previewOverlay !== 'page'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><template v-if="previewOverlay === 'share'"><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || '拿铁公寓 · 精装朝南' }}</strong><div class="share-cover"></div><b>¥2300/月</b><p>拿铁公寓 · {{ previewListingTags.join(' · ') || '真实好房' }}</p><small>小皮租房</small></template><template v-else><span>朋友圈海报预览</span><div class="poster-cover"></div><b>¥2300<span>/月</span></b><strong>拿铁公寓 · 精装朝南</strong><p>{{ previewListingTags.join(' · ') || '真实好房 · 拎包入住' }}</p><i>小皮租房 · 扫码查看房源</i></template></div></div>
               <p class="preview-note">预览只反映当前选择的页面配置，实际尺寸会随设备自适应。</p>
             </aside>
           </div>
