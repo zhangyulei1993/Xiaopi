@@ -322,6 +322,8 @@ button, input, textarea { font: inherit; }
   .channel-fields label:last-child { grid-column: auto; }
   .config-section-heading { flex-wrap: wrap; }
   .config-section-heading .el-button { width: 100%; }
+  .detail-config-workspace{align-items:flex-start;flex-direction:column}
+  .detail-config-workspace>small{margin-left:0}
   .share-field-options{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
