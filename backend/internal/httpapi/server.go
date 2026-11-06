@@ -547,14 +547,24 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(items)})
+		config, err := s.loadPublicConfig(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load public config")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(items, config)})
 		return
 	}
 	if showAll {
 		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": s.properties})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(s.properties)})
+	config, err := s.loadPublicConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load public config")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(s.properties, config)})
 }
 
 type publicProperty struct {
@@ -563,6 +573,7 @@ type publicProperty struct {
 	Community            string                 `json:"community"`
 	Location             string                 `json:"location"`
 	AreaLabel            string                 `json:"areaLabel"`
+	DoorplateLabel       string                 `json:"doorplateLabel,omitempty"`
 	Latitude             float64                `json:"latitude"`
 	Longitude            float64                `json:"longitude"`
 	Layout               string                 `json:"layout"`
@@ -589,14 +600,63 @@ type publicProperty struct {
 	UpdatedAt            time.Time              `json:"updatedAt"`
 }
 
-func publicProperties(items []domain.Property) []publicProperty {
+func publicDoorplateLabel(item domain.Property) string {
+	parts := make([]string, 0, 3)
+	if value := strings.TrimSpace(item.BuildingNo); value != "" {
+		parts = append(parts, value)
+	}
+	if value := strings.TrimSpace(item.UnitNo); value != "" {
+		if !strings.Contains(value, "单元") {
+			value += "单元"
+		}
+		parts = append(parts, value)
+	}
+	if value := strings.TrimSpace(item.RoomNo); value != "" {
+		if !strings.Contains(value, "室") {
+			value += "室"
+		}
+		parts = append(parts, value)
+	}
+	return strings.Join(parts, "")
+}
+
+// publicListingTitle keeps doorplate out of the public title. Doorplate is a
+// separate config-controlled badge, so a legacy title cannot reveal it after
+// that badge is disabled in the admin configuration.
+func publicListingTitle(item domain.Property) string {
+	title := strings.TrimSpace(item.Title)
+	if doorplate := publicDoorplateLabel(item); doorplate != "" {
+		title = strings.ReplaceAll(title, doorplate, "")
+	}
+	title = strings.Trim(title, " ·・-—")
+	for strings.Contains(title, "· ·") || strings.Contains(title, "··") {
+		title = strings.ReplaceAll(title, "· ·", "·")
+		title = strings.ReplaceAll(title, "··", "·")
+	}
+	if title != "" {
+		return title
+	}
+	if community := strings.TrimSpace(item.Community); community != "" {
+		return community
+	}
+	return "房源"
+}
+
+func publicProperties(items []domain.Property, config domain.PublicConfig) []publicProperty {
+	showDoorplate := false
+	for _, field := range config.ListingTitle.EnabledFields {
+		if field == "unit" {
+			showDoorplate = true
+			break
+		}
+	}
 	result := make([]publicProperty, 0, len(items))
 	for _, item := range items {
 		if item.Status != domain.PropertyAvailable {
 			continue
 		}
-		result = append(result, publicProperty{
-			ID: item.ID, Title: item.Title, Community: item.Community, Location: item.Location, AreaLabel: item.AreaLabel,
+		property := publicProperty{
+			ID: item.ID, Title: publicListingTitle(item), Community: item.Community, Location: item.Location, AreaLabel: item.AreaLabel,
 			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout,
 			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType, ListingSource: item.ListingSource, RemainingLeaseMonths: item.RemainingLeaseMonths, TransferDeposit: item.TransferDeposit,
 			AvailableDate: item.AvailableDate, DepositPayment: item.DepositPayment,
@@ -605,7 +665,11 @@ func publicProperties(items []domain.Property) []publicProperty {
 			VerificationDate: item.VerificationDate, RulesText: item.RulesText,
 			Description: item.Description, Status: item.Status, Media: item.Media,
 			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
-		})
+		}
+		if showDoorplate {
+			property.DoorplateLabel = publicDoorplateLabel(item)
+		}
+		result = append(result, property)
 	}
 	return result
 }

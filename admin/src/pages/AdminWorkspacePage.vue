@@ -73,7 +73,7 @@ const activeChannel = computed(() => publicConfig.featuredChannels[activeChannel
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
 const defaultListingTitle = () => ({ enabledFields: ['community', 'unit', 'floor', 'layout', 'rentType', 'area'] })
 const listingTitleFieldOptions = [
-  { key: 'community', label: '小区' }, { key: 'unit', label: '门牌' }, { key: 'floor', label: '楼层' },
+  { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
   { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'area', label: '面积' },
 ]
 const shareFieldOptions = [
@@ -221,7 +221,8 @@ const configErrors = computed(() => {
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
   if (!publicConfig.shareCard.titleFields.length || publicConfig.shareCard.titleFields.length > 4) errors.push('分享标题需选择 1 到 4 个字段')
   if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
-  if (!publicConfig.listingTitle.enabledFields.length) errors.push('标题拼接至少启用一个字段')
+  if (!publicConfig.listingTitle.enabledFields.length) errors.push('列表展示至少启用一个字段')
+  if (!publicConfig.listingTitle.enabledFields.some(field => field !== 'unit')) errors.push('发布标题至少启用一个非门牌字段')
   return errors
 })
 
@@ -750,11 +751,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </el-form>
               </section>
               <section v-if="configPage === 'adminPropertyEdit'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户标题拼接</h2><p>决定录入房源最后一步可勾选哪些标题字段；启用几项，小程序就显示几项。</p></div></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户列表展示</h2><p>控制录入页可选标题字段；“门牌标签”单独展示，不参与标题拼接。关闭后普通用户列表立即隐藏门牌。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
                   <header><strong>允许发布者选择的字段</strong><span>这里只控制普通用户看到的房源标题。管理员列表始终显示完整门牌。</span></header>
                   <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.enabledFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
-                  <div class="listing-title-preview"><span>录入页将显示 {{ publicConfig.listingTitle.enabledFields.length }} 个复选项</span><strong>{{ publicConfig.listingTitle.enabledFields.map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '请至少启用一个字段' }}</strong></div>
+                  <div class="listing-title-preview"><span>标题可选字段与门牌标签开关</span><strong>{{ publicConfig.listingTitle.enabledFields.map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '请至少启用一个字段' }}</strong></div>
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
@@ -804,7 +805,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <template v-else-if="configPage === 'me'"><div class="preview-profile"><i>小</i><div><b>微信用户</b><span>管理关注与找房需求</span></div></div><div class="preview-tool-grid"><article>全部房源<small>继续看房</small></article><article>我的关注<small>收藏房源</small></article><article>浏览足迹<small>最近查看</small></article><article>找房需求<small>查看进度</small></article></div></template>
                   <template v-else-if="configPage === 'footprints'"><article v-for="name in ['拿铁公寓', '凤凰花园三期', '中建大公馆']" :key="name" class="preview-footprint"><div></div><section><b>{{ name }}</b><span>今天浏览 · ¥2300/月</span></section></article></template>
                   <template v-else-if="configPage === 'adminWorkbench'"><div class="preview-admin-card"><b>运营管理</b><span>管理员 · 已绑定手机号</span></div><div class="preview-stats"><i>3<small>房源草稿</small></i><i>1<small>待联系</small></i><i>2<small>用户意向</small></i></div><div class="preview-tool-grid"><article>＋ 录入房源<small>发布可租房源</small></article><article>▦ 房源管理<small>编辑与上下架</small></article><article>○ 客户需求<small>预约与找房</small></article><article>♡ 用户意向<small>关注记录</small></article></div></template>
-                  <template v-else-if="configPage === 'adminPropertyEdit'"><div class="preview-steps"><i class="active">位置门牌</i><i>户型出租</i><i>环境配套</i><i>租金入住</i></div><div class="preview-edit-card"><b>发布标题</b><span>勾选需要展示的信息</span><div class="preview-checks"><i v-for="key in publicConfig.listingTitle.enabledFields" :key="key">✓ {{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</i></div><strong>拿铁公寓5栋3单元101室</strong></div><button class="preview-primary-button">下一步 · 户型出租</button></template>
+                  <template v-else-if="configPage === 'adminPropertyEdit'"><div class="preview-steps"><i class="active">位置门牌</i><i>户型出租</i><i>环境配套</i><i>租金入住</i></div><div class="preview-edit-card"><b>发布标题</b><span>勾选需要展示的信息；门牌独立成标签</span><div class="preview-checks"><i v-for="key in publicConfig.listingTitle.enabledFields" :key="key">✓ {{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</i></div><strong>拿铁公寓 · 两室一厅</strong></div><button class="preview-primary-button">下一步 · 户型出租</button></template>
                   <template v-else-if="configPage === 'authLogin'"><div class="preview-login-mark">皮</div><div class="preview-login-card"><b>登录后开始找房</b><span>同步关注、足迹和找房需求</span><button>微信一键登录</button><small>稍后完善头像与昵称</small></div></template>
                 </div>
                 <div class="mini-tabbar"><span>⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>

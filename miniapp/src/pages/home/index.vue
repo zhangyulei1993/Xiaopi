@@ -11,6 +11,7 @@ import editIcon from "../../static/icons/edit.svg";
 // first render on mobile networks. This 1440px JPEG is visually equivalent.
 import heroFallback from "../../static/home-lifestyle-hero.jpg";
 import { getSession } from "../../auth/session";
+import { listingDoorplate, publicListingTitle } from "../../utils/listing-title";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", heroSubtitle: "在武汉，住得更省心", heroDescription: "真实房源 · 可靠服务", notice: "", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 3 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 3 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 3 }] };
 const priceRanges = [
@@ -100,23 +101,13 @@ const feeLabel = (item: Property) => {
 };
 const secondaryLabels = (item: Property) => {
   const layout = String(item.layout || "").match(/^\d+室(?:\d+厅)?/)?.[0] || "";
-  return [layout, feeLabel(item)].filter(Boolean);
+  const doorplate = !isAdmin.value && config.value.listingTitle?.enabledFields?.includes("unit") ? listingDoorplate(item) : "";
+  return [doorplate, layout, feeLabel(item)].filter(Boolean);
 };
-const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
-const doorplate = (item: Property) => [
-  item.buildingNo,
-  item.unitNo && String(item.unitNo).includes("单元") ? item.unitNo : item.unitNo && `${item.unitNo}单元`,
-  item.roomNo && String(item.roomNo).includes("室") ? item.roomNo : item.roomNo && `${item.roomNo}室`,
-].filter(Boolean).join("");
-const needsAdminDoorplate = (item: Property) => Boolean(doorplate(item) && !compact(listingTitle(item)).includes(compact(doorplate(item))));
 const listingTitle = (item: Property) => {
-  const raw = String(item.title || item.community || "").trim();
-  const layout = String(item.layout || "").split(" · ")[0].trim();
-  // 仅修正历史测试数据：旧标题把事实区的户型也塞进标题；新建自定义标题仍原样保留。
-  if (layout && compact(raw).includes(compact(layout)) && item.community) {
-    return `${item.community}${doorplate(item)}`;
-  }
-  return raw || String(item.community || "房源");
+  return isAdmin.value
+    ? String(item.title || item.community || "房源").trim()
+    : publicListingTitle(item, config.value.listingTitle?.enabledFields);
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -174,7 +165,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="isAdmin && needsAdminDoorplate(item)" class="home-admin-doorplate">门牌 {{ doorplate(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="isAdmin && listingDoorplate(item)" class="home-admin-doorplate">门牌 {{ listingDoorplate(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>

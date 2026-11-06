@@ -525,6 +525,27 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	}
 }
 
+func TestPublicDoorplateBadgeFollowsConfigAndNeverStaysInTitle(t *testing.T) {
+	item := domain.Property{
+		ID: "property-1", Status: domain.PropertyAvailable,
+		Title:     "拿铁公寓5栋3单元101室 · 两室一厅",
+		Community: "拿铁公寓", BuildingNo: "5栋", UnitNo: "3", RoomNo: "101",
+	}
+	config := domain.DefaultPublicConfig()
+	visible := publicProperties([]domain.Property{item}, config)
+	if len(visible) != 1 || visible[0].DoorplateLabel != "5栋3单元101室" {
+		t.Fatalf("expected configured public doorplate badge, got %#v", visible)
+	}
+	if strings.Contains(visible[0].Title, "101室") {
+		t.Fatalf("doorplate must never remain in public title: %q", visible[0].Title)
+	}
+	config.ListingTitle.EnabledFields = []string{"community", "layout"}
+	hidden := publicProperties([]domain.Property{item}, config)
+	if hidden[0].DoorplateLabel != "" {
+		t.Fatalf("disabled doorplate must not reach normal users: %#v", hidden[0])
+	}
+}
+
 func TestDisabledWechatAdminCannotKeepManagementAccess(t *testing.T) {
 	dataStore := &fakeStore{
 		users:  []domain.User{{ID: "wx-admin-1", Status: domain.UserActive}},

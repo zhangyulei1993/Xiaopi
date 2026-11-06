@@ -14,6 +14,7 @@ import { getSession } from "../../auth/session";
 import searchIcon from "../../static/icons/search.svg";
 import filterIcon from "../../static/icons/filter.svg";
 import heartIcon from "../../static/icons/heart.svg";
+import { listingDoorplate, publicListingTitle } from "../../utils/listing-title";
 
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
@@ -37,6 +38,7 @@ const selectedPrice = ref(0),
   loading = ref(false),
   loadFailed = ref(false),
   workingID = ref("");
+const listingTitleFields = ref<string[]>(["community", "unit", "floor", "layout", "rentType", "area"]);
 const priceRanges = [
   { label: "不限价格", min: 0, max: 0 },
   { label: "≤1500", min: 0, max: 1500 },
@@ -158,6 +160,7 @@ const load = async () => {
     properties.value = items;
     configuredLocations.value = config?.locations || [];
     configuredChannels.value = config?.featuredChannels || [];
+    listingTitleFields.value = config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : listingTitleFields.value;
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
@@ -231,20 +234,13 @@ const feeLabel = (item: Property) => {
 };
 const secondaryLabels = (item: Property) => {
   const layout = String(item.layout || "").match(/^\d+室(?:\d+厅)?/)?.[0] || "";
-  return [layout, feeLabel(item)].filter(Boolean);
+  const doorplate = !isAdmin.value && listingTitleFields.value.includes("unit") ? listingDoorplate(item) : "";
+  return [doorplate, layout, feeLabel(item)].filter(Boolean);
 };
-const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
-const doorplate = (item: Property) => [
-  item.buildingNo,
-  item.unitNo && String(item.unitNo).includes("单元") ? item.unitNo : item.unitNo && `${item.unitNo}单元`,
-  item.roomNo && String(item.roomNo).includes("室") ? item.roomNo : item.roomNo && `${item.roomNo}室`,
-].filter(Boolean).join("");
-const needsAdminDoorplate = (item: Property) => Boolean(doorplate(item) && !compact(listingTitle(item)).includes(compact(doorplate(item))));
 const listingTitle = (item: Property) => {
-  const raw = String(item.title || item.community || "").trim();
-  const layout = String(item.layout || "").split(" · ")[0].trim();
-  if (layout && compact(raw).includes(compact(layout)) && item.community) return `${item.community}${doorplate(item)}`;
-  return raw || String(item.community || "房源");
+  return isAdmin.value
+    ? String(item.title || item.community || "房源").trim()
+    : publicListingTitle(item, listingTitleFields.value);
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -391,7 +387,7 @@ const subscribeArea = () => {
             ></view
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
-          ><view v-if="isAdmin && needsAdminDoorplate(item)" class="admin-doorplate">门牌 {{ doorplate(item) }}</view
+          ><view v-if="isAdmin && listingDoorplate(item)" class="admin-doorplate">门牌 {{ listingDoorplate(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"

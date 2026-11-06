@@ -113,7 +113,6 @@ const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, househ
 const titleParts = ref<string[]>([]);
 const allTitlePartOptions = [
   { key: "community", label: "小区" },
-  { key: "unit", label: "门牌" },
   { key: "floor", label: "楼层" },
   { key: "layout", label: "户型" },
   { key: "rentType", label: "整租/合租" },
@@ -122,12 +121,13 @@ const allTitlePartOptions = [
 const enabledTitlePartKeys = ref(allTitlePartOptions.map((option) => option.key));
 const titlePartOptions = computed(() => allTitlePartOptions.filter((option) => enabledTitlePartKeys.value.includes(option.key)));
 const defaultTitleParts = () => {
-  const preferred = ["community", "unit"].filter((key) => enabledTitlePartKeys.value.includes(key));
+  const preferred = ["community", "layout"].filter((key) => enabledTitlePartKeys.value.includes(key));
   return preferred.length ? preferred : enabledTitlePartKeys.value.slice(0, 1);
 };
 const applyTitleFieldConfig = (fields?: string[]) => {
   const supported = new Set(allTitlePartOptions.map((option) => option.key));
-  const enabled = (fields || []).filter((key) => supported.has(key));
+  // 门牌只作为普通用户列表的独立标签，不参与发布标题拼接。
+  const enabled = (fields || []).filter((key) => key !== "unit" && supported.has(key));
   enabledTitlePartKeys.value = enabled.length ? enabled : allTitlePartOptions.map((option) => option.key);
   titleParts.value = titleParts.value.filter((key) => enabledTitlePartKeys.value.includes(key));
   if (!titleParts.value.length) titleParts.value = defaultTitleParts();
@@ -449,7 +449,6 @@ const generatedTitle = computed(() => {
   if (!community) return "选择小区后自动生成";
   const values: Record<string, string> = {
     community,
-    unit: [buildingNo.value.trim(), unitNo.value.trim() && `${unitNo.value.trim()}单元`, roomNo.value.trim() && `${roomNo.value.trim()}室`].filter(Boolean).join(""),
     floor: selectedFloor.value ? `${selectedFloor.value}层` : "",
     layout: rentType.value === "合租" ? roomType.value : wholeLayoutText.value,
     rentType: rentType.value,
@@ -460,8 +459,7 @@ const generatedTitle = computed(() => {
     .filter((item) => item.value)
     .reduce((title, item) => {
       if (!title) return item.value;
-      // 门牌本身应连续展示，例如「5栋3单元101室」；其余语义字段用分隔点保持可读。
-      return item.key === "unit" ? `${title}${item.value}` : `${title} · ${item.value}`;
+      return `${title} · ${item.value}`;
     }, "");
 });
 watch([() => form.community, roomCount, customRoomCount, hallCount, kitchenCount, bathroomCount, balcony, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
@@ -1428,7 +1426,7 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
-        ><view><strong>发布标题</strong><small>按点选先后自动拼接，不添加分隔符</small></view
+        ><view><strong>发布标题</strong><small>按点选先后自动拼接；门牌将作为列表标签展示</small></view
         ><view class="title-part-list"><view v-for="option in orderedTitlePartOptions" :key="option.key" class="title-part" :class="{ active: titleParts.includes(option.key) }" @click="toggleTitlePart(option.key)"><view class="title-part-name"><text>{{ titleParts.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view></view></view>
         <view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle || "请至少选择一项" }}</strong></view></view
       ><view v-if="activeSection === 4" class="final-review"
