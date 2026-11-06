@@ -223,7 +223,7 @@ const primaryLabels = (item: Property) => {
   const rentType = item.rentType === "合租" ? "合租" : "整租";
   const listingSource = item.listingSource === "转租" ? "转租" : "直租";
   const fields = item.displayTags || listingTitleFields.value;
-  return [fields.includes("rentType") ? rentType : "", listingSource].filter(Boolean);
+  return [fields.includes("rentType") ? rentType : "", fields.includes("listingSource") ? listingSource : ""].filter(Boolean);
 };
 const feeLabel = (item: Property) => {
   const source = String(item.feeText || "");
@@ -238,7 +238,7 @@ const secondaryLabels = (item: Property) => {
   const layoutParts = String(item.layout || "").split(/[·・]/).filter(Boolean);
   const layout = item.rentType === "合租" ? (layoutParts[1] || "") : (layoutParts[0] || "");
   const doorplate = !isAdmin.value && fields.includes("unit") ? listingDoorplate(item) : "";
-  return [doorplate, fields.includes("layout") ? layout : "", fields.includes("floor") ? item.floorInfo : "", fields.includes("area") && item.areaSqm ? `${item.areaSqm}㎡` : "", feeLabel(item)].filter(Boolean);
+  return [doorplate, fields.includes("layout") ? layout : "", fields.includes("floor") ? item.floorInfo : "", fields.includes("area") && item.areaSqm ? `${item.areaSqm}㎡` : "", fields.includes("fee") ? feeLabel(item) : ""].filter(Boolean);
 };
 const listingTitle = (item: Property) => {
   return isAdmin.value

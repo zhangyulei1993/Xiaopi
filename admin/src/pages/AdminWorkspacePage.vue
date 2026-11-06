@@ -71,10 +71,10 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ enabledFields: ['community', 'floor', 'layout', 'rentType', 'area'] })
+const defaultListingTitle = () => ({ enabledFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'] })
 const listingTitleFieldOptions = [
   { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
-  { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'area', label: '面积' },
+  { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'fee', label: '有无中介费' }, { key: 'area', label: '面积' },
 ]
 const shareFieldOptions = [
   { key: 'community', label: '小区名称' }, { key: 'layout', label: '户型 / 房间' }, { key: 'roomNo', label: '门牌信息' },

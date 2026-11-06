@@ -93,7 +93,7 @@ func DefaultPublicConfig() PublicConfig {
 		ListingTitle: ListingTitleConfig{
 			// 门牌属于精确住址信息，默认不向普通用户列表公开；管理员可在后台
 			// 明确确认风险后开启独立的“门牌标签”。
-			EnabledFields: []string{"community", "floor", "layout", "rentType", "area"},
+			EnabledFields: []string{"community", "floor", "layout", "rentType", "listingSource", "fee", "area"},
 		},
 	}
 }
@@ -153,7 +153,7 @@ var shareCardFieldLabels = map[string]string{
 }
 
 var listingTitleFieldLabels = map[string]string{
-	"community": "小区", "unit": "门牌", "floor": "楼层", "layout": "户型", "rentType": "整租/合租", "area": "面积",
+	"community": "小区", "unit": "门牌", "floor": "楼层", "layout": "户型", "rentType": "整租/合租", "listingSource": "直租/转租", "fee": "中介费", "area": "面积",
 }
 
 func validateShareFields(fields []string, minimum, maximum int, name string) error {
@@ -175,15 +175,15 @@ func validateShareFields(fields []string, minimum, maximum int, name string) err
 
 func validateListingTitleFields(fields []string) error {
 	if len(fields) == 0 || len(fields) > len(listingTitleFieldLabels) {
-		return errors.New("标题拼接字段数量必须在 1 到 6 个之间")
+		return fmt.Errorf("列表标签数量必须在 1 到 %d 个之间", len(listingTitleFieldLabels))
 	}
 	seen := map[string]struct{}{}
 	for _, field := range fields {
 		if _, exists := listingTitleFieldLabels[field]; !exists {
-			return errors.New("标题拼接包含不支持的字段")
+			return errors.New("列表标签包含不支持的字段")
 		}
 		if _, exists := seen[field]; exists {
-			return errors.New("标题拼接字段不能重复")
+			return errors.New("列表标签不能重复")
 		}
 		seen[field] = struct{}{}
 	}

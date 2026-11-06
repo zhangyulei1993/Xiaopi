@@ -92,10 +92,12 @@ const listingTagOptions = [
   { key: "floor", label: "楼层" },
   { key: "layout", label: "户型" },
   { key: "rentType", label: "整租/合租" },
+  { key: "listingSource", label: "直租/转租" },
+  { key: "fee", label: "有无中介费" },
   { key: "area", label: "面积" },
 ];
-const allowedDisplayTags = ref<string[]>(["floor", "layout", "rentType", "area"]);
-const selectedDisplayTags = ref<string[]>(["layout", "rentType"]);
+const allowedDisplayTags = ref<string[]>(["floor", "layout", "rentType", "listingSource", "fee", "area"]);
+const selectedDisplayTags = ref<string[]>(["layout", "rentType", "listingSource", "fee"]);
 const toggleDisplayTag = (key: string) => {
   selectedDisplayTags.value = selectedDisplayTags.value.includes(key)
     ? selectedDisplayTags.value.filter((item) => item !== key)
@@ -308,7 +310,7 @@ const loadChannels = async () => {
     allowedDisplayTags.value = (config.listingTitle?.enabledFields || [])
       .filter((key) => key !== "community");
     selectedDisplayTags.value = selectedDisplayTags.value.filter((key) => allowedDisplayTags.value.includes(key));
-    if (!selectedDisplayTags.value.length) selectedDisplayTags.value = allowedDisplayTags.value.filter((key) => ["layout", "rentType"].includes(key));
+    if (!selectedDisplayTags.value.length) selectedDisplayTags.value = allowedDisplayTags.value.filter((key) => ["layout", "rentType", "listingSource", "fee"].includes(key));
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
       if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
@@ -438,12 +440,39 @@ const displayTagValue = (key: string) => {
   if (key === "floor") return form.floorInfo || (selectedFloor.value ? `${selectedFloor.value}层` : "");
   if (key === "layout") return form.layout || (rentType.value === "合租" ? roomType.value : wholeLayoutText.value);
   if (key === "rentType") return rentType.value;
+  if (key === "listingSource") return form.listingSource || "直租";
+  if (key === "fee") return form.feeText || "无中介费";
   if (key === "area") return Number(form.areaSqm) ? `${form.areaSqm}㎡` : "";
   return "";
 };
 const selectedDisplayTagLabels = computed(() => selectedDisplayTags.value
   .map((key) => displayTagValue(key))
   .filter(Boolean));
+const isDisplayTagSelected = (key: string) => selectedDisplayTags.value.includes(key);
+const previewPrimaryTags = computed(() => [
+  isDisplayTagSelected("rentType") ? (rentType.value || "整租") : "",
+  isDisplayTagSelected("listingSource") ? (form.listingSource || "直租") : "",
+].filter(Boolean));
+const previewSecondaryTags = computed(() => [
+  isDisplayTagSelected("unit") ? displayTagValue("unit") : "",
+  isDisplayTagSelected("layout") ? displayTagValue("layout") : "",
+  isDisplayTagSelected("floor") ? displayTagValue("floor") : "",
+  isDisplayTagSelected("area") ? displayTagValue("area") : "",
+  isDisplayTagSelected("fee") ? displayTagValue("fee") : "",
+].filter(Boolean));
+const reviewCoverUrl = computed(() => {
+  const pending = orderedImages.value[0]?.path;
+  if (pending) return pending;
+  const existing = existingMedia.value.find((item) => item.type === "image")?.url;
+  return existing ? resolveAssetUrl(existing) : "";
+});
+const reviewLocation = computed(() => {
+  const raw = String(form.location || "").trim();
+  if (!raw) return "位置待补充";
+  const district = raw.split(/[·・]/).map((part) => part.trim()).find((part) => /区$/.test(part));
+  const landmark = raw.match(/[^省市区\s·・]*(?:大道|一路|二路|三路|路|街道|街|商圈)/)?.[0];
+  return [district, landmark].filter(Boolean).join(" · ") || raw.split(/[·・]/)[0].trim();
+});
 watch([() => form.community], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
@@ -691,7 +720,7 @@ const loadProperty = async () => {
     // only legacy records without this field receive the sensible default.
     selectedDisplayTags.value = Array.isArray(property.displayTags)
       ? property.displayTags.filter((key) => allowedDisplayTags.value.includes(key))
-      : allowedDisplayTags.value.filter((key) => ["layout", "rentType"].includes(key));
+      : allowedDisplayTags.value.filter((key) => ["layout", "rentType", "listingSource", "fee"].includes(key));
     paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
     form.listingSource = property.listingSource || "直租";
     transferDepositMultiplier.value = Number(property.transferDeposit) && Number(property.rentMonthly)
@@ -1423,7 +1452,9 @@ const mediaUrl = resolveAssetUrl;
           ><view :class="{ ready: sectionReady[3] }"><text>租金入住</text><small>{{ Number(form.rentMonthly) || 0 }}/月 {{ form.depositPayment || "" }}</small></view
           ><view :class="{ ready: sectionReady[4] }"><text>图片素材</text><small>{{ mediaCount }}/9 张图片 · {{ videoCount }} 个视频</small></view
         ></view
-        ><view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>保存前分别查看普通用户与管理员看到的信息</small></view><view class="listing-preview customer-preview"><text>普通用户视角</text><view><strong>{{ generatedTitle }}</strong><small>{{ form.location || "位置待补充" }}</small><view class="preview-tag-row"><i v-for="label in selectedDisplayTagLabels" :key="label">{{ label }}</i><i>{{ form.listingSource || "直租" }}</i><i>{{ form.feeText || "无中介费" }}</i></view><b>¥{{ Number(form.rentMonthly) || 0 }}<small>/月</small></b></view></view><view class="listing-preview admin-preview"><text>管理员视角</text><view><strong>{{ generatedTitle }}</strong><small>门牌 {{ displayTagValue("unit") || "待补充" }} · {{ form.location || "位置待补充" }}</small><view class="preview-tag-row"><i v-for="label in selectedDisplayTagLabels" :key="label">{{ label }}</i><i>{{ form.listingSource || "直租" }}</i></view><b>¥{{ Number(form.rentMonthly) || 0 }}<small>/月</small></b></view></view></view
+        ><view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>以下为保存后首页与“房源”页的真实卡片布局</small></view
+          ><view class="review-list-card"><text class="review-perspective">普通用户视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small>{{ reviewLocation }}</small><view v-if="previewPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewSecondaryTags.length" class="review-tags review-secondary-tags"><text v-for="label in previewSecondaryTags" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view
+          ><view class="review-list-card admin-review-card"><text class="review-perspective">管理员视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small class="review-admin-doorplate">门牌 {{ displayTagValue("unit") || "待补充" }}</small><small>{{ reviewLocation }}</small><view v-if="previewPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="review-tags review-secondary-tags"><text v-for="label in previewSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view></view
         ><text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
@@ -1659,7 +1690,7 @@ const mediaUrl = resolveAssetUrl;
 .final-review-grid text,.final-review-grid small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .final-review-grid text { font-size:20rpx;font-weight:700; }
 .final-review-grid small { margin-top:5rpx;font-size:18rpx; }
-.listing-compare{margin-top:18rpx;padding-top:18rpx;border-top:1rpx solid #e2ebe6}.listing-compare-head strong,.listing-compare-head small{display:block}.listing-compare-head strong{color:#31463d;font-size:23rpx}.listing-compare-head small{margin-top:5rpx;color:#7b9187;font-size:18rpx}.listing-preview{margin-top:12rpx;padding:14rpx;border-radius:14rpx;background:#fff;border:1rpx solid #e5ece8}.listing-preview>text{display:block;margin-bottom:9rpx;color:#7c9589;font-size:18rpx;font-weight:700}.listing-preview>view>strong,.listing-preview>view>small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.listing-preview>view>strong{color:#293b31;font-size:23rpx}.listing-preview>view>small{margin-top:5rpx;color:#7a877f;font-size:18rpx}.preview-tag-row{display:flex;gap:7rpx;overflow:hidden;margin-top:10rpx;white-space:nowrap}.preview-tag-row i{flex:none;padding:4rpx 7rpx;border-radius:7rpx;background:#edf3e7;color:#59704e;font-size:17rpx;font-style:normal}.listing-preview b{display:block;margin-top:10rpx;color:#d86749;font-size:27rpx;line-height:1}.listing-preview b small{margin-left:3rpx;font-size:17rpx;font-weight:500}.admin-preview{background:#f5f8f6}.admin-preview>text{color:#395b4b}
+.listing-compare{margin-top:18rpx;padding-top:18rpx;border-top:1rpx solid #e2ebe6}.listing-compare-head strong,.listing-compare-head small{display:block}.listing-compare-head strong{color:#31463d;font-size:23rpx}.listing-compare-head small{margin-top:5rpx;color:#7b9187;font-size:18rpx}.review-list-card{margin-top:14rpx;padding:14rpx;border:1rpx solid #e4ebe5;border-radius:18rpx;background:#fff;box-shadow:0 8rpx 18rpx rgba(31,55,43,.04)}.admin-review-card{background:#f7faf8}.review-perspective{display:block;margin:0 0 10rpx;color:#638278;font-size:18rpx;font-weight:800}.review-card-main{display:flex;gap:13rpx;min-height:154rpx}.review-cover{position:relative;flex:none;overflow:hidden;width:178rpx;height:154rpx;border-radius:12rpx;background:#e8eee4;color:#587062}.review-cover image{width:100%;height:100%}.review-cover>text{display:flex;height:100%;align-items:center;justify-content:center;font-size:26rpx;font-weight:800}.review-cover i{position:absolute;top:9rpx;left:9rpx;padding:4rpx 8rpx;border-radius:7rpx;background:#118f80;color:#fff;font-size:18rpx;font-style:normal;font-weight:800}.review-copy{display:flex;min-width:0;flex:1;flex-direction:column}.review-copy>strong,.review-copy>small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.review-copy>strong{color:#293b31;font-size:24rpx;line-height:1.28;font-weight:800}.review-copy>small{margin-top:6rpx;color:#7a877f;font-size:18rpx;line-height:1.25}.review-copy .review-admin-doorplate{margin-top:6rpx;color:#426258;font-weight:700}.review-tags{display:flex;gap:6rpx;overflow:hidden;margin-top:8rpx;white-space:nowrap}.review-tags text{flex:none;padding:3rpx 7rpx;border-radius:6rpx;font-size:16rpx;line-height:1.35}.review-primary-tags text{background:#edf3e7;color:#577049}.review-secondary-tags text{background:#fff0e9;color:#c26b54}.review-copy b{margin-top:auto;color:#d86749;font-size:29rpx;line-height:1;font-weight:800}.review-copy b em{margin-left:3rpx;color:#7b817a;font-size:17rpx;font-style:normal;font-weight:500}
 .draft-delete-link { display:block;margin-top:18rpx;color:#bd5a45;font-size:21rpx;text-align:center; }
 .title-part-list { display:flex;flex-wrap:wrap;gap:10rpx;margin-top:16rpx; }
 .title-part { display:flex;align-items:center;overflow:hidden;border:1rpx solid #dfe5da;border-radius:11rpx;background:#fff;color:#708a84;font-size:20rpx; }
