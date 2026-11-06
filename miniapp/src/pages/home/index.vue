@@ -236,10 +236,10 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing-image{width:248rpx;height:208rpx;border-radius:16rpx}
 .listing-info{height:208rpx;padding:5rpx 5rpx 4rpx 0}
 .home-listing-title{font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
-.home-listing-address{max-height:32rpx;margin-top:10rpx;color:#7c8479;font-size:22rpx;line-height:1.45}
+.home-listing-address{max-height:34rpx;margin-top:10rpx;color:#707b70;font-size:24rpx;line-height:1.4}
 .listing-info .tags{height:34rpx;gap:8rpx;margin-top:10rpx}
 .listing-info .tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
 .listing-price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.listing-price .price-unit{font-size:19rpx}
 .listing:active{opacity:.9;transform:scale(.995)}
-.tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.listing-info .tag-stack .tags{height:27rpx;margin:0}.listing-info .tag-stack .tags text{padding:4rpx 8rpx;font-size:17rpx;line-height:1.1}.listing-info .fee-tags text{background:#f8eadf;color:#b7644b}
+.tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.listing-info .tag-stack .tags{height:29rpx;margin:0}.listing-info .tag-stack .tags text{padding:4rpx 8rpx;font-size:19rpx;line-height:1.1}.listing-info .fee-tags text{background:#f8eadf;color:#b7644b}
 </style>

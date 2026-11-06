@@ -703,9 +703,9 @@ const subscribeArea = () => {
 .cover{width:248rpx;height:208rpx;border-radius:16rpx}
 .property-copy{height:208rpx;padding:5rpx 5rpx 4rpx 0;box-sizing:border-box}
 .property-listing-title{font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
-.property-listing-address{max-height:32rpx;margin-top:10rpx;color:#7c8479;font-size:22rpx;line-height:1.45}
+.property-listing-address{max-height:34rpx;margin-top:10rpx;color:#707b70;font-size:24rpx;line-height:1.4}
 .service-tags{height:34rpx;gap:8rpx;margin-top:10rpx}.service-tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
 .property>.property-copy>.price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.property>.property-copy>.price .price-unit{font-size:19rpx}
 .admin-property{height:auto;min-height:0;padding:14rpx;border-radius:22rpx}.admin-property .property-main{height:208rpx;min-height:208rpx}.admin-property .property-copy{height:208rpx}.admin-card-actions{margin-top:14rpx;padding-top:14rpx}.admin-inline-actions{gap:9rpx}.admin-inline-actions button{min-width:98rpx;min-height:54rpx;border-radius:10rpx;font-size:21rpx;line-height:52rpx}
-.service-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.service-tag-stack .service-tags{height:27rpx;margin:0}.service-tag-stack .service-tags text{padding:4rpx 8rpx;font-size:17rpx;line-height:1.1}.service-tag-stack .fee-tags text{background:#f8eadf;color:#b7644b}
+.service-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.service-tag-stack .service-tags{height:29rpx;margin:0}.service-tag-stack .service-tags text{padding:4rpx 8rpx;font-size:19rpx;line-height:1.1}.service-tag-stack .fee-tags text{background:#f8eadf;color:#b7644b}
 </style>
