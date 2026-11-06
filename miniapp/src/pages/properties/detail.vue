@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onLoad, onShareAppMessage, onShareTimeline } from "@dcloudio/uni-app";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { request, resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
@@ -13,8 +13,10 @@ import {
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
+import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
 const item = ref<Property | null>(null),
+  contactPhone = ref(""),
   loading = ref(true),
   loadFailed = ref(false),
   favorite = ref(false);
@@ -24,6 +26,7 @@ const activeMediaIndex = ref(0);
 const playingVideoIndex = ref(-1);
 const videoDimensions = ref<Record<number, { width: number; height: number }>>({});
 const mapExpanded = ref(false);
+const shareCardImage = ref("");
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "propertyDetail",
   "房源详情",
@@ -45,6 +48,7 @@ const load = async (id = "") => {
     playingVideoIndex.value = -1;
     videoDimensions.value = {};
     mapExpanded.value = false;
+    contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
     if (getSession()?.role === "user")
       favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
@@ -56,6 +60,8 @@ const load = async (id = "") => {
     });
   } finally {
     loading.value = false;
+    await nextTick();
+    void generateShareCard();
   }
 };
 onLoad((query) => {
@@ -144,10 +150,88 @@ const shareTitle = computed(() => {
   return [subject, layout, rent].filter(Boolean).join(" · ");
 });
 const shareImageUrl = computed(() => {
+  if (shareCardImage.value) return shareCardImage.value;
   const current = item.value;
   const cover = current?.media?.find((media) => media.type === "image");
   return cover ? mediaUrl(cover.url) : "";
 });
+const compactText = (value: string, maxLength: number) =>
+  value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+const generateShareCard = async () => {
+  const current = item.value;
+  const cover = current?.media?.find((media) => media.type === "image");
+  if (!current || !cover) return;
+  try {
+    const source = mediaUrl(cover.url);
+    const info = await new Promise<UniApp.GetImageInfoSuccessData>((resolve, reject) =>
+      uni.getImageInfo({ src: source, success: resolve, fail: reject }),
+    );
+    const width = 600;
+    const height = 480;
+    const imageHeight = 276;
+    const context = uni.createCanvasContext("share-card-canvas");
+    const sourceRatio = info.width / info.height;
+    const targetRatio = width / imageHeight;
+    let sx = 0;
+    let sy = 0;
+    let sw = info.width;
+    let sh = info.height;
+    if (sourceRatio > targetRatio) {
+      sw = info.height * targetRatio;
+      sx = (info.width - sw) / 2;
+    } else {
+      sh = info.width / targetRatio;
+      sy = (info.height - sh) / 2;
+    }
+    context.setFillStyle("#ffffff");
+    context.fillRect(0, 0, width, height);
+    context.drawImage(info.path, sx, sy, sw, sh, 0, 0, width, imageHeight);
+    context.setFillStyle("#d85f42");
+    context.setFontSize(34);
+    context.fillText(`¥ ${Number(current.rentMonthly) || 0}`, 24, 324);
+    context.setFontSize(20);
+    context.fillText("元/月", 160, 324);
+    context.setFillStyle("#7b8579");
+    context.setFontSize(18);
+    context.fillText(current.depositPayment || "押付面议", 230, 324);
+    context.setFillStyle("#26372c");
+    context.setFontSize(27);
+    const sourceLabel = current.listingSource || "直租";
+    const subject = compactText(`${current.rentType || "整租"}·${current.community}`, 19);
+    context.fillText(`${sourceLabel}·${subject}`, 24, 366);
+    const columns = [
+      ["面积", current.areaSqm ? `${current.areaSqm}㎡` : "待补充"],
+      ["楼层", current.floorInfo || "待补充"],
+      ["入住", current.availableDate || "拎包入住"],
+    ];
+    columns.forEach(([label, value], index) => {
+      const x = 24 + index * 192;
+      context.setFillStyle("#92988f");
+      context.setFontSize(17);
+      context.fillText(label, x, 409);
+      context.setFillStyle("#26372c");
+      context.setFontSize(22);
+      context.fillText(compactText(value, 8), x, 446);
+    });
+    await new Promise<void>((resolve) => context.draw(false, resolve));
+    const result = await new Promise<UniApp.CanvasToTempFilePathRes>((resolve, reject) =>
+      uni.canvasToTempFilePath({
+        canvasId: "share-card-canvas",
+        width,
+        height,
+        destWidth: 1200,
+        destHeight: 960,
+        fileType: "jpg",
+        quality: 0.9,
+        success: resolve,
+        fail: reject,
+      }),
+    );
+    shareCardImage.value = result.tempFilePath;
+  } catch {
+    shareCardImage.value = "";
+  }
+};
 const propertyMessagePath = computed(
   () => `/pages/properties/detail?id=${encodeURIComponent(item.value?.id || "")}`,
 );
@@ -375,14 +459,17 @@ const deletePropertyFromPreview = () => {
     },
   });
 };
+const phoneCustomerService = () =>
+  callPhone(contactPhone.value, "客服电话尚未配置");
 </script>
 <template>
   <view v-if="loading" class="page detail-skeleton"
     ><view class="skeleton-media"></view><view class="skeleton-card"><view></view><view></view><view></view></view><view class="skeleton-card short"><view></view><view></view></view></view
   ><view v-else-if="loadFailed" class="page state"
     >房源加载失败，请返回重试</view
-  ><view v-else-if="item" class="page detail-page" :style="pageStyle"
-    ><view class="detail-page-head"><view>{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
+  ><view v-else-if="item" class="page detail-page" :style="pageStyle">
+    <canvas canvas-id="share-card-canvas" class="share-card-canvas" :width="600" :height="480"></canvas>
+    <view class="detail-page-head"><view>{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
       ><text class="detail-cover-icon">⌂</text><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
     ><view v-else class="media-gallery" :class="{ 'portrait-video': activeVideoIsPortrait }"
@@ -511,9 +598,10 @@ const deletePropertyFromPreview = () => {
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
-      ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享房源</text></button
-      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><image src="/static/icons/contact-property.svg" mode="aspectFit" /><text>联系小皮</text></button
-      ><view class="reserve user-reserve-primary" @click="reserve">预约看房</view></view
+      ><view class="service-persona"><view class="service-persona-avatar">皮</view><view><strong>小皮客服</strong><small>房源咨询</small></view></view
+      ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享</text></button
+      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><text>在线咨询</text></button
+      ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
 </template>
@@ -824,15 +912,15 @@ const deletePropertyFromPreview = () => {
 .admin-detail-tool.delete { color:#b96d57; }
 .admin-share-primary:active,.admin-edit-primary:active,.admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
 
-/* Tenant detail actions: share is light, direct contact is secondary, viewing is the primary conversion. */
-.user-action-bar { grid-template-columns:152rpx minmax(0,1fr) 146rpx; gap:12rpx; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
-.user-share,.user-contact { box-sizing:border-box; display:flex; min-width:0; align-items:center; justify-content:center; gap:7rpx; margin:0; padding:0; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#5a6955; line-height:1; }
-.user-share { flex-direction:column; gap:4rpx; background:#edf1e8; color:#40543f; }
-.user-share::after,.user-contact::after { border:0; }
-.user-share image,.user-contact image { width:28rpx; height:28rpx; flex:none; }.user-share text { display:block; width:100%; font-size:20rpx; font-weight:700; line-height:1; text-align:center; white-space:nowrap; }
-.user-contact { border-color:#40543f; background:#40543f; color:#fff; font-weight:750; }.user-contact image { filter:brightness(0) invert(1); }.user-contact text { overflow:hidden; font-size:25rpx; line-height:1; white-space:nowrap; }
-.user-reserve-primary { min-height:82rpx; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#667362; font-size:22rpx; font-weight:650; letter-spacing:0; }
-.user-share:active,.user-contact:active,.user-reserve-primary:active { opacity:.8; transform:scale(.985); }
+/* Tenant detail actions: identify the service first, then expose the three direct actions. */
+.user-action-bar { display:grid; grid-template-columns:minmax(168rpx,1.2fr) 88rpx minmax(142rpx,1fr) minmax(132rpx,.92fr); gap:10rpx; align-items:center; padding:14rpx 22rpx calc(14rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
+.service-persona{display:flex;min-width:0;align-items:center;gap:11rpx}.service-persona-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:18rpx;background:#40543f;color:#fff;font-size:28rpx;font-weight:800}.service-persona>view:last-child{min-width:0}.service-persona strong,.service-persona small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.service-persona strong{color:#29382d;font-size:23rpx;line-height:1.25}.service-persona small{margin-top:5rpx;color:#8a9287;font-size:18rpx;line-height:1.2}
+.user-share,.user-contact,.user-phone { box-sizing:border-box; display:flex; min-width:0; min-height:76rpx; align-items:center; justify-content:center; margin:0; padding:0; border:0; border-radius:17rpx; line-height:1; }
+.user-share::after,.user-contact::after,.user-phone::after { border:0; }
+.user-share{flex-direction:column;gap:4rpx;background:transparent;color:#40543f}.user-share image{width:31rpx;height:31rpx}.user-share text{font-size:19rpx;font-weight:700;white-space:nowrap}
+.user-contact{background:#40543f;color:#fff;font-weight:750}.user-phone{background:#748c69;color:#fff;font-weight:750}.user-contact text,.user-phone text{font-size:23rpx;white-space:nowrap}
+.share-card-canvas{position:fixed;left:-2000px;top:-2000px;width:600px;height:480px;opacity:0;pointer-events:none}
+.user-share:active,.user-contact:active,.user-phone:active { opacity:.8; transform:scale(.985); }
 .transfer-tag { display:inline-block; margin-top:12rpx; padding:7rpx 12rpx; border-radius:8rpx; background:#edf0dc; color:#536a45; font-size:20rpx; font-weight:700; }
 /* Final palette and rhythm pass: remove legacy teal without changing detail flow. */
 .state{color:#7e887d}.detail-cover,.media-image,.media-video{background:#e4e7de}.location-heading strong,.nearby-item strong{color:#29382d}.location-heading small,.nearby-heading small,.nearby-item small{color:#7e887d}.nearby-heading>text,.nearby-price strong{color:#d76440}.navigate-button{background:#edf1e8;color:#536a45}.tags{gap:10rpx}.tags text{padding:8rpx 13rpx;background:#edf0dc;color:#536a45;font-size:21rpx}.row{color:#7e887d}.row text:last-child{color:#29382d}.amenity-icon{border-color:#dfe7d8;background:#edf1e8;box-shadow:none}.amenity-name{color:#40543f}.desc{color:#64705f}.heart{color:#657162}.heart.active{color:#d76440}
