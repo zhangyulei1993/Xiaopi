@@ -87,15 +87,17 @@ const coverUrl = (item?: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const fields = isAdmin.value
-    ? (config.value.listingTitle?.adminEnabledFields || [])
-    : (config.value.listingTitle?.enabledFields || []);
+  const fields = [
+    ...(isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? ["unit"] : []),
+    ...(config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit"),
+  ];
   return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
-  const fields = isAdmin.value
-    ? (config.value.listingTitle?.adminEnabledFields || [])
-    : (config.value.listingTitle?.enabledFields || []);
+  const fields = [
+    ...(isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? ["unit"] : []),
+    ...(config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit"),
+  ];
   return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const listingTitle = (item: Property) => {

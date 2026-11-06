@@ -39,7 +39,7 @@ const selectedPrice = ref(0),
   loadFailed = ref(false),
   workingID = ref("");
 const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
-const adminListingTitleFields = ref<string[]>(["community", "unit", "layout", "rentType", "fee"]);
+const adminDoorplateEnabled = ref(true);
 const priceRanges = [
   { label: "不限价格", min: 0, max: 0 },
   { label: "≤1500", min: 0, max: 1500 },
@@ -162,7 +162,7 @@ const load = async () => {
     configuredLocations.value = config?.locations || [];
     configuredChannels.value = config?.featuredChannels || [];
     listingTitleFields.value = config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : listingTitleFields.value;
-    adminListingTitleFields.value = config?.listingTitle?.adminEnabledFields?.length ? config.listingTitle.adminEnabledFields : adminListingTitleFields.value;
+    adminDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
@@ -222,11 +222,17 @@ const coverUrl = (item: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const fields = isAdmin.value ? adminListingTitleFields.value : listingTitleFields.value;
+  const fields = [
+    ...(isAdmin.value && adminDoorplateEnabled.value ? ["unit"] : []),
+    ...listingTitleFields.value.filter((field) => field !== "community" && field !== "unit"),
+  ];
   return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
-  const fields = isAdmin.value ? adminListingTitleFields.value : listingTitleFields.value;
+  const fields = [
+    ...(isAdmin.value && adminDoorplateEnabled.value ? ["unit"] : []),
+    ...listingTitleFields.value.filter((field) => field !== "community" && field !== "unit"),
+  ];
   return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const listingTitle = (item: Property) => {

@@ -47,8 +47,8 @@ type ListingTitleConfig struct {
 	// EnabledFields applies to customer-facing cards. A listing can only
 	// use the globally configured result; publishers do not choose tags.
 	EnabledFields []string `json:"enabledFields"`
-	// AdminEnabledFields independently controls operator cards and detail
-	// metadata; it is never reduced by a listing's public visibility choices.
+	// AdminEnabledFields is the optional doorplate supplement for operator
+	// cards and details. All other labels are shared with the customer view.
 	AdminEnabledFields []string `json:"adminEnabledFields"`
 }
 
@@ -104,7 +104,7 @@ func DefaultPublicConfig() PublicConfig {
 			// 明确确认风险后开启独立的“门牌标签”。
 			CustomerAllowedFields: []string{"community", "floor", "layout", "rentType", "listingSource", "fee", "area"},
 			EnabledFields:         []string{"community", "layout", "rentType", "fee"},
-			AdminEnabledFields:    []string{"community", "unit", "layout", "rentType", "fee"},
+			AdminEnabledFields:    []string{"unit"},
 		},
 	}
 }
@@ -158,8 +158,19 @@ func (config *PublicConfig) Normalize() {
 	if len(config.ListingTitle.CustomerAllowedFields) == 0 {
 		config.ListingTitle.CustomerAllowedFields = append([]string(nil), DefaultPublicConfig().ListingTitle.CustomerAllowedFields...)
 	}
-	if len(config.ListingTitle.AdminEnabledFields) == 0 {
-		config.ListingTitle.AdminEnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.AdminEnabledFields...)
+	// Historical configurations held a full administrator tag set. The public
+	// set is now shared globally, so preserve only the optional doorplate bit.
+	adminDoorplate := false
+	for _, field := range config.ListingTitle.AdminEnabledFields {
+		if field == "unit" {
+			adminDoorplate = true
+			break
+		}
+	}
+	if adminDoorplate {
+		config.ListingTitle.AdminEnabledFields = []string{"unit"}
+	} else {
+		config.ListingTitle.AdminEnabledFields = []string{}
 	}
 }
 
@@ -259,8 +270,10 @@ func (config PublicConfig) Validate() error {
 			return errors.New("客户展示标签必须先在客户可选标签中开启")
 		}
 	}
-	if err := validateListingTitleFields(config.ListingTitle.AdminEnabledFields); err != nil {
-		return err
+	for _, field := range config.ListingTitle.AdminEnabledFields {
+		if field != "unit" {
+			return errors.New("管理员附加标签只支持门牌")
+		}
 	}
 	if len(config.Locations) == 0 || len(config.Locations) > 20 {
 		return errors.New("地理位置数量必须在 1 到 20 个之间")
