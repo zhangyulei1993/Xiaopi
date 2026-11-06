@@ -684,7 +684,7 @@ func publicProperties(items []domain.Property, config domain.PublicConfig) []pub
 		tags := item.DisplayTags
 		// Existing records predate per-listing tag selection. Preserve the prior
 		// configuration-driven presentation until an operator edits the listing.
-		if len(tags) == 0 {
+		if tags == nil {
 			tags = config.ListingTitle.EnabledFields
 		}
 		for _, tag := range tags {

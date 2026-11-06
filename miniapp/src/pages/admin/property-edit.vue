@@ -687,7 +687,9 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
-    selectedDisplayTags.value = property.displayTags?.length
+    // An empty array is an explicit choice to show no optional list tags;
+    // only legacy records without this field receive the sensible default.
+    selectedDisplayTags.value = Array.isArray(property.displayTags)
       ? property.displayTags.filter((key) => allowedDisplayTags.value.includes(key))
       : allowedDisplayTags.value.filter((key) => ["layout", "rentType"].includes(key));
     paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
