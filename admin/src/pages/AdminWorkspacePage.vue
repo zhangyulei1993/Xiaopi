@@ -35,6 +35,13 @@ const configPage = ref('home')
 type ConfigAudience = 'customer' | 'operator'
 const configAudience = ref<ConfigAudience>('customer')
 const visiblePagePresentationOptions = computed(() => pagePresentationOptions.filter(page => page.audience === configAudience.value))
+const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
+const selectConfigPage = (key: string) => {
+  const target = pagePresentationOptions.find(page => page.key === key)
+  if (!target) return
+  if (target.audience !== configAudience.value) configAudience.value = target.audience as ConfigAudience
+  configPage.value = target.key
+}
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
   configPage.value = visiblePagePresentationOptions.value[0]?.key || 'home'
@@ -678,7 +685,13 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <section class="surface page-config-nav">
             <div class="config-audience-heading"><strong>选择使用视角</strong><span>先按角色筛选，再以真实小程序页面进行配置</span></div>
             <div class="config-audience-switch"><button type="button" :class="{ active: configAudience === 'customer' }" @click="switchConfigAudience('customer')"><b>客户视角</b><small>找房、关注与联系</small></button><button type="button" :class="{ active: configAudience === 'operator' }" @click="switchConfigAudience('operator')"><b>非客户视角</b><small>运营、录入与管理</small></button></div>
-            <div class="page-config-tabs"><button v-for="page in visiblePagePresentationOptions" :key="page.key" :class="{ active: configPage === page.key }" @click="configPage = page.key">{{ page.label }}</button></div>
+            <div class="page-config-tabs"><button v-for="page in visiblePagePresentationOptions" :key="page.key" :class="{ active: configPage === page.key }" @click="selectConfigPage(page.key)">{{ page.label }}</button></div>
+            <div class="mini-page-board" aria-label="小程序页面选择">
+              <button v-for="page in visiblePagePresentationOptions" :key="`board-${page.key}`" type="button" :class="{ active: configPage === page.key }" @click="selectConfigPage(page.key)">
+                <i>{{ page.key === 'home' ? '⌂' : page.key === 'properties' ? '▤' : page.key === 'propertyDetail' ? '▱' : page.key === 'me' ? '○' : page.key === 'adminWorkbench' ? '▦' : page.key === 'adminPropertyEdit' ? '＋' : '·' }}</i>
+                <span>{{ page.label }}</span><small>{{ configPage === page.key ? '正在配置' : '点击配置' }}</small>
+              </button>
+            </div>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section v-if="configErrors.length" class="config-validation">
@@ -777,7 +790,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </div>
 
             <aside class="config-preview-column">
-              <div class="preview-heading"><div><strong>{{ pagePresentationOptions.find(page => page.key === configPage)?.label }}预览</strong></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
+              <div class="preview-heading"><div><strong>{{ configPageMeta?.label }} · 小程序页面</strong><small>点击页面中的入口可切换对应配置</small></div><el-tag :type="configDirty ? 'warning' : 'success'" effect="light">{{ configDirty ? '未发布' : '线上版本' }}</el-tag></div>
               <div class="config-preview-actions">
                 <el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button>
                 <el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button>
@@ -791,10 +804,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="mini-budget"><b>租金预算</b><span>¥1,500 以下</span><span>¥1,500–2,500</span></div>
                   <div class="mini-section-title">精选频道</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
-                  <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b>查看房源</b></div>
-                  <div class="mini-listing"><div></div><section><strong>正在加载附近好房</strong><span>真实房源 · 可靠服务</span><b>¥ 租金/月</b></section></div>
+                  <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">查看房源</b></div>
+                  <div class="mini-listing" @click="selectConfigPage('propertyDetail')"><div></div><section><strong>正在加载附近好房</strong><span>真实房源 · 可靠服务</span><b>¥ 租金/月</b></section></div>
                 </div>
-                <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
+                <div class="mini-tabbar"><button class="active" @click="selectConfigPage('home')">⌂<small>首页</small></button><button @click="selectConfigPage('properties')">▤<small>房源</small></button><button @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
               <div v-else class="phone-preview page-phone-preview" :class="`preview-${configPage}`">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
@@ -810,7 +823,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <template v-else-if="configPage === 'adminPropertyEdit'"><div class="preview-steps"><i class="active">位置门牌</i><i>户型出租</i><i>环境配套</i><i>租金入住</i></div><div class="preview-edit-card"><b>发布标题</b><span>勾选需要展示的信息；门牌独立成标签</span><div class="preview-checks"><i v-for="key in publicConfig.listingTitle.enabledFields" :key="key">✓ {{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</i></div><strong>拿铁公寓 · 两室一厅</strong></div><button class="preview-primary-button">下一步 · 户型出租</button></template>
                   <template v-else-if="configPage === 'authLogin'"><div class="preview-login-mark">皮</div><div class="preview-login-card"><b>登录后开始找房</b><span>同步关注、足迹和找房需求</span><button>微信一键登录</button><small>稍后完善头像与昵称</small></div></template>
                 </div>
-                <div class="mini-tabbar"><span>⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
+                <div class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
               <div v-if="configPage === 'propertyDetail'" class="share-card-preview"><span>微信分享标题</span><strong>{{ shareTitlePreview || '请选择分享标题字段' }}</strong><div><b>¥2300/月</b><small>拿铁公寓 · 68㎡ · 中层 · 拎包入住</small></div></div>
               <p class="preview-note">预览只反映当前选择的页面配置，实际尺寸会随设备自适应。</p>
