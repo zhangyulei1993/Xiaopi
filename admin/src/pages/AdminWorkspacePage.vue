@@ -34,19 +34,27 @@ const configLastSavedAt = ref('')
 const configPage = ref('home')
 const previewOverlay = ref<'page' | 'share' | 'poster'>('page')
 type ConfigAudience = 'customer' | 'operator'
+type DetailConfigTab = 'detail' | 'share' | 'poster'
 const configAudience = ref<ConfigAudience>('customer')
+const detailConfigTab = ref<DetailConfigTab>('detail')
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
+function selectDetailConfigTab(value: DetailConfigTab) {
+  detailConfigTab.value = value
+  previewOverlay.value = value === 'detail' ? 'page' : value
+}
 const selectConfigPage = (key: string) => {
   const target = pagePresentationOptions.find(page => page.key === key)
   if (!target) return
   if (target.audience !== 'both' && target.audience !== configAudience.value) configAudience.value = target.audience as ConfigAudience
   configPage.value = target.key
+  detailConfigTab.value = 'detail'
   previewOverlay.value = 'page'
 }
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
   configPage.value = value === 'operator' ? 'adminWorkbench' : 'home'
   previewSelectedPropertyID.value = ''
+  detailConfigTab.value = 'detail'
   previewOverlay.value = 'page'
 }
 const assigningAdmin = ref(false)
@@ -925,7 +933,16 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="listing-title-preview"><span>当前客户展示标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>
-              <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
+              <section v-if="configAudience === 'customer' && configPage === 'propertyDetail'" class="surface detail-config-workspace" aria-label="房源详情配置工作区">
+                <span>配置对象</span>
+                <div class="detail-config-tabs" role="tablist" aria-label="房源详情配置选项卡">
+                  <button type="button" :class="{ active: detailConfigTab === 'detail' }" role="tab" :aria-selected="detailConfigTab === 'detail'" @click="selectDetailConfigTab('detail')">房源详情</button>
+                  <button type="button" :class="{ active: detailConfigTab === 'share' }" role="tab" :aria-selected="detailConfigTab === 'share'" @click="selectDetailConfigTab('share')">微信分享卡</button>
+                  <button type="button" :class="{ active: detailConfigTab === 'poster' }" role="tab" :aria-selected="detailConfigTab === 'poster'" @click="selectDetailConfigTab('poster')">朋友圈海报</button>
+                </div>
+                <small>切换后仅编辑当前效果，右侧小程序画布会同步预览。</small>
+              </section>
+              <section v-if="configPage === 'propertyDetail' && (configAudience === 'operator' || detailConfigTab === 'detail')" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>房源详情标签</h2><p v-if="configAudience === 'customer'">从管理员开放的标签列中选择详情展示字段；右侧详情效果立即同步。</p><p v-else>详情字段由客户视角配置；管理员仅可在其基础上额外展示门牌。</p></div><el-button v-if="configAudience === 'operator'" plain @click="switchConfigAudience('customer'); selectConfigPage('propertyDetail')">配置客户详情标签</el-button></div>
                 <div v-if="configAudience === 'customer'" class="share-field-editor listing-title-editor">
                   <header><strong>客户详情展示标签</strong><span>与客户列表独立配置，但都只能使用非客户视角开放的标签列。</span></header>
@@ -935,12 +952,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div v-else class="listing-title-preview"><span>客户详情当前标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 <div v-if="configAudience === 'operator'" class="listing-title-preview"><span>管理员详情附加信息</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '额外显示门牌' : '不额外显示门牌' }}</strong></div>
               </section>
-              <section v-if="configAudience === 'customer' && configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>03</span><div><h2>公开分享配置</h2><p>好友分享和朋友圈海报不区分角色，统一采用客户公开标签。</p></div></div>
-                <div class="preview-mode-tabs" aria-label="右侧小程序预览模式">
-                  <span>右侧预览效果</span>
-                  <div><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">详情效果</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">微信分享卡</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">朋友圈海报</button></div>
-                </div>
+              <section v-if="configAudience === 'customer' && configPage === 'propertyDetail' && detailConfigTab === 'share'" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>03</span><div><h2>微信分享卡</h2><p>好友分享不区分角色，统一采用客户公开标签；右侧画布显示聊天中的实际卡片效果。</p></div></div>
                 <el-form label-position="top" class="basic-config-form"><el-form-item label="标题前缀（选填）"><el-input v-model="publicConfig.shareCard.titlePrefix" maxlength="12" show-word-limit placeholder="例如：精选好房" /></el-form-item></el-form>
                 <div class="share-field-editor">
                   <header><strong>客户标签来源</strong><span>以下标签直接沿用“客户房源列表标签”配置；管理员门牌不会进入分享卡。</span></header>
@@ -950,6 +963,13 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <header><strong>分享标题</strong><span>默认推荐“小区名称 + 户型 / 房间”，不突出合租或分租。</span></header>
                   <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.titleFields.includes(field.key) }" :disabled="!publicConfig.shareCard.titleFields.includes(field.key) && (publicConfig.shareCard.titleFields.length >= 4 || !shareFieldEnabledForCustomer(field.key))" :aria-pressed="publicConfig.shareCard.titleFields.includes(field.key)" @click="toggleShareField('titleFields', field.key, !publicConfig.shareCard.titleFields.includes(field.key))"><i>{{ publicConfig.shareCard.titleFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
                   <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.titleFields" :key="`title-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('titleFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.titleFields.length - 1" @click="moveShareField('titleFields', index, 1)">下移</button></span></article></div>
+                </div>
+              </section>
+              <section v-if="configAudience === 'customer' && configPage === 'propertyDetail' && detailConfigTab === 'poster'" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>03</span><div><h2>朋友圈海报</h2><p>海报不区分角色，统一采用客户公开标签；右侧画布显示海报效果。</p></div></div>
+                <div class="share-field-editor">
+                  <header><strong>客户标签来源</strong><span>以下标签直接沿用“客户房源列表标签”配置；管理员门牌不会进入海报。</span></header>
+                  <div class="listing-title-preview"><span>当前用于公开海报的标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
                 <div class="share-field-editor">
                   <header><strong>海报详情字段</strong><span>选择 3–8 项，月租会自动作为重点信息展示。</span></header>
