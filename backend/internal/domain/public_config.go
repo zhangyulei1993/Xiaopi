@@ -40,9 +40,13 @@ type ShareCardConfig struct {
 }
 
 type ListingTitleConfig struct {
+	// CustomerAllowedFields is the operator-managed set of fields the customer
+	// perspective is allowed to choose from. EnabledFields is its final visible
+	// subset, so operators can prepare choices without exposing every field.
+	CustomerAllowedFields []string `json:"customerAllowedFields"`
 	// EnabledFields applies to customer-facing cards. A listing can only
-	// subtract from these on its final publishing step.
-	EnabledFields      []string `json:"enabledFields"`
+	// use the globally configured result; publishers do not choose tags.
+	EnabledFields []string `json:"enabledFields"`
 	// AdminEnabledFields independently controls operator cards and detail
 	// metadata; it is never reduced by a listing's public visibility choices.
 	AdminEnabledFields []string `json:"adminEnabledFields"`
@@ -98,8 +102,9 @@ func DefaultPublicConfig() PublicConfig {
 		ListingTitle: ListingTitleConfig{
 			// 门牌属于精确住址信息，默认不向普通用户列表公开；管理员可在后台
 			// 明确确认风险后开启独立的“门牌标签”。
-			EnabledFields:      []string{"community", "layout", "rentType", "fee"},
-			AdminEnabledFields: []string{"community", "unit", "layout", "rentType", "fee"},
+			CustomerAllowedFields: []string{"community", "floor", "layout", "rentType", "listingSource", "fee", "area"},
+			EnabledFields:         []string{"community", "layout", "rentType", "fee"},
+			AdminEnabledFields:    []string{"community", "unit", "layout", "rentType", "fee"},
 		},
 	}
 }
@@ -149,6 +154,9 @@ func (config *PublicConfig) Normalize() {
 	}
 	if len(config.ListingTitle.EnabledFields) == 0 {
 		config.ListingTitle.EnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.EnabledFields...)
+	}
+	if len(config.ListingTitle.CustomerAllowedFields) == 0 {
+		config.ListingTitle.CustomerAllowedFields = append([]string(nil), DefaultPublicConfig().ListingTitle.CustomerAllowedFields...)
 	}
 	if len(config.ListingTitle.AdminEnabledFields) == 0 {
 		config.ListingTitle.AdminEnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.AdminEnabledFields...)
@@ -238,6 +246,18 @@ func (config PublicConfig) Validate() error {
 	}
 	if err := validateListingTitleFields(config.ListingTitle.EnabledFields); err != nil {
 		return err
+	}
+	if err := validateListingTitleFields(config.ListingTitle.CustomerAllowedFields); err != nil {
+		return err
+	}
+	allowed := make(map[string]struct{}, len(config.ListingTitle.CustomerAllowedFields))
+	for _, field := range config.ListingTitle.CustomerAllowedFields {
+		allowed[field] = struct{}{}
+	}
+	for _, field := range config.ListingTitle.EnabledFields {
+		if _, exists := allowed[field]; !exists {
+			return errors.New("客户展示标签必须先在客户可选标签中开启")
+		}
 	}
 	if err := validateListingTitleFields(config.ListingTitle.AdminEnabledFields); err != nil {
 		return err

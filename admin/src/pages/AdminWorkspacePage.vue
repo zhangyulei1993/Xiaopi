@@ -81,7 +81,7 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ enabledFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['community', 'unit', 'layout', 'rentType', 'fee'] })
+const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['community', 'unit', 'layout', 'rentType', 'fee'] })
 const listingTitleFieldOptions = [
   { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
   { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'fee', label: '有无中介费' }, { key: 'area', label: '面积' },
@@ -285,8 +285,9 @@ const configErrors = computed(() => {
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
   if (!publicConfig.shareCard.titleFields.length || publicConfig.shareCard.titleFields.length > 4) errors.push('分享标题需选择 1 到 4 个字段')
   if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
-  if (!publicConfig.listingTitle.enabledFields.length) errors.push('列表展示至少启用一个字段')
-  if (!publicConfig.listingTitle.enabledFields.some(field => field !== 'unit')) errors.push('发布标题至少启用一个非门牌字段')
+  if (!publicConfig.listingTitle.customerAllowedFields.length) errors.push('客户视角至少开放一个标签字段')
+  if (!publicConfig.listingTitle.enabledFields.length) errors.push('客户列表至少启用一个字段')
+  if (!publicConfig.listingTitle.enabledFields.every(field => publicConfig.listingTitle.customerAllowedFields.includes(field))) errors.push('客户展示标签必须先在“客户可选标签”中开启')
   if (!publicConfig.listingTitle.adminEnabledFields.length) errors.push('管理员列表至少启用一个字段')
   return errors
 })
@@ -309,10 +310,20 @@ const shareTitlePreview = computed(() => {
 })
 function toggleListingTitleField(key: string, enabled: boolean) {
   if (key === 'community') return
-  if (key === 'unit' && enabled && !window.confirm('开启“门牌标签”后，普通用户可在房源列表看到精确门牌号，可能暴露住址信息。确认开启吗？')) return
+  if (!publicConfig.listingTitle.customerAllowedFields.includes(key)) return
   const fields = publicConfig.listingTitle.enabledFields
   if (enabled && !fields.includes(key)) fields.push(key)
   if (!enabled) publicConfig.listingTitle.enabledFields = fields.filter(item => item !== key)
+}
+function toggleCustomerAllowedListingField(key: string, enabled: boolean) {
+  if (key === 'community') return
+  if (key === 'unit' && enabled && !window.confirm('开启“门牌标签”后，客户视角可将精确门牌号作为展示标签，可能暴露住址信息。确认开启吗？')) return
+  const fields = publicConfig.listingTitle.customerAllowedFields
+  if (enabled && !fields.includes(key)) fields.push(key)
+  if (!enabled) {
+    publicConfig.listingTitle.customerAllowedFields = fields.filter(item => item !== key)
+    publicConfig.listingTitle.enabledFields = publicConfig.listingTitle.enabledFields.filter(item => item !== key)
+  }
 }
 function toggleAdminListingField(key: string, enabled: boolean) {
   const fields = publicConfig.listingTitle.adminEnabledFields
@@ -825,7 +836,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </el-form>
               </section>
               <section v-if="configAudience === 'operator' && (configPage === 'properties' || configPage === 'propertyDetail')" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '管理员房源列表标签' : '管理员房源详情标签' }}</h2><p>仅控制管理员登录后的列表和详情显示；勾选后右侧非客户画布会立即同步。</p></div></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '房源标签配置' : '房源详情标签配置' }}</h2><p>在这里同时维护客户与管理员两套独立规则；勾选后相应视角的列表、首页推荐和详情会立即同步。</p></div></div>
+                <div class="share-field-editor listing-title-editor">
+                  <header><strong>客户视角：允许配置的标签</strong><span>先在这里开放客户视角可使用的标签；客户视角的配置页只能从此范围内勾选最终显示项。发布者不参与标签选择。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`customer-allowed-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.customerAllowedFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.customerAllowedFields.includes(field.key)" @click="toggleCustomerAllowedListingField(field.key, !publicConfig.listingTitle.customerAllowedFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.customerAllowedFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <div class="listing-title-preview"><span>客户可配置标签范围</span><strong>{{ publicConfig.listingTitle.customerAllowedFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                </div>
                 <div class="share-field-editor listing-title-editor">
                   <header><strong>非客户视角：管理员固定查看标签</strong><span>管理员列表和详情统一按此规则展示；门牌会直接显示为“5栋3单元101室”，与客户视角规则彼此独立。</span></header>
                   <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`admin-listing-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key)" @click="toggleAdminListingField(field.key, !publicConfig.listingTitle.adminEnabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
@@ -833,10 +849,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
               </section>
               <section v-else-if="configAudience === 'customer' && (configPage === 'properties' || configPage === 'propertyDetail')" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '客户房源列表标签' : '客户房源详情标签' }}</h2><p>后台在客户视角下全局勾选客户实际看见的标签。发布者无需、也不能为单套房源选择标签。</p></div></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '客户房源列表标签' : '客户房源详情标签' }}</h2><p>从非客户视角已开放的标签范围中，勾选客户实际显示的全局标签；发布者无需、也不能为单套房源选择标签。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
-                  <header><strong>客户实际展示标签</strong><span>小区名称始终作为主标题；广告语为独立文案。以下每一项标签独立显示，勾选后即时反映在右侧列表和详情。</span></header>
-                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <header><strong>客户实际展示标签</strong><span>小区名称始终作为主标题。灰色项尚未在非客户视角开放，需先回到非客户视角开启。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`customer-visible-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community' || !publicConfig.listingTitle.customerAllowedFields.includes(field.key)" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
                   <div class="listing-title-preview"><span>当前客户展示标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>

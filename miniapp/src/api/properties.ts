@@ -168,6 +168,7 @@ export interface PublicConfig {
     posterFields?: string[];
   };
   listingTitle?: {
+    customerAllowedFields?: string[];
     enabledFields?: string[];
     adminEnabledFields?: string[];
   };
