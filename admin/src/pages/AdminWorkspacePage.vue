@@ -117,21 +117,24 @@ function previewPropertyTags(item?: Property) {
   if (!item) return previewListingTags.value
   const fields = configAudience.value === 'operator' ? publicConfig.listingTitle.adminEnabledFields : publicConfig.listingTitle.enabledFields
   const selectedFields = configAudience.value === 'customer' && item.displayTags ? new Set(item.displayTags) : null
-  const unit = [item.buildingNo, item.unitNo, item.roomNo].filter(Boolean).join('')
+  const unit = [item.buildingNo, item.unitNo && (String(item.unitNo).includes('单元') ? item.unitNo : `${item.unitNo}单元`), item.roomNo && (String(item.roomNo).includes('室') ? item.roomNo : `${item.roomNo}室`)].filter(Boolean).join('')
+  const layout = String(item.layout || '').split(/[·・|｜]/).map((value) => value.trim()).filter((value) => value && !/^(整租|合租|直租|转租|有中介费|无中介费)$/.test(value)).join(' · ')
+  const fee = String(item.feeText || '').includes('无中介费') ? '无中介费' : String(item.feeText || '').includes('有中介费') ? '有中介费' : ''
   const values: Record<string, string> = {
     unit,
     floor: item.floorInfo || '',
-    layout: item.layout || '',
+    layout,
     rentType: item.rentType || '',
     listingSource: item.listingSource || '',
-    fee: item.feeText || '',
+    fee,
     area: item.areaSqm ? `${item.areaSqm}㎡` : '',
   }
+  const known = new Set<string>()
   return fields
     .filter((key) => key !== 'community' && (!selectedFields || selectedFields.has(key)))
     .map((key) => values[key])
     .filter((value) => Boolean(value))
-    .reduce<string[]>((result, value) => result.some((item) => item === value || item.includes(value) || value.includes(item)) ? result : [...result, value], [])
+    .filter((value) => known.has(value) ? false : (known.add(value), true))
 }
 function previewCoverStyle(item?: Property) {
   const cover = item?.media?.find((media) => media.type === 'image')?.url
@@ -821,13 +824,17 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(configPage, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[configPage].backgroundImage" @click="publicConfig.pagePresentations[configPage].backgroundImage = ''">移除背景图</button></div>
                 </el-form>
               </section>
-              <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '房源列表标签' : '房源详情标签' }}</h2><p>当前正在配置{{ configAudience === 'customer' ? '客户' : '非客户' }}视角；勾选后，右侧房源列表、首页推荐卡与房源详情会立刻同步。</p></div></div>
+              <section v-if="configAudience === 'operator' && (configPage === 'properties' || configPage === 'propertyDetail')" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>{{ configPage === 'properties' ? '房源列表标签规则' : '房源详情标签规则' }}</h2><p>由非客户视角统一管理；客户视角只展示结果。勾选后，右侧画布的首页推荐、房源列表和详情会立刻同步。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
-                  <header><strong>{{ configAudience === 'customer' ? '客户可见标签' : '非客户可见标签' }}</strong><span>{{ configAudience === 'customer' ? '小区名称作为主标题；这些项目决定录入人员可在发布前为每套房源勾选的公开标签。' : '非客户列表与详情统一使用此规则；门牌会直接显示为“5栋3单元101室”。' }}</span></header>
-                  <div v-if="configAudience === 'customer'" class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
-                  <div v-else class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`admin-listing-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key)" @click="toggleAdminListingField(field.key, !publicConfig.listingTitle.adminEnabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
-                  <div class="listing-title-preview"><span>当前启用标签</span><strong>{{ (configAudience === 'customer' ? publicConfig.listingTitle.enabledFields : publicConfig.listingTitle.adminEnabledFields).filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                  <header><strong>客户视角：允许发布者选择的公开标签</strong><span>客户卡片的主标题始终是小区名称。这里仅决定发布前能勾选哪些独立标签；单套房源可再做减法。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <div class="listing-title-preview"><span>客户可选标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                </div>
+                <div class="share-field-editor listing-title-editor">
+                  <header><strong>非客户视角：管理员固定查看标签</strong><span>管理员列表和详情统一按此规则展示；门牌会直接显示为“5栋3单元101室”，不受客户卡片的单套勾选影响。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`admin-listing-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key)" @click="toggleAdminListingField(field.key, !publicConfig.listingTitle.adminEnabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.adminEnabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <div class="listing-title-preview"><span>管理员固定标签</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">

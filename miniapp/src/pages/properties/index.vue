@@ -14,7 +14,7 @@ import { getSession } from "../../auth/session";
 import searchIcon from "../../static/icons/search.svg";
 import filterIcon from "../../static/icons/filter.svg";
 import heartIcon from "../../static/icons/heart.svg";
-import { listingDoorplate, publicListingTitle } from "../../utils/listing-title";
+import { listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
 
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
@@ -222,25 +222,12 @@ const coverUrl = (item: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const rentType = item.rentType === "合租" ? "合租" : "整租";
-  const listingSource = item.listingSource === "转租" ? "转租" : "直租";
   const fields = isAdmin.value ? adminListingTitleFields.value : (item.displayTags || listingTitleFields.value);
-  return [fields.includes("rentType") ? rentType : "", fields.includes("listingSource") ? listingSource : ""].filter(Boolean);
-};
-const feeLabel = (item: Property) => {
-  const source = String(item.feeText || "");
-  return source.includes("无中介费")
-    ? "无中介费"
-    : source.includes("有中介费")
-      ? "有中介费"
-      : "";
+  return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
   const fields = isAdmin.value ? adminListingTitleFields.value : (item.displayTags || listingTitleFields.value);
-  const layoutParts = String(item.layout || "").split(/[·・]/).filter(Boolean);
-  const layout = item.rentType === "合租" ? (layoutParts[1] || "") : (layoutParts[0] || "");
-  const doorplate = fields.includes("unit") ? listingDoorplate(item) : "";
-  return [doorplate, fields.includes("layout") ? layout : "", fields.includes("floor") ? item.floorInfo : "", fields.includes("area") && item.areaSqm ? `${item.areaSqm}㎡` : "", fields.includes("fee") ? feeLabel(item) : ""].filter(Boolean);
+  return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const listingTitle = (item: Property) => {
   return publicListingTitle(item, listingTitleFields.value);

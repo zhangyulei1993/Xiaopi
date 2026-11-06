@@ -11,7 +11,7 @@ import editIcon from "../../static/icons/edit.svg";
 // first render on mobile networks. This 1440px JPEG is visually equivalent.
 import heroFallback from "../../static/home-lifestyle-hero.jpg";
 import { getSession } from "../../auth/session";
-import { listingDoorplate, publicListingTitle } from "../../utils/listing-title";
+import { listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", heroSubtitle: "在武汉，住得更省心", heroDescription: "真实房源 · 可靠服务", notice: "", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 3 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 3 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 3 }] };
 const priceRanges = [
@@ -87,29 +87,16 @@ const coverUrl = (item?: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const rentType = item.rentType === "合租" ? "合租" : "整租";
-  const listingSource = item.listingSource === "转租" ? "转租" : "直租";
   const fields = isAdmin.value
     ? (config.value.listingTitle?.adminEnabledFields || [])
     : (item.displayTags || config.value.listingTitle?.enabledFields || []);
-  return [fields.includes("rentType") ? rentType : "", fields.includes("listingSource") ? listingSource : ""].filter(Boolean);
-};
-const feeLabel = (item: Property) => {
-  const source = String(item.feeText || "");
-  return source.includes("无中介费")
-    ? "无中介费"
-    : source.includes("有中介费")
-      ? "有中介费"
-      : "";
+  return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
   const fields = isAdmin.value
     ? (config.value.listingTitle?.adminEnabledFields || [])
     : (item.displayTags || config.value.listingTitle?.enabledFields || []);
-  const layoutParts = String(item.layout || "").split(/[·・]/).filter(Boolean);
-  const layout = item.rentType === "合租" ? (layoutParts[1] || "") : (layoutParts[0] || "");
-  const doorplate = fields.includes("unit") ? listingDoorplate(item) : "";
-  return [doorplate, fields.includes("layout") ? layout : "", fields.includes("floor") ? item.floorInfo : "", fields.includes("area") && item.areaSqm ? `${item.areaSqm}㎡` : "", fields.includes("fee") ? feeLabel(item) : ""].filter(Boolean);
+  return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const listingTitle = (item: Property) => {
   return publicListingTitle(item, config.value.listingTitle?.enabledFields);
