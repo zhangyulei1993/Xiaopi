@@ -71,7 +71,7 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ enabledFields: ['community', 'unit', 'floor', 'layout', 'rentType', 'area'] })
+const defaultListingTitle = () => ({ enabledFields: ['community', 'floor', 'layout', 'rentType', 'area'] })
 const listingTitleFieldOptions = [
   { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
   { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'area', label: '面积' },
@@ -243,6 +243,7 @@ const shareTitlePreview = computed(() => {
   return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.map(key => examples[key])].filter(Boolean).join(' · ')
 })
 function toggleListingTitleField(key: string, enabled: boolean) {
+  if (key === 'unit' && enabled && !window.confirm('开启“门牌标签”后，普通用户可在房源列表看到精确门牌号，可能暴露住址信息。确认开启吗？')) return
   const fields = publicConfig.listingTitle.enabledFields
   if (enabled && !fields.includes(key)) fields.push(key)
   if (!enabled) publicConfig.listingTitle.enabledFields = fields.filter(item => item !== key)

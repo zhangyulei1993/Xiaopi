@@ -38,7 +38,7 @@ const selectedPrice = ref(0),
   loading = ref(false),
   loadFailed = ref(false),
   workingID = ref("");
-const listingTitleFields = ref<string[]>(["community", "unit", "floor", "layout", "rentType", "area"]);
+const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
 const priceRanges = [
   { label: "不限价格", min: 0, max: 0 },
   { label: "≤1500", min: 0, max: 1500 },

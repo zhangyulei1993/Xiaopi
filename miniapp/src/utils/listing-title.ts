@@ -3,7 +3,7 @@ import type { Property } from "../api/properties";
 export type ListingTitleField = "community" | "unit" | "floor" | "layout" | "rentType" | "area";
 
 export const defaultListingTitleFields: ListingTitleField[] = [
-  "community", "unit", "floor", "layout", "rentType", "area",
+  "community", "floor", "layout", "rentType", "area",
 ];
 
 export const listingDoorplate = (item: Property) => {

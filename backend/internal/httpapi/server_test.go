@@ -532,6 +532,7 @@ func TestPublicDoorplateBadgeFollowsConfigAndNeverStaysInTitle(t *testing.T) {
 		Community: "拿铁公寓", BuildingNo: "5栋", UnitNo: "3单元", RoomNo: "101室",
 	}
 	config := domain.DefaultPublicConfig()
+	config.ListingTitle.EnabledFields = append(config.ListingTitle.EnabledFields, "unit")
 	visible := publicProperties([]domain.Property{item}, config)
 	if len(visible) != 1 || visible[0].DoorplateLabel != "5栋3单元101室" {
 		t.Fatalf("expected configured public doorplate badge, got %#v", visible)

@@ -91,7 +91,9 @@ func DefaultPublicConfig() PublicConfig {
 			PosterFields: []string{"rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"},
 		},
 		ListingTitle: ListingTitleConfig{
-			EnabledFields: []string{"community", "unit", "floor", "layout", "rentType", "area"},
+			// 门牌属于精确住址信息，默认不向普通用户列表公开；管理员可在后台
+			// 明确确认风险后开启独立的“门牌标签”。
+			EnabledFields: []string{"community", "floor", "layout", "rentType", "area"},
 		},
 	}
 }
