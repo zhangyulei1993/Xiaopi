@@ -46,14 +46,18 @@ const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
 };
 const matchesArea = (item: Property, label: string) => {
   if (label === "全部") return true;
-  const location = config.value.locations.find((area) => area.label === label);
-  const channel = config.value.featuredChannels.find((area) => area.title === label);
-  const latitude = location?.latitude || channel?.latitude || 0;
-  const longitude = location?.longitude || channel?.longitude || 0;
-  const radiusKm = location?.radiusKm || channel?.radiusKm || config.value.relatedPropertyRadiusKm || 3;
-  if (latitude && longitude && item.latitude && item.longitude) return distanceKm(latitude, longitude, item.latitude, item.longitude) <= radiusKm;
-  const keyword = location?.keyword || channel?.keyword || label;
-  return `${item.title || ""} ${item.community || ""} ${item.location || ""}`.includes(keyword);
+  if (item.areaLabel) return item.areaLabel === label;
+  // Compatibility for records created before areaLabel existed: assign them to
+  // exactly one nearest configured area, never to every overlapping radius.
+  const candidates = config.value.featuredChannels.filter((area) => area.latitude && area.longitude);
+  if (item.latitude && item.longitude && candidates.length) {
+    const nearest = candidates.reduce((current, candidate) =>
+      distanceKm(Number(candidate.latitude), Number(candidate.longitude), item.latitude!, item.longitude!) <
+      distanceKm(Number(current.latitude), Number(current.longitude), item.latitude!, item.longitude!) ? candidate : current,
+    );
+    return nearest.title === label;
+  }
+  return false;
 };
 const homeProperties = computed(() => properties.value.filter((item) => {
   // 首页是找房入口，不是运营工作台。即使管理员登录时接口返回全量
@@ -131,7 +135,7 @@ const browseFiltered = () => {
 };
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
 const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
-  uni.setStorageSync("xiaopi_property_filter", JSON.stringify({ keyword: channel.keyword, latitude: channel.latitude || 0, longitude: channel.longitude || 0, radiusKm: channel.radiusKm || 3, title: channel.title }));
+  uni.setStorageSync("xiaopi_property_filter", JSON.stringify({ area: channel.title }));
   browse();
 };
 </script>

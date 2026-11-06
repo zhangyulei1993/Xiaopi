@@ -5,6 +5,7 @@ export interface Property {
   title: string;
   community: string;
   location: string;
+  areaLabel?: string;
   buildingNo?: string;
   unitNo?: string;
   roomNo?: string;

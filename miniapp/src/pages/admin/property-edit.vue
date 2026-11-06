@@ -707,7 +707,9 @@ const loadProperty = async () => {
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
     parseLayout(property.layout);
-    if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
+    const boundChannelIndex = channels.value.findIndex((channel) => channel.title === property.areaLabel);
+    if (boundChannelIndex >= 0) selectedChannelIndex.value = boundChannelIndex;
+    else if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
     // 默认只放小区与门牌；户型、出租方式在卡片副标题展示，避免标题重复堆叠。
     titleParts.value = ["community", "unit"];
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
@@ -732,8 +734,8 @@ onLoad(async (query) => {
   id.value = String(query?.id || "");
   await loadPresentation();
   syncLayout();
-  loadChannels();
-  loadProperty();
+  await loadChannels();
+  await loadProperty();
   uni.getLocation({
     type: "gcj02",
     success: (result) => {
@@ -1002,6 +1004,7 @@ const save = async (mode: SaveMode = "draft") => {
       transferDeposit: form.listingSource === "转租" ? transferDepositAmount.value : 0,
       community: finalCommunity,
       location: form.location?.trim(),
+      areaLabel: selectedChannel.value.title,
       buildingNo: buildingNo.value.trim(),
       unitNo: unitNo.value.trim(),
       roomNo: roomNo.value.trim(),
@@ -1184,7 +1187,7 @@ const mediaUrl = resolveAssetUrl;
             maxlength="60"
             placeholder="选择小区后自动回填，可补充门牌信息" /></view
         ><view class="channel-scope"
-          ><view class="scope-heading"><text>自动关联</text><small>按小区位置匹配最近精选地区</small></view
+          ><view class="scope-heading"><text>归属地区</text><small>保存后按当前选择归类</small></view
           ><picker
             :range="channelTitles"
             :value="selectedChannelIndex"
@@ -1193,11 +1196,11 @@ const mediaUrl = resolveAssetUrl;
               ><view
                 ><strong>{{ selectedChannel.title }}</strong
                 ><small
-                  >{{ geoReady ? `距该地区 ${selectedChannelDistance.toFixed(1)} 公里` : "选择小区后自动匹配" }} · 关联 {{ channelRadiusKm }} 公里</small
+                  >{{ geoReady ? `当前绑定：${selectedChannel.title}` : "选择小区后推荐最近地区" }}</small
                 ></view
               ><text>调整 ›</text></view
             ></picker
-          ><view v-if="geoReady" class="map-toggle" @click="mapExpanded = !mapExpanded"><text>{{ mapExpanded ? "收起地图" : "地图调整位置" }}</text><small>{{ propertyInChannel ? "已在自动关联范围内" : "当前地点超出关联范围" }}</small></view></view
+          ><view v-if="geoReady" class="map-toggle" @click="mapExpanded = !mapExpanded"><text>{{ mapExpanded ? "收起地图" : "地图调整位置" }}</text><small>地图仅用于确认房源坐标</small></view></view
         ><view v-if="!geoReady || mapExpanded" class="map-picker"
           ><map
             class="property-map"
@@ -1210,16 +1213,9 @@ const mediaUrl = resolveAssetUrl;
             @tap="selectPointOnMap"
           /><view class="map-picker-footer"
             ><view
-              ><strong :class="{ warning: geoReady && !propertyInChannel }">{{
-                geoReady
-                  ? propertyInChannel
-                    ? `已在${selectedChannel.title}范围内`
-                    : `超出${selectedChannel.title}范围`
-                  : `请在${selectedChannel.title}圆形范围内选点`
-              }}</strong
+              ><strong>{{ geoReady ? `归属地区：${selectedChannel.title}` : "请先选择小区位置" }}</strong
               ><small v-if="geoReady"
-                >距频道中心 {{ propertyDistance.toFixed(2) }} 公里 ·
-                {{ Number(form.latitude).toFixed(6) }},
+                >房源坐标 {{ Number(form.latitude).toFixed(6) }},
                 {{ Number(form.longitude).toFixed(6) }}</small
               ><small v-else
                 >地图以当前位置显示，也可以搜索小区或直接点击落点</small

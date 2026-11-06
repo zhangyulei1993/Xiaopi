@@ -85,16 +85,17 @@ const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase(),
     price = priceRanges[selectedPrice.value];
   return properties.value.filter((item) => {
-    const location = areas.value.find(
-      (area) => area.label === selectedArea.value,
-    );
-    const areaChannel = configuredChannels.value.find((area) => area.title === selectedArea.value);
-    const areaDistance = areaChannel?.latitude && areaChannel?.longitude && item.latitude && item.longitude
-      ? distanceKm(areaChannel.latitude, areaChannel.longitude, item.latitude, item.longitude)
-      : null;
-    const areaMatched = selectedArea.value === "全部" || (areaDistance !== null
-      ? areaDistance <= (areaChannel?.radiusKm || 3)
-      : !location?.keyword || `${item.title || ""} ${item.community || ""} ${item.location || ""}`.includes(location.keyword));
+    let areaMatched = selectedArea.value === "全部" || item.areaLabel === selectedArea.value;
+    if (!areaMatched && selectedArea.value !== "全部" && !item.areaLabel && item.latitude && item.longitude) {
+      const candidates = configuredChannels.value.filter((area) => area.latitude && area.longitude);
+      if (candidates.length) {
+        const nearest = candidates.reduce((current, candidate) =>
+          distanceKm(Number(candidate.latitude), Number(candidate.longitude), item.latitude!, item.longitude!) <
+          distanceKm(Number(current.latitude), Number(current.longitude), item.latitude!, item.longitude!) ? candidate : current,
+        );
+        areaMatched = nearest.title === selectedArea.value;
+      }
+    }
     const channelDistance =
       channelFilter.value &&
       channelFilter.value.latitude &&
