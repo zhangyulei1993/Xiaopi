@@ -14,9 +14,7 @@ import {
 import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { usePagePresentation } from "../../utils/presentation";
-import { callPhone } from "../../utils/phone";
 const item = ref<Property | null>(null),
-  contactPhone = ref(""),
   loading = ref(true),
   loadFailed = ref(false),
   favorite = ref(false);
@@ -47,7 +45,6 @@ const load = async (id = "") => {
     playingVideoIndex.value = -1;
     videoDimensions.value = {};
     mapExpanded.value = false;
-    contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
     if (getSession()?.role === "user")
       favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
@@ -151,11 +148,21 @@ const shareImageUrl = computed(() => {
   const cover = current?.media?.find((media) => media.type === "image");
   return cover ? mediaUrl(cover.url) : "";
 });
+const propertyMessagePath = computed(
+  () => `/pages/properties/detail?id=${encodeURIComponent(item.value?.id || "")}`,
+);
+const customerSessionFrom = computed(() =>
+  JSON.stringify({
+    source: "property_detail",
+    propertyId: item.value?.id || "",
+    community: item.value?.community || "",
+  }),
+);
 const friendSharePayload = () => {
   const current = item.value;
   return {
     title: shareTitle.value,
-    path: `/pages/properties/detail?id=${encodeURIComponent(current?.id || "")}`,
+    path: propertyMessagePath.value,
     imageUrl: shareImageUrl.value,
   };
 };
@@ -368,17 +375,6 @@ const deletePropertyFromPreview = () => {
     },
   });
 };
-const contact = () => {
-  if (!getSession()) {
-    uni.navigateTo({ url: "/pages/auth/login" });
-    return;
-  }
-  if (!contactPhone.value) {
-    uni.showToast({ title: "管理员电话尚未配置", icon: "none" });
-    return;
-  }
-  callPhone(contactPhone.value, "管理员电话尚未配置");
-};
 </script>
 <template>
   <view v-if="loading" class="page detail-skeleton"
@@ -447,7 +443,7 @@ const contact = () => {
         ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ></view
       ></view
-    ><view v-if="!isAdmin" class="card service-card"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>{{ item.feeText || "咨询房源、确认看房时间与费用明细" }}</text></view><view class="service-status">在线服务</view></view
+    ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
     ><view v-if="item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租'" class="card detail-info"
       ><view class="title small">入住与房屋信息</view
       ><view class="detail-info-grid"
@@ -516,7 +512,7 @@ const contact = () => {
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享房源</text></button
-      ><view class="user-contact" @click="contact"><image src="/static/icons/contact-property.svg" mode="aspectFit" /><text>联系小皮</text></view
+      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><image src="/static/icons/contact-property.svg" mode="aspectFit" /><text>联系小皮</text></button
       ><view class="reserve user-reserve-primary" @click="reserve">预约看房</view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
@@ -807,9 +803,7 @@ const contact = () => {
 .detail-kicker { margin: 6rpx 4rpx 18rpx; color: #7b8579; font-size: 23rpx; }.media-strip { margin: 14rpx 0 4rpx; white-space: nowrap; }.media-strip-row { display: inline-flex; gap: 12rpx; padding: 0 2rpx; }.media-thumb { width: 104rpx; height: 76rpx; overflow: hidden; border: 2rpx solid transparent; border-radius: 12rpx; background: #e8ebe3; box-sizing: border-box; }.media-thumb image { width: 100%; height: 100%; }.media-thumb.video { display: flex; align-items: center; justify-content: center; background: #40543f; color: #fff; font-size: 20rpx; }.media-thumb.active { border-color: #536a45; box-shadow: 0 0 0 2rpx #dce7d5; }.admin-preview-tag { display: inline-block; margin-bottom: 14rpx; padding: 7rpx 12rpx; border-radius: 8rpx; background: #f8eadf; color: #b55b37; font-size: 20rpx; font-weight: 650; }.overview .price.pending { color: #73826d; font-size: 39rpx; }.overview .price.pending small { color: #8d9789; }.key-facts,.detail-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }.key-facts > view,.detail-info-grid>view { min-width: 0; padding: 16rpx; border-radius: 14rpx; background: #eeece5; }.key-facts > .wide,.detail-info-grid>.wide { grid-column: span 2; }.key-facts strong,.detail-info-grid strong { white-space: normal; text-overflow: clip; }.key-facts small,.detail-info-grid small { margin-top: 0; }.detail-info .title{margin-bottom:20rpx}.detail-info-grid small{display:block;color:#8a9087;font-size:19rpx}.detail-info-grid strong{display:block;margin-top:7rpx;color:#384438;font-size:24rpx;line-height:1.4}.location-heading { margin-bottom: 8rpx; }
 .overview .price .price-unit{font-size:23rpx}.overview .price.pending .price-unit{color:#8d9789}
 .detail-page-head{margin:8rpx 4rpx 18rpx}.detail-page-head view{color:#29382d;font-size:40rpx;font-weight:800;line-height:1.25;letter-spacing:-1rpx}.detail-page-head text{display:block;margin-top:8rpx;color:#7b8579;font-size:23rpx;line-height:1.45}
-.media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}
-.media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{display:flex;align-items:center;gap:16rpx;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{flex:none;color:#5d744d;font-size:20rpx;font-weight:700}
-
+.media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{box-sizing:border-box;display:flex;width:100%;align-items:center;gap:16rpx;margin-right:0;margin-left:0;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7;text-align:left;line-height:1.3}.service-card::after{border:0}.service-card:active{background:#f1f4ed;transform:scale(.99)}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{display:flex;flex:none;align-items:center;gap:5rpx;color:#5d744d;font-size:20rpx;font-weight:700}.service-status text{font-size:28rpx;line-height:1}
 /* Admin detail actions: lifecycle decisions are prominent; tools stay quiet and separate. */
 .admin-detail-bar { position:fixed; z-index:6; right:0; bottom:0; left:0; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
 .admin-detail-lead { display:grid; grid-template-columns:minmax(0,1fr) 180rpx; gap:12rpx; }
@@ -834,7 +828,7 @@ const contact = () => {
 .user-action-bar { grid-template-columns:152rpx minmax(0,1fr) 146rpx; gap:12rpx; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
 .user-share,.user-contact { box-sizing:border-box; display:flex; min-width:0; align-items:center; justify-content:center; gap:7rpx; margin:0; padding:0; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#5a6955; line-height:1; }
 .user-share { flex-direction:column; gap:4rpx; background:#edf1e8; color:#40543f; }
-.user-share::after { border:0; }
+.user-share::after,.user-contact::after { border:0; }
 .user-share image,.user-contact image { width:28rpx; height:28rpx; flex:none; }.user-share text { display:block; width:100%; font-size:20rpx; font-weight:700; line-height:1; text-align:center; white-space:nowrap; }
 .user-contact { border-color:#40543f; background:#40543f; color:#fff; font-weight:750; }.user-contact image { filter:brightness(0) invert(1); }.user-contact text { overflow:hidden; font-size:25rpx; line-height:1; white-space:nowrap; }
 .user-reserve-primary { min-height:82rpx; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#667362; font-size:22rpx; font-weight:650; letter-spacing:0; }
