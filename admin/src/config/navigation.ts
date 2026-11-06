@@ -1,7 +1,7 @@
 import type { PagePresentation } from '../types/domain'
 
 export const pagePresentationOptions = [
-  { key: 'home', label: '首页' }, { key: 'properties', label: '房源列表' }, { key: 'propertyDetail', label: '房源详情' }, { key: 'requests', label: '找房需求' }, { key: 'publish', label: '发布房源' }, { key: 'me', label: '我的' }, { key: 'footprints', label: '浏览足迹' }, { key: 'adminWorkbench', label: '运营工作台' }, { key: 'adminPropertyEdit', label: '编辑房源' }, { key: 'authLogin', label: '微信登录' },
+  { key: 'home', label: '首页', audience: 'customer' }, { key: 'properties', label: '房源列表', audience: 'customer' }, { key: 'propertyDetail', label: '房源详情', audience: 'customer' }, { key: 'requests', label: '找房需求', audience: 'customer' }, { key: 'publish', label: '房源线索', audience: 'customer' }, { key: 'me', label: '我的', audience: 'customer' }, { key: 'footprints', label: '浏览足迹', audience: 'customer' }, { key: 'authLogin', label: '微信登录', audience: 'customer' }, { key: 'adminWorkbench', label: '运营工作台', audience: 'operator' }, { key: 'adminPropertyEdit', label: '录入与编辑房源', audience: 'operator' },
 ]
 
 export const channelStyleOptions = [

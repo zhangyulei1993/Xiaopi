@@ -32,6 +32,13 @@ const configFailed = ref(false)
 const savedConfigJSON = ref('')
 const configLastSavedAt = ref('')
 const configPage = ref('home')
+type ConfigAudience = 'customer' | 'operator'
+const configAudience = ref<ConfigAudience>('customer')
+const visiblePagePresentationOptions = computed(() => pagePresentationOptions.filter(page => page.audience === configAudience.value))
+function switchConfigAudience(value: ConfigAudience) {
+  configAudience.value = value
+  configPage.value = visiblePagePresentationOptions.value[0]?.key || 'home'
+}
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
 const adminCandidate = ref<WechatUser | null>(null)
@@ -666,8 +673,9 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
           </section>
           <section class="surface page-config-nav">
-            <div><strong>选择小程序页面</strong><span>每页单独维护展示文案与背景图</span></div>
-            <div class="page-config-tabs"><button v-for="page in pagePresentationOptions" :key="page.key" :class="{ active: configPage === page.key }" @click="configPage = page.key">{{ page.label }}</button></div>
+            <div class="config-audience-heading"><strong>选择使用视角</strong><span>先按角色筛选，再以真实小程序页面进行配置</span></div>
+            <div class="config-audience-switch"><button type="button" :class="{ active: configAudience === 'customer' }" @click="switchConfigAudience('customer')"><b>客户视角</b><small>找房、关注与联系</small></button><button type="button" :class="{ active: configAudience === 'operator' }" @click="switchConfigAudience('operator')"><b>非客户视角</b><small>运营、录入与管理</small></button></div>
+            <div class="page-config-tabs"><button v-for="page in visiblePagePresentationOptions" :key="page.key" :class="{ active: configPage === page.key }" @click="configPage = page.key">{{ page.label }}</button></div>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section v-if="configErrors.length" class="config-validation">
@@ -745,7 +753,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户标题拼接</h2><p>决定录入房源最后一步可勾选哪些标题字段；启用几项，小程序就显示几项。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
                   <header><strong>允许发布者选择的字段</strong><span>这里只控制普通用户看到的房源标题。管理员列表始终显示完整门牌。</span></header>
-                  <div class="share-field-options"><el-checkbox v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" :model-value="publicConfig.listingTitle.enabledFields.includes(field.key)" @change="toggleListingTitleField(field.key, Boolean($event))">{{ field.label }}</el-checkbox></div>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.enabledFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
                   <div class="listing-title-preview"><span>录入页将显示 {{ publicConfig.listingTitle.enabledFields.length }} 个复选项</span><strong>{{ publicConfig.listingTitle.enabledFields.map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '请至少启用一个字段' }}</strong></div>
                 </div>
               </section>
@@ -754,12 +762,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <el-form label-position="top" class="basic-config-form"><el-form-item label="标题前缀（选填）"><el-input v-model="publicConfig.shareCard.titlePrefix" maxlength="12" show-word-limit placeholder="例如：精选好房" /></el-form-item></el-form>
                 <div class="share-field-editor">
                   <header><strong>分享标题</strong><span>默认推荐“小区名称 + 户型 / 房间”，不突出合租或分租。</span></header>
-                  <div class="share-field-options"><el-checkbox v-for="field in shareFieldOptions" :key="`title-${field.key}`" :model-value="publicConfig.shareCard.titleFields.includes(field.key)" :disabled="!publicConfig.shareCard.titleFields.includes(field.key) && publicConfig.shareCard.titleFields.length >= 4" @change="toggleShareField('titleFields', field.key, Boolean($event))">{{ field.label }}</el-checkbox></div>
+                  <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.titleFields.includes(field.key) }" :disabled="!publicConfig.shareCard.titleFields.includes(field.key) && publicConfig.shareCard.titleFields.length >= 4" :aria-pressed="publicConfig.shareCard.titleFields.includes(field.key)" @click="toggleShareField('titleFields', field.key, !publicConfig.shareCard.titleFields.includes(field.key))"><i>{{ publicConfig.shareCard.titleFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
                   <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.titleFields" :key="`title-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('titleFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.titleFields.length - 1" @click="moveShareField('titleFields', index, 1)">下移</button></span></article></div>
                 </div>
                 <div class="share-field-editor">
                   <header><strong>海报详情字段</strong><span>选择 3–8 项，月租会自动作为重点信息展示。</span></header>
-                  <div class="share-field-options"><el-checkbox v-for="field in shareFieldOptions" :key="`poster-${field.key}`" :model-value="publicConfig.shareCard.posterFields.includes(field.key)" :disabled="!publicConfig.shareCard.posterFields.includes(field.key) && publicConfig.shareCard.posterFields.length >= 8" @change="toggleShareField('posterFields', field.key, Boolean($event))">{{ field.label }}</el-checkbox></div>
+                  <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`poster-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.posterFields.includes(field.key) }" :disabled="!publicConfig.shareCard.posterFields.includes(field.key) && publicConfig.shareCard.posterFields.length >= 8" :aria-pressed="publicConfig.shareCard.posterFields.includes(field.key)" @click="toggleShareField('posterFields', field.key, !publicConfig.shareCard.posterFields.includes(field.key))"><i>{{ publicConfig.shareCard.posterFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
                   <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.posterFields" :key="`poster-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('posterFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.posterFields.length - 1" @click="moveShareField('posterFields', index, 1)">下移</button></span></article></div>
                 </div>
               </section>
@@ -785,7 +793,22 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
                 <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
               </div>
-              <div v-else class="selected-page-preview" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.88),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}"><span>小程序页面</span><strong>{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</strong><p>{{ publicConfig.pagePresentations[configPage].subtitle || '辅助文本将在页面标题区域展示' }}</p><div></div></div>
+              <div v-else class="phone-preview page-phone-preview" :class="`preview-${configPage}`">
+                <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+                <div class="mini-navigation">{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</div>
+                <div class="page-mini-content" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.9),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}">
+                  <header><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
+                  <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article class="preview-property-card"><div></div><section><b>拿铁公寓两室一厅</b><span>洪山区 · 关山大道</span><small>整租　直租</small><strong>¥2300/月</strong></section></article><article class="preview-property-card"><div></div><section><b>凤凰花园三期</b><span>江夏区 · 藏龙岛</span><small>合租　无中介费</small><strong>¥1680/月</strong></section></article></template>
+                  <template v-else-if="configPage === 'propertyDetail'"><div class="preview-detail-cover"><span>实拍 1/6</span></div><div class="preview-detail-main"><b>¥2300<small>/月</small></b><strong>拿铁公寓 · 两室一厅</strong><span>洪山区 · 关山大道</span><div><i>68㎡</i><i>中层</i><i>朝南</i></div></div><div class="preview-detail-section"><b>家具与配套</b><span>冰箱　空调　洗衣机　热水器</span></div></template>
+                  <template v-else-if="configPage === 'requests' || configPage === 'publish'"><div class="preview-form-card"><label>意向地区</label><span>选择地区与商圈　›</span><label>预算范围</label><span>¥1500 – ¥2500</span><label>入住需求</label><span>填写补充说明</span><button>提交{{ configPage === 'requests' ? '找房需求' : '房源线索' }}</button></div></template>
+                  <template v-else-if="configPage === 'me'"><div class="preview-profile"><i>小</i><div><b>微信用户</b><span>管理关注与找房需求</span></div></div><div class="preview-tool-grid"><article>全部房源<small>继续看房</small></article><article>我的关注<small>收藏房源</small></article><article>浏览足迹<small>最近查看</small></article><article>找房需求<small>查看进度</small></article></div></template>
+                  <template v-else-if="configPage === 'footprints'"><article v-for="name in ['拿铁公寓', '凤凰花园三期', '中建大公馆']" :key="name" class="preview-footprint"><div></div><section><b>{{ name }}</b><span>今天浏览 · ¥2300/月</span></section></article></template>
+                  <template v-else-if="configPage === 'adminWorkbench'"><div class="preview-admin-card"><b>运营管理</b><span>管理员 · 已绑定手机号</span></div><div class="preview-stats"><i>3<small>房源草稿</small></i><i>1<small>待联系</small></i><i>2<small>用户意向</small></i></div><div class="preview-tool-grid"><article>＋ 录入房源<small>发布可租房源</small></article><article>▦ 房源管理<small>编辑与上下架</small></article><article>○ 客户需求<small>预约与找房</small></article><article>♡ 用户意向<small>关注记录</small></article></div></template>
+                  <template v-else-if="configPage === 'adminPropertyEdit'"><div class="preview-steps"><i class="active">位置门牌</i><i>户型出租</i><i>环境配套</i><i>租金入住</i></div><div class="preview-edit-card"><b>发布标题</b><span>勾选需要展示的信息</span><div class="preview-checks"><i v-for="key in publicConfig.listingTitle.enabledFields" :key="key">✓ {{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</i></div><strong>拿铁公寓5栋3单元101室</strong></div><button class="preview-primary-button">下一步 · 户型出租</button></template>
+                  <template v-else-if="configPage === 'authLogin'"><div class="preview-login-mark">皮</div><div class="preview-login-card"><b>登录后开始找房</b><span>同步关注、足迹和找房需求</span><button>微信一键登录</button><small>稍后完善头像与昵称</small></div></template>
+                </div>
+                <div class="mini-tabbar"><span>⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
+              </div>
               <div v-if="configPage === 'propertyDetail'" class="share-card-preview"><span>微信分享标题</span><strong>{{ shareTitlePreview || '请选择分享标题字段' }}</strong><div><b>¥2300/月</b><small>拿铁公寓 · 68㎡ · 中层 · 拎包入住</small></div></div>
               <p class="preview-note">预览只反映当前选择的页面配置，实际尺寸会随设备自适应。</p>
             </aside>
