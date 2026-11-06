@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
-import { getSession, saveSession } from '../../auth/session'
+import { clearSession, getSession, saveSession } from '../../auth/session'
 import { API_ORIGIN } from '../../api/client'
-import { getWechatUserProfile, temporaryLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
+import { getWechatUserProfile, refreshAuth, temporaryLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
 import { usePagePresentation } from '../../utils/presentation'
 
 const isLoggingIn = ref(false)
@@ -88,8 +88,22 @@ const loginTemporarily = async () => {
   }
   isLoggingIn.value = true
   try {
-	const result = await temporaryLogin(phone.value.trim(), accessCode.value.trim())
-    await completeLogin(result.accessToken, result.role, result.phone)
+    const result = await temporaryLogin(phone.value.trim(), accessCode.value.trim())
+    clearSession()
+    uni.removeStorageSync('xiaopi_bound_phone')
+    saveSession(result.accessToken, result.role)
+    try {
+      const refreshed = await refreshAuth()
+      saveSession(refreshed.accessToken, refreshed.role)
+      uni.setStorageSync('xiaopi_bound_phone', result.phone)
+      uni.removeStorageSync('xiaopi_show_favorites')
+      uni.showToast({ title: '身份已切换' })
+      setTimeout(() => uni.reLaunch({ url: '/pages/me/index' }), 300)
+    } catch (error) {
+      clearSession()
+      uni.removeStorageSync('xiaopi_bound_phone')
+      throw error
+    }
   } catch (error) {
     showLoginError(error instanceof Error ? error.message : undefined)
   } finally {
