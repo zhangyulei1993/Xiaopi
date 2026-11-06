@@ -667,7 +667,7 @@ const subscribeArea = () => {
 .favorite image { width:28rpx; height:28rpx; }.favorite.active { background:#d66d50; }
 .cover-benefit { bottom:0; left:0; padding:8rpx 11rpx; border-radius:0 10rpx 0 0; background:#d66d50; color:#fff; font-size:18rpx; font-weight:700; line-height:1.1; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:6rpx 4rpx 3rpx 0; }
-.property-listing-title { display:-webkit-box; overflow:hidden; max-height:75rpx; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.28; letter-spacing:-.4rpx; text-overflow:ellipsis; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.property-listing-title { display:block; overflow:hidden; max-width:100%; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.28; letter-spacing:-.4rpx; text-overflow:ellipsis; white-space:nowrap; }
 .property-listing-address { overflow:hidden; max-height:31rpx; margin:8rpx 0 0; color:#778176; font-size:22rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .service-tags { display:flex; height:32rpx; gap:10rpx; overflow:hidden; margin-top:10rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
@@ -702,7 +702,7 @@ const subscribeArea = () => {
 .property{height:232rpx;min-height:232rpx;gap:18rpx;padding:12rpx;border-color:#e7e5dd;border-radius:22rpx;background:#fffdf9;box-shadow:0 7rpx 20rpx rgba(55,65,50,.045)}
 .cover{width:248rpx;height:208rpx;border-radius:16rpx}
 .property-copy{height:208rpx;padding:5rpx 5rpx 4rpx 0;box-sizing:border-box}
-.property-listing-title{max-height:80rpx;font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
+.property-listing-title{font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
 .property-listing-address{max-height:32rpx;margin-top:10rpx;color:#7c8479;font-size:22rpx;line-height:1.45}
 .service-tags{height:34rpx;gap:8rpx;margin-top:10rpx}.service-tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
 .property>.property-copy>.price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.property>.property-copy>.price .price-unit{font-size:19rpx}

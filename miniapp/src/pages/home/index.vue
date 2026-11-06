@@ -226,7 +226,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing{height:224rpx;box-sizing:border-box}
 .listing-image{width:244rpx;height:200rpx}
 .listing-info{display:flex;height:200rpx;flex-direction:column;padding:6rpx 4rpx 3rpx 0;box-sizing:border-box}
-.home-listing-title{display:-webkit-box;overflow:hidden;max-height:75rpx;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.28;letter-spacing:-.4rpx;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.home-listing-title{display:block;overflow:hidden;max-width:100%;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.28;letter-spacing:-.4rpx;text-overflow:ellipsis;white-space:nowrap}
 .home-listing-address{overflow:hidden;max-height:31rpx;margin-top:8rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .listing-info .tags{height:32rpx;gap:10rpx;margin-top:10rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:18rpx}
@@ -235,7 +235,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing{height:232rpx;gap:18rpx;padding:12rpx;border-color:#e9e1d7;border-radius:22rpx;background:#fffdf9;box-shadow:0 8rpx 22rpx rgba(91,69,44,.055)}
 .listing-image{width:248rpx;height:208rpx;border-radius:16rpx}
 .listing-info{height:208rpx;padding:5rpx 5rpx 4rpx 0}
-.home-listing-title{max-height:80rpx;font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
+.home-listing-title{font-size:30rpx;line-height:1.33;letter-spacing:-.3rpx}
 .home-listing-address{max-height:32rpx;margin-top:10rpx;color:#7c8479;font-size:22rpx;line-height:1.45}
 .listing-info .tags{height:34rpx;gap:8rpx;margin-top:10rpx}
 .listing-info .tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
