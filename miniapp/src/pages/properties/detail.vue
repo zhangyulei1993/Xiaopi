@@ -61,7 +61,10 @@ const load = async (id = "") => {
     loading.value = false;
   }
 };
-onLoad((query) => load(String(query?.id || "")));
+onLoad((query) => {
+  uni.showShareMenu({ menus: ["shareAppMessage", "shareTimeline"] });
+  load(String(query?.id || ""));
+});
 const mediaUrl = resolveAssetUrl;
 const propertyCover = (property: Property) => {
   const cover = property.media?.find((media) => media.type === "image");
@@ -508,8 +511,9 @@ const contact = () => {
       ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>附近暂时没有其他可租房源</strong><text>可以继续查看其他地区的新房源</text><button @click="openAllProperties">查看全部房源</button></view
       ><view v-else class="nearby-more" @click="openAllProperties">查看更多房源 <text>›</text></view></view
     ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
+      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status === 'offline' }"><button v-if="item.status !== 'offline'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享房源</text></button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
-      ><view class="admin-detail-tools"><button class="admin-detail-tool" @click="editProperty">编辑房源</button><button v-if="item.status !== 'offline'" class="admin-detail-tool share" open-type="share">分享房源</button><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
+      ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享房源</text></button
       ><view class="user-contact" @click="contact"><image src="/static/icons/contact-property.svg" mode="aspectFit" /><text>联系小皮</text></view
@@ -808,26 +812,32 @@ const contact = () => {
 
 /* Admin detail actions: lifecycle decisions are prominent; tools stay quiet and separate. */
 .admin-detail-bar { position:fixed; z-index:6; right:0; bottom:0; left:0; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
-.admin-detail-main { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:12rpx; }
+.admin-detail-lead { display:grid; grid-template-columns:minmax(0,1fr) 180rpx; gap:12rpx; }
+.admin-detail-lead.share-disabled { grid-template-columns:1fr; }
+.admin-share-primary,.admin-edit-primary { box-sizing:border-box; display:flex; min-width:0; min-height:82rpx; align-items:center; justify-content:center; gap:10rpx; margin:0; padding:0 18rpx; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:1; }
+.admin-share-primary { border:1rpx solid #40543f; background:#40543f; color:#fff; }
+.admin-share-primary image { width:29rpx; height:29rpx; filter:brightness(0) invert(1); }
+.admin-edit-primary { border:1rpx solid #d9e0d4; background:#f1f4ed; color:#4e6048; }
+.admin-share-primary::after,.admin-edit-primary::after { border:0; }
+.admin-detail-main { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:10rpx; margin-top:10rpx; }
 .admin-detail-primary { min-width:0; margin:0; padding:0 16rpx; border:1rpx solid transparent; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:82rpx; }
 .admin-detail-primary::after,.admin-detail-tool::after { border:0; }
 .admin-detail-primary.primary { border-color:#40543f; background:#40543f; color:#fff; }
 .admin-detail-primary.secondary { border-color:#dce3d7; background:#f2f5ef; color:#52624b; }
-.admin-detail-tools { display:flex; align-items:center; justify-content:center; gap:0; margin-top:12rpx; }
+.admin-detail-tools { display:flex; align-items:center; justify-content:center; gap:0; margin-top:10rpx; }
 .admin-detail-tool { position:relative; min-width:0; margin:0; padding:4rpx 22rpx; border:0; border-radius:0; background:transparent; color:#687464; font-size:20rpx; line-height:1.3; }
 .admin-detail-tool + .admin-detail-tool::before { position:absolute; top:8rpx; bottom:8rpx; left:0; width:1rpx; background:#e0e4dc; content:""; }
-.admin-detail-tool.share { color:#40543f; font-weight:700; }
 .admin-detail-tool.delete { color:#b96d57; }
-.admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
+.admin-share-primary:active,.admin-edit-primary:active,.admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
 
 /* Tenant detail actions: share is light, direct contact is secondary, viewing is the primary conversion. */
-.user-action-bar { grid-template-columns:152rpx 184rpx minmax(0,1fr); gap:12rpx; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
+.user-action-bar { grid-template-columns:152rpx minmax(0,1fr) 146rpx; gap:12rpx; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
 .user-share,.user-contact { box-sizing:border-box; display:flex; min-width:0; align-items:center; justify-content:center; gap:7rpx; margin:0; padding:0; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#5a6955; line-height:1; }
 .user-share { flex-direction:column; gap:4rpx; background:#edf1e8; color:#40543f; }
 .user-share::after { border:0; }
 .user-share image,.user-contact image { width:28rpx; height:28rpx; flex:none; }.user-share text { display:block; width:100%; font-size:20rpx; font-weight:700; line-height:1; text-align:center; white-space:nowrap; }
-.user-contact { background:#f1f4ed; color:#4b5e45; font-weight:700; }.user-contact text { overflow:hidden; font-size:22rpx; line-height:1; white-space:nowrap; }
-.user-reserve-primary { min-height:82rpx; border-radius:15rpx; background:#40543f; color:#fff; font-size:27rpx; letter-spacing:.3rpx; }
+.user-contact { border-color:#40543f; background:#40543f; color:#fff; font-weight:750; }.user-contact image { filter:brightness(0) invert(1); }.user-contact text { overflow:hidden; font-size:25rpx; line-height:1; white-space:nowrap; }
+.user-reserve-primary { min-height:82rpx; border:1rpx solid #dfe5da; border-radius:15rpx; background:#fff; color:#667362; font-size:22rpx; font-weight:650; letter-spacing:0; }
 .user-share:active,.user-contact:active,.user-reserve-primary:active { opacity:.8; transform:scale(.985); }
 .transfer-tag { display:inline-block; margin-top:12rpx; padding:7rpx 12rpx; border-radius:8rpx; background:#edf0dc; color:#536a45; font-size:20rpx; font-weight:700; }
 /* Final palette and rhythm pass: remove legacy teal without changing detail flow. */
