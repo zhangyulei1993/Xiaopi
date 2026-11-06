@@ -33,6 +33,7 @@ const savedConfigJSON = ref('')
 const configLastSavedAt = ref('')
 const configPage = ref('home')
 const previewOverlay = ref<'page' | 'share' | 'poster'>('page')
+const previewPagePickerOpen = ref(false)
 type ConfigAudience = 'customer' | 'operator'
 const configAudience = ref<ConfigAudience>('customer')
 const visiblePagePresentationOptions = computed(() => pagePresentationOptions.filter(page => page.audience === configAudience.value))
@@ -43,11 +44,13 @@ const selectConfigPage = (key: string) => {
   if (target.audience !== configAudience.value) configAudience.value = target.audience as ConfigAudience
   configPage.value = target.key
   previewOverlay.value = 'page'
+  previewPagePickerOpen.value = false
 }
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
   configPage.value = visiblePagePresentationOptions.value[0]?.key || 'home'
   previewOverlay.value = 'page'
+  previewPagePickerOpen.value = false
 }
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
@@ -110,6 +113,7 @@ const previewIdentity = computed(() => {
 function previewPropertyTags(item?: Property) {
   if (!item) return previewListingTags.value
   const fields = configAudience.value === 'operator' ? publicConfig.listingTitle.adminEnabledFields : publicConfig.listingTitle.enabledFields
+  const selectedFields = configAudience.value === 'customer' && item.displayTags ? new Set(item.displayTags) : null
   const unit = [item.buildingNo, item.unitNo, item.roomNo].filter(Boolean).join('')
   const values: Record<string, string> = {
     unit,
@@ -120,7 +124,7 @@ function previewPropertyTags(item?: Property) {
     fee: item.feeText || '',
     area: item.areaSqm ? `${item.areaSqm}㎡` : '',
   }
-  return fields.filter((key) => key !== 'community').map((key) => values[key]).filter(Boolean)
+  return fields.filter((key) => key !== 'community' && (!selectedFields || selectedFields.has(key))).map((key) => values[key]).filter(Boolean)
 }
 function previewCoverStyle(item?: Property) {
   const cover = item?.media?.find((media) => media.type === 'image')?.url
@@ -737,13 +741,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <section class="surface page-config-nav">
             <div class="config-audience-heading"><strong>选择使用视角</strong><span>先按角色筛选，再以真实小程序页面进行配置</span></div>
             <div class="config-audience-switch"><button type="button" :class="{ active: configAudience === 'customer' }" @click="switchConfigAudience('customer')"><b>客户视角</b><small>找房、关注与联系</small></button><button type="button" :class="{ active: configAudience === 'operator' }" @click="switchConfigAudience('operator')"><b>非客户视角</b><small>运营、录入与管理</small></button></div>
-            <div class="page-config-tabs"><button v-for="page in visiblePagePresentationOptions" :key="page.key" :class="{ active: configPage === page.key }" @click="selectConfigPage(page.key)">{{ page.label }}</button></div>
-            <div class="mini-page-board" aria-label="小程序页面选择">
-              <button v-for="page in visiblePagePresentationOptions" :key="`board-${page.key}`" type="button" :class="{ active: configPage === page.key }" @click="selectConfigPage(page.key)">
-                <i>{{ page.key === 'home' ? '⌂' : page.key === 'properties' ? '▤' : page.key === 'propertyDetail' ? '▱' : page.key === 'me' ? '○' : page.key === 'adminWorkbench' ? '▦' : page.key === 'adminPropertyEdit' ? '＋' : '·' }}</i>
-                <span>{{ page.label }}</span><small>{{ configPage === page.key ? '正在配置' : '点击配置' }}</small>
-              </button>
-            </div>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section v-if="configErrors.length" class="config-validation">
@@ -854,7 +851,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
             <aside class="config-preview-column">
               <div v-if="configPage === 'home'" class="phone-preview">
-                <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+                <div class="phone-status"><span>9:41</span><button class="preview-page-trigger" type="button" @click="previewPagePickerOpen = !previewPagePickerOpen">页面</button></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content">
                   <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong>{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
@@ -863,13 +860,13 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="mini-section-title">精选频道</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
                   <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">查看房源</b></div>
-                  <div v-if="previewPrimaryProperty" class="mini-listing" @click="selectConfigPage('propertyDetail')"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><section><strong>{{ previewPrimaryProperty.title || previewPrimaryProperty.community }}</strong><span>{{ previewPrimaryProperty.location || previewPrimaryProperty.community }}</span><b>¥{{ previewPrimaryProperty.rentMonthly }}/月</b></section></div>
+                  <div v-if="previewPrimaryProperty" class="mini-listing" @click="selectConfigPage('propertyDetail')"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><section><strong>{{ previewPrimaryProperty.title || previewPrimaryProperty.community }}</strong><span>{{ previewPrimaryProperty.location || previewPrimaryProperty.community }}</span><small><i v-for="tag in previewPropertyTags(previewPrimaryProperty).slice(0, 3)" :key="tag">{{ tag }}</i></small><b>¥{{ previewPrimaryProperty.rentMonthly }}/月</b></section></div>
                   <div v-else class="mini-listing"><div></div><section><strong>正在加载附近好房</strong><span>发布可租房源后会实时显示</span><b>¥ 租金/月</b></section></div>
                 </div>
                 <div class="mini-tabbar"><button class="active" @click="selectConfigPage('home')">⌂<small>首页</small></button><button @click="selectConfigPage('properties')">▤<small>房源</small></button><button @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
               <div v-else class="phone-preview page-phone-preview" :class="`preview-${configPage}`">
-                <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+                <div class="phone-status"><span>9:41</span><button class="preview-page-trigger" type="button" @click="previewPagePickerOpen = !previewPagePickerOpen">页面</button></div>
                 <div class="mini-navigation">{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</div>
                 <div class="page-mini-content" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.9),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}">
                   <header><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
@@ -884,6 +881,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
                 <div class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
+              <div v-if="previewPagePickerOpen" class="preview-page-picker" @click="previewPagePickerOpen = false"><div @click.stop><strong>{{ configAudience === 'customer' ? '客户视角页面' : '运营视角页面' }}</strong><button v-for="page in visiblePagePresentationOptions" :key="`canvas-${page.key}`" :class="{ active: configPage === page.key }" @click="selectConfigPage(page.key)">{{ page.label }}</button></div></div>
               <div v-if="configPage === 'propertyDetail' && previewOverlay !== 'page'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><template v-if="previewOverlay === 'share'"><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><div class="share-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}/月</b><p>{{ previewPrimaryProperty?.community || '房源小区' }} · {{ previewPropertyTags(previewPrimaryProperty).join(' · ') || '真实好房' }}</p><small>{{ publicConfig.heroTitle || '小皮租房' }}</small></template><template v-else><span>朋友圈海报预览</span><div class="poster-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<span>/月</span></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><p>{{ previewPropertyTags(previewPrimaryProperty).join(' · ') || '真实好房 · 拎包入住' }}</p><i>{{ publicConfig.heroTitle || '小皮租房' }} · 扫码查看房源</i></template></div></div>
             </aside>
           </div>
