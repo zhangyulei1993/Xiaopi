@@ -19,13 +19,8 @@ export const listingDoorplate = (item: Property) => {
 // tag so configuration changes apply to old listings immediately and the
 // core title remains readable on narrow cards.
 export const publicListingTitle = (item: Property, fields?: string[]) => {
-  // The publisher controls title order. The global setting controls the
-  // separate doorplate badge only; a public title never includes doorplate.
+  // Public cards use the community as a stable title. Everything else belongs
+  // to configurable tags, never to an auto-composed title.
   void fields;
-  const badge = listingDoorplate(item);
-  const cleaned = badge ? String(item.title || "").split(badge).join("") : String(item.title || "");
-  return cleaned
-    .replace(/[·・]\s*[·・]/g, "·")
-    .replace(/^\s*[·・\-—]\s*|\s*[·・\-—]\s*$/g, "")
-    .trim() || String(item.community || "房源").trim();
+  return String(item.community || item.title || "房源").trim();
 };

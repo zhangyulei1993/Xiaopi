@@ -620,10 +620,14 @@ func publicDoorplateLabel(item domain.Property) string {
 	return strings.Join(parts, "")
 }
 
-// publicListingTitle keeps doorplate out of the public title. Doorplate is a
-// separate config-controlled badge, so a legacy title cannot reveal it after
-// that badge is disabled in the admin configuration.
+// publicListingTitle deliberately uses the community as the public main title.
+// Listing attributes are configurable badges, not a long title assembled from
+// precise address facts. This also prevents old composed titles from leaking a
+// doorplate when the badge is disabled.
 func publicListingTitle(item domain.Property) string {
+	if community := strings.TrimSpace(item.Community); community != "" {
+		return community
+	}
 	title := strings.TrimSpace(item.Title)
 	building := strings.TrimSpace(item.BuildingNo)
 	unit := strings.TrimSpace(item.UnitNo)
@@ -651,9 +655,6 @@ func publicListingTitle(item domain.Property) string {
 	}
 	if title != "" {
 		return title
-	}
-	if community := strings.TrimSpace(item.Community); community != "" {
-		return community
 	}
 	return "房源"
 }

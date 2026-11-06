@@ -109,38 +109,6 @@ const structureStep = ref<StructureStep>("");
 const showStructureSetup = ref(false);
 const ruleSaving = ref(false);
 const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
-// 标题严格按用户点选的先后顺序拼接，避免默认顺序干扰发布者表达。
-const titleParts = ref<string[]>([]);
-const allTitlePartOptions = [
-  { key: "community", label: "小区" },
-  { key: "floor", label: "楼层" },
-  { key: "layout", label: "户型" },
-  { key: "rentType", label: "整租/合租" },
-  { key: "area", label: "面积" },
-];
-const enabledTitlePartKeys = ref(allTitlePartOptions.map((option) => option.key));
-const titlePartOptions = computed(() => allTitlePartOptions.filter((option) => enabledTitlePartKeys.value.includes(option.key)));
-const defaultTitleParts = () => {
-  const preferred = ["community", "layout"].filter((key) => enabledTitlePartKeys.value.includes(key));
-  return preferred.length ? preferred : enabledTitlePartKeys.value.slice(0, 1);
-};
-const applyTitleFieldConfig = (fields?: string[]) => {
-  const supported = new Set(allTitlePartOptions.map((option) => option.key));
-  // 门牌只作为普通用户列表的独立标签，不参与发布标题拼接。
-  const enabled = (fields || []).filter((key) => key !== "unit" && supported.has(key));
-  enabledTitlePartKeys.value = enabled.length ? enabled : allTitlePartOptions.map((option) => option.key);
-  titleParts.value = titleParts.value.filter((key) => enabledTitlePartKeys.value.includes(key));
-  if (!titleParts.value.length) titleParts.value = defaultTitleParts();
-};
-const toggleTitlePart = (key: string) => {
-  titleParts.value = titleParts.value.includes(key)
-    ? titleParts.value.filter((item) => item !== key)
-    : [...titleParts.value, key];
-};
-const orderedTitlePartOptions = computed(() => [
-  ...titleParts.value.map((key) => titlePartOptions.value.find((option) => option.key === key)).filter(Boolean),
-  ...titlePartOptions.value.filter((option) => !titleParts.value.includes(option.key)),
-] as typeof allTitlePartOptions);
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
   amenityOptions = [
     "冰箱",
@@ -323,7 +291,6 @@ const loadChannels = async () => {
   try {
     const config = await getPublicConfig();
     associationRadiusKm.value = Number(config.relatedPropertyRadiusKm) || 3;
-    applyTitleFieldConfig(config.listingTitle?.enabledFields);
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
       if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
@@ -446,23 +413,9 @@ const completionCount = computed(
 );
 const generatedTitle = computed(() => {
   const community = String(form.community || "").trim();
-  if (!community) return "选择小区后自动生成";
-  const values: Record<string, string> = {
-    community,
-    floor: selectedFloor.value ? `${selectedFloor.value}层` : "",
-    layout: rentType.value === "合租" ? roomType.value : wholeLayoutText.value,
-    rentType: rentType.value,
-    area: Number(form.areaSqm) > 0 ? `${form.areaSqm}㎡` : "",
-  };
-  return titleParts.value
-    .map((key) => ({ key, value: values[key] }))
-    .filter((item) => item.value)
-    .reduce((title, item) => {
-      if (!title) return item.value;
-      return `${title} · ${item.value}`;
-    }, "");
+  return community || "选择小区后自动生成";
 });
-watch([() => form.community, roomCount, customRoomCount, hallCount, kitchenCount, bathroomCount, balcony, rentType, buildingNo, unitNo, selectedFloor, roomNo, () => form.areaSqm, titleParts], () => {
+watch([() => form.community], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
     : "";
@@ -722,8 +675,6 @@ const loadProperty = async () => {
     const boundChannelIndex = channels.value.findIndex((channel) => channel.title === property.areaLabel);
     if (boundChannelIndex >= 0) selectedChannelIndex.value = boundChannelIndex;
     else if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
-    // 默认只放小区与门牌；户型、出租方式在卡片副标题展示，避免标题重复堆叠。
-    titleParts.value = defaultTitleParts();
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
     form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
@@ -1426,9 +1377,8 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
-        ><view><strong>发布标题</strong><small>按点选先后自动拼接；门牌将作为列表标签展示</small></view
-        ><view class="title-part-list"><view v-for="option in orderedTitlePartOptions" :key="option.key" class="title-part" :class="{ active: titleParts.includes(option.key) }" @click="toggleTitlePart(option.key)"><view class="title-part-name"><text>{{ titleParts.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view></view></view>
-        <view class="auto-title"><text>标题预览</text><strong>{{ generatedTitle || "请至少选择一项" }}</strong></view></view
+        ><view><strong>列表展示</strong><small>小区名称作为主标题；户型、楼层、面积、门牌等由后台配置为标签</small></view
+        ><view class="auto-title"><text>主标题预览</text><strong>{{ generatedTitle }}</strong></view></view
       ><view v-if="activeSection === 4" class="final-review"
         ><view class="final-review-head"><view><strong>发布前核对</strong><small>可点上方步骤返回修改</small></view><text>{{ completionCount }}/5</text></view
         ><view class="final-review-grid"

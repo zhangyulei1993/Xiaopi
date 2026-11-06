@@ -243,6 +243,7 @@ const shareTitlePreview = computed(() => {
   return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.map(key => examples[key])].filter(Boolean).join(' · ')
 })
 function toggleListingTitleField(key: string, enabled: boolean) {
+  if (key === 'community') return
   if (key === 'unit' && enabled && !window.confirm('开启“门牌标签”后，普通用户可在房源列表看到精确门牌号，可能暴露住址信息。确认开启吗？')) return
   const fields = publicConfig.listingTitle.enabledFields
   if (enabled && !fields.includes(key)) fields.push(key)
@@ -752,11 +753,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </el-form>
               </section>
               <section v-if="configPage === 'adminPropertyEdit'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户列表展示</h2><p>控制录入页可选标题字段；“门牌标签”单独展示，不参与标题拼接。关闭后普通用户列表立即隐藏门牌。</p></div></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户列表标签</h2><p>小区名称固定作为主标题；勾选的内容以标签显示，不再拼接成长标题。关闭门牌标签后，普通用户列表立即隐藏门牌。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
-                  <header><strong>允许发布者选择的字段</strong><span>这里只控制普通用户看到的房源标题。管理员列表始终显示完整门牌。</span></header>
-                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.enabledFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
-                  <div class="listing-title-preview"><span>标题可选字段与门牌标签开关</span><strong>{{ publicConfig.listingTitle.enabledFields.map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '请至少启用一个字段' }}</strong></div>
+                  <header><strong>列表标签开关</strong><span>小区名称固定显示为主标题。管理员列表始终显示完整门牌。</span></header>
+                  <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+                  <div class="listing-title-preview"><span>已启用标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
