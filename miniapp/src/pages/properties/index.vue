@@ -67,14 +67,21 @@ const adminStatusMatched = (status: string) =>
       ? ["published", "available"].includes(status)
       : status === selectedStatus.value;
 const kindOptions = ["整租", "合租", "一居", "两居", "三居+"];
+const roomCountOf = (item: Property) => {
+  const match = `${item.layout || ""} ${item.title || ""}`.match(/(\d+)\s*室/);
+  if (match) return Number(match[1]);
+  const chinese = `${item.layout || ""} ${item.title || ""}`.match(/([一二两三四五六七八九])\s*居/);
+  return chinese ? ({ 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }[chinese[1]] || 0) : 0;
+};
 const kindMatched = (item: Property) => {
   if (!selectedKind.value) return true;
   const text = `${item.title || ""} ${item.layout || ""} ${item.rentType || ""}`;
   // 兼容历史房源：旧数据没有 rentType 时，按整租展示，不让新筛选把存量房源全部筛掉。
   if (selectedKind.value === "整租" && !item.rentType) return true;
-  return selectedKind.value === "三居+"
-    ? /[三四五六七八九]居/.test(text)
-    : text.includes(selectedKind.value);
+  if (selectedKind.value === "一居") return roomCountOf(item) === 1;
+  if (selectedKind.value === "两居") return roomCountOf(item) === 2;
+  if (selectedKind.value === "三居+") return roomCountOf(item) >= 3;
+  return text.includes(selectedKind.value);
 };
 const activeAreaName = computed(() => selectedArea.value !== "全部" ? selectedArea.value : channelFilter.value?.title || keyword.value.trim());
 const selectArea = (label: string) => {
@@ -221,6 +228,10 @@ const feeLabel = (item: Property) => {
     : source.includes("有中介费")
       ? "有中介费"
       : "";
+};
+const secondaryLabels = (item: Property) => {
+  const layout = String(item.layout || "").match(/^\d+室(?:\d+厅)?/)?.[0] || "";
+  return [layout, feeLabel(item)].filter(Boolean);
 };
 const compact = (value: unknown) => String(value || "").replace(/[·・\s]/g, "");
 const doorplate = (item: Property) => [
@@ -380,7 +391,7 @@ const subscribeArea = () => {
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
-          ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="feeLabel(item)" class="service-tags fee-tags"><text>{{ feeLabel(item) }}</text></view></view
+          ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
             >¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view
           ></view
