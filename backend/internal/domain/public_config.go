@@ -39,6 +39,10 @@ type ShareCardConfig struct {
 	PosterFields []string `json:"posterFields"`
 }
 
+type ListingTitleConfig struct {
+	EnabledFields []string `json:"enabledFields"`
+}
+
 type PublicConfig struct {
 	HeroTitle               string                      `json:"heroTitle"`
 	HeroSubtitle            string                      `json:"heroSubtitle"`
@@ -50,6 +54,7 @@ type PublicConfig struct {
 	FeaturedChannels        []FeaturedChannel           `json:"featuredChannels"`
 	PagePresentations       map[string]PagePresentation `json:"pagePresentations"`
 	ShareCard               ShareCardConfig             `json:"shareCard"`
+	ListingTitle            ListingTitleConfig          `json:"listingTitle"`
 }
 
 func DefaultPublicConfig() PublicConfig {
@@ -84,6 +89,9 @@ func DefaultPublicConfig() PublicConfig {
 		ShareCard: ShareCardConfig{
 			TitleFields:  []string{"community", "layout"},
 			PosterFields: []string{"rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"},
+		},
+		ListingTitle: ListingTitleConfig{
+			EnabledFields: []string{"community", "unit", "floor", "layout", "rentType", "area"},
 		},
 	}
 }
@@ -131,12 +139,19 @@ func (config *PublicConfig) Normalize() {
 	if len(config.ShareCard.PosterFields) == 0 {
 		config.ShareCard.PosterFields = append([]string(nil), DefaultPublicConfig().ShareCard.PosterFields...)
 	}
+	if len(config.ListingTitle.EnabledFields) == 0 {
+		config.ListingTitle.EnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.EnabledFields...)
+	}
 }
 
 var shareCardFieldLabels = map[string]string{
 	"community": "小区", "layout": "户型/房间", "roomNo": "门牌", "rentMonthly": "月租",
 	"listingSource": "直租/转租", "rentType": "整租/合租", "depositPayment": "押付方式",
 	"areaSqm": "面积", "floorInfo": "楼层", "availableDate": "入住时间",
+}
+
+var listingTitleFieldLabels = map[string]string{
+	"community": "小区", "unit": "门牌", "floor": "楼层", "layout": "户型", "rentType": "整租/合租", "area": "面积",
 }
 
 func validateShareFields(fields []string, minimum, maximum int, name string) error {
@@ -150,6 +165,23 @@ func validateShareFields(fields []string, minimum, maximum int, name string) err
 		}
 		if _, exists := seen[field]; exists {
 			return fmt.Errorf("%s字段不能重复", name)
+		}
+		seen[field] = struct{}{}
+	}
+	return nil
+}
+
+func validateListingTitleFields(fields []string) error {
+	if len(fields) == 0 || len(fields) > len(listingTitleFieldLabels) {
+		return errors.New("标题拼接字段数量必须在 1 到 6 个之间")
+	}
+	seen := map[string]struct{}{}
+	for _, field := range fields {
+		if _, exists := listingTitleFieldLabels[field]; !exists {
+			return errors.New("标题拼接包含不支持的字段")
+		}
+		if _, exists := seen[field]; exists {
+			return errors.New("标题拼接字段不能重复")
 		}
 		seen[field] = struct{}{}
 	}
@@ -191,6 +223,9 @@ func (config PublicConfig) Validate() error {
 		return err
 	}
 	if err := validateShareFields(config.ShareCard.PosterFields, 3, 8, "分享海报"); err != nil {
+		return err
+	}
+	if err := validateListingTitleFields(config.ListingTitle.EnabledFields); err != nil {
 		return err
 	}
 	if len(config.Locations) == 0 || len(config.Locations) > 20 {

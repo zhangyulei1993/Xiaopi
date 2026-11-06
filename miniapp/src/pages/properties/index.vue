@@ -239,6 +239,7 @@ const doorplate = (item: Property) => [
   item.unitNo && String(item.unitNo).includes("单元") ? item.unitNo : item.unitNo && `${item.unitNo}单元`,
   item.roomNo && String(item.roomNo).includes("室") ? item.roomNo : item.roomNo && `${item.roomNo}室`,
 ].filter(Boolean).join("");
+const needsAdminDoorplate = (item: Property) => Boolean(doorplate(item) && !compact(listingTitle(item)).includes(compact(doorplate(item))));
 const listingTitle = (item: Property) => {
   const raw = String(item.title || item.community || "").trim();
   const layout = String(item.layout || "").split(" · ")[0].trim();
@@ -390,6 +391,7 @@ const subscribeArea = () => {
             ></view
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
+          ><view v-if="isAdmin && needsAdminDoorplate(item)" class="admin-doorplate">门牌 {{ doorplate(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
@@ -668,6 +670,7 @@ const subscribeArea = () => {
 .cover-benefit { bottom:0; left:0; padding:8rpx 11rpx; border-radius:0 10rpx 0 0; background:#d66d50; color:#fff; font-size:18rpx; font-weight:700; line-height:1.1; }
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:6rpx 4rpx 3rpx 0; }
 .property-listing-title { display:block; overflow:hidden; max-width:100%; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.28; letter-spacing:-.4rpx; text-overflow:ellipsis; white-space:nowrap; }
+.admin-doorplate{display:block;overflow:hidden;margin-top:7rpx;color:#526553;font-size:21rpx;font-weight:700;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
 .property-listing-address { overflow:hidden; max-height:31rpx; margin:8rpx 0 0; color:#778176; font-size:22rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .service-tags { display:flex; height:32rpx; gap:10rpx; overflow:hidden; margin-top:10rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }

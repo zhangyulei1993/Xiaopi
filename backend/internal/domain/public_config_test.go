@@ -59,9 +59,13 @@ func TestPublicConfigNormalizeBeforeValidation(t *testing.T) {
 func TestPublicConfigNormalizeLegacyShareCard(t *testing.T) {
 	config := DefaultPublicConfig()
 	config.ShareCard = ShareCardConfig{}
+	config.ListingTitle = ListingTitleConfig{}
 	config.Normalize()
 	if len(config.ShareCard.TitleFields) == 0 || len(config.ShareCard.PosterFields) == 0 {
 		t.Fatalf("legacy config should receive share defaults: %+v", config.ShareCard)
+	}
+	if len(config.ListingTitle.EnabledFields) == 0 {
+		t.Fatalf("legacy config should receive listing title defaults: %+v", config.ListingTitle)
 	}
 	if err := config.Validate(); err != nil {
 		t.Fatalf("normalized share config should be valid: %v", err)

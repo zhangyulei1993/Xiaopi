@@ -64,12 +64,17 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
+const defaultListingTitle = () => ({ enabledFields: ['community', 'unit', 'floor', 'layout', 'rentType', 'area'] })
+const listingTitleFieldOptions = [
+  { key: 'community', label: '小区' }, { key: 'unit', label: '门牌' }, { key: 'floor', label: '楼层' },
+  { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'area', label: '面积' },
+]
 const shareFieldOptions = [
   { key: 'community', label: '小区名称' }, { key: 'layout', label: '户型 / 房间' }, { key: 'roomNo', label: '门牌信息' },
   { key: 'rentMonthly', label: '月租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'rentType', label: '整租 / 合租' },
   { key: 'depositPayment', label: '押付方式' }, { key: 'areaSqm', label: '面积' }, { key: 'floorInfo', label: '楼层' }, { key: 'availableDate', label: '入住时间' },
 ]
-const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations(), shareCard: defaultShareCard() })
+const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations(), shareCard: defaultShareCard(), listingTitle: defaultListingTitle() })
 
 const api = createAdminApi({ baseUrl: apiBase, onUnauthorized: () => { loggedIn.value = false; password.value = '' } })
 
@@ -80,6 +85,7 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
   next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ ...item, latitude: item.latitude || 0, longitude: item.longitude || 0, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
   next.pagePresentations = { ...defaultPagePresentations(), ...(next.pagePresentations || {}) }
   next.shareCard = { ...defaultShareCard(), ...(next.shareCard || {}) }
+  next.listingTitle = { ...defaultListingTitle(), ...(next.listingTitle || {}) }
   Object.assign(publicConfig, next)
   // Keep a map visible as soon as the configuration view is opened. Existing
   // channel coordinates are used when present; otherwise this is the Wuhan
@@ -208,6 +214,7 @@ const configErrors = computed(() => {
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
   if (!publicConfig.shareCard.titleFields.length || publicConfig.shareCard.titleFields.length > 4) errors.push('分享标题需选择 1 到 4 个字段')
   if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
+  if (!publicConfig.listingTitle.enabledFields.length) errors.push('标题拼接至少启用一个字段')
   return errors
 })
 
@@ -227,6 +234,11 @@ const shareTitlePreview = computed(() => {
   const examples: Record<string, string> = { community: '拿铁公寓', layout: '两室一厅', roomNo: '5栋3单元101室', rentMonthly: '¥2300/月', listingSource: '直租', rentType: '整租', depositPayment: '押一付一', areaSqm: '68㎡', floorInfo: '中层', availableDate: '拎包入住' }
   return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.map(key => examples[key])].filter(Boolean).join(' · ')
 })
+function toggleListingTitleField(key: string, enabled: boolean) {
+  const fields = publicConfig.listingTitle.enabledFields
+  if (enabled && !fields.includes(key)) fields.push(key)
+  if (!enabled) publicConfig.listingTitle.enabledFields = fields.filter(item => item !== key)
+}
 
 function addLocation() {
   if (publicConfig.locations.length >= 20) return
@@ -728,6 +740,14 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <el-form-item label="背景图"><el-input v-model="publicConfig.pagePresentations[configPage].backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /></el-form-item>
                   <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(configPage, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[configPage].backgroundImage" @click="publicConfig.pagePresentations[configPage].backgroundImage = ''">移除背景图</button></div>
                 </el-form>
+              </section>
+              <section v-if="configPage === 'adminPropertyEdit'" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>普通用户标题拼接</h2><p>决定录入房源最后一步可勾选哪些标题字段；启用几项，小程序就显示几项。</p></div></div>
+                <div class="share-field-editor listing-title-editor">
+                  <header><strong>允许发布者选择的字段</strong><span>这里只控制普通用户看到的房源标题。管理员列表始终显示完整门牌。</span></header>
+                  <div class="share-field-options"><el-checkbox v-for="field in listingTitleFieldOptions" :key="`listing-title-${field.key}`" :model-value="publicConfig.listingTitle.enabledFields.includes(field.key)" @change="toggleListingTitleField(field.key, Boolean($event))">{{ field.label }}</el-checkbox></div>
+                  <div class="listing-title-preview"><span>录入页将显示 {{ publicConfig.listingTitle.enabledFields.length }} 个复选项</span><strong>{{ publicConfig.listingTitle.enabledFields.map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '请至少启用一个字段' }}</strong></div>
+                </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>分享卡配置</h2><p>配置转发给微信好友时的标题与图片卡片内容，勾选顺序就是展示顺序。</p></div></div>

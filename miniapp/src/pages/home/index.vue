@@ -108,6 +108,7 @@ const doorplate = (item: Property) => [
   item.unitNo && String(item.unitNo).includes("单元") ? item.unitNo : item.unitNo && `${item.unitNo}单元`,
   item.roomNo && String(item.roomNo).includes("室") ? item.roomNo : item.roomNo && `${item.roomNo}室`,
 ].filter(Boolean).join("");
+const needsAdminDoorplate = (item: Property) => Boolean(doorplate(item) && !compact(listingTitle(item)).includes(compact(doorplate(item))));
 const listingTitle = (item: Property) => {
   const raw = String(item.title || item.community || "").trim();
   const layout = String(item.layout || "").split(" · ")[0].trim();
@@ -173,7 +174,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="isAdmin && needsAdminDoorplate(item)" class="home-admin-doorplate">门牌 {{ doorplate(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -227,6 +228,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing-image{width:244rpx;height:200rpx}
 .listing-info{display:flex;height:200rpx;flex-direction:column;padding:6rpx 4rpx 3rpx 0;box-sizing:border-box}
 .home-listing-title{display:block;overflow:hidden;max-width:100%;color:#2d3d30;font-size:29rpx;font-weight:800;line-height:1.28;letter-spacing:-.4rpx;text-overflow:ellipsis;white-space:nowrap}
+.home-admin-doorplate{display:block;overflow:hidden;margin-top:7rpx;color:#526553;font-size:20rpx;font-weight:700;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
 .home-listing-address{overflow:hidden;max-height:31rpx;margin-top:8rpx;color:#778176;font-size:22rpx;font-weight:400;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
 .listing-info .tags{height:32rpx;gap:10rpx;margin-top:10rpx;white-space:nowrap}
 .listing-info .tags text{padding:5rpx 8rpx;font-size:18rpx}

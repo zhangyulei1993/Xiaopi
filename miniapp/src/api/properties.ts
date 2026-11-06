@@ -165,6 +165,9 @@ export interface PublicConfig {
     titleFields?: string[];
     posterFields?: string[];
   };
+  listingTitle?: {
+    enabledFields?: string[];
+  };
 }
 
 export const wechatLogin = (code: string) =>

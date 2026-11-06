@@ -111,7 +111,7 @@ const ruleSaving = ref(false);
 const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
 // 标题严格按用户点选的先后顺序拼接，避免默认顺序干扰发布者表达。
 const titleParts = ref<string[]>([]);
-const titlePartOptions = [
+const allTitlePartOptions = [
   { key: "community", label: "小区" },
   { key: "unit", label: "门牌" },
   { key: "floor", label: "楼层" },
@@ -119,15 +119,28 @@ const titlePartOptions = [
   { key: "rentType", label: "整租/合租" },
   { key: "area", label: "面积" },
 ];
+const enabledTitlePartKeys = ref(allTitlePartOptions.map((option) => option.key));
+const titlePartOptions = computed(() => allTitlePartOptions.filter((option) => enabledTitlePartKeys.value.includes(option.key)));
+const defaultTitleParts = () => {
+  const preferred = ["community", "unit"].filter((key) => enabledTitlePartKeys.value.includes(key));
+  return preferred.length ? preferred : enabledTitlePartKeys.value.slice(0, 1);
+};
+const applyTitleFieldConfig = (fields?: string[]) => {
+  const supported = new Set(allTitlePartOptions.map((option) => option.key));
+  const enabled = (fields || []).filter((key) => supported.has(key));
+  enabledTitlePartKeys.value = enabled.length ? enabled : allTitlePartOptions.map((option) => option.key);
+  titleParts.value = titleParts.value.filter((key) => enabledTitlePartKeys.value.includes(key));
+  if (!titleParts.value.length) titleParts.value = defaultTitleParts();
+};
 const toggleTitlePart = (key: string) => {
   titleParts.value = titleParts.value.includes(key)
     ? titleParts.value.filter((item) => item !== key)
     : [...titleParts.value, key];
 };
 const orderedTitlePartOptions = computed(() => [
-  ...titleParts.value.map((key) => titlePartOptions.find((option) => option.key === key)).filter(Boolean),
-  ...titlePartOptions.filter((option) => !titleParts.value.includes(option.key)),
-] as typeof titlePartOptions);
+  ...titleParts.value.map((key) => titlePartOptions.value.find((option) => option.key === key)).filter(Boolean),
+  ...titlePartOptions.value.filter((option) => !titleParts.value.includes(option.key)),
+] as typeof allTitlePartOptions);
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
   amenityOptions = [
     "冰箱",
@@ -310,6 +323,7 @@ const loadChannels = async () => {
   try {
     const config = await getPublicConfig();
     associationRadiusKm.value = Number(config.relatedPropertyRadiusKm) || 3;
+    applyTitleFieldConfig(config.listingTitle?.enabledFields);
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
       if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
@@ -711,7 +725,7 @@ const loadProperty = async () => {
     if (boundChannelIndex >= 0) selectedChannelIndex.value = boundChannelIndex;
     else if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
     // 默认只放小区与门牌；户型、出租方式在卡片副标题展示，避免标题重复堆叠。
-    titleParts.value = ["community", "unit"];
+    titleParts.value = defaultTitleParts();
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
     amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
     form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
