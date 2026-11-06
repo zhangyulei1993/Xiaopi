@@ -124,7 +124,11 @@ function previewPropertyTags(item?: Property) {
     fee: item.feeText || '',
     area: item.areaSqm ? `${item.areaSqm}㎡` : '',
   }
-  return fields.filter((key) => key !== 'community' && (!selectedFields || selectedFields.has(key))).map((key) => values[key]).filter(Boolean)
+  return fields
+    .filter((key) => key !== 'community' && (!selectedFields || selectedFields.has(key)))
+    .map((key) => values[key])
+    .filter((value) => Boolean(value))
+    .reduce<string[]>((result, value) => result.some((item) => item === value || item.includes(value) || value.includes(item)) ? result : [...result, value], [])
 }
 function previewCoverStyle(item?: Property) {
   const cover = item?.media?.find((media) => media.type === 'image')?.url
