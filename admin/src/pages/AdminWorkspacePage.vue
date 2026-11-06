@@ -35,7 +35,6 @@ const configPage = ref('home')
 const previewOverlay = ref<'page' | 'share' | 'poster'>('page')
 type ConfigAudience = 'customer' | 'operator'
 const configAudience = ref<ConfigAudience>('customer')
-const visiblePagePresentationOptions = computed(() => pagePresentationOptions.filter(page => page.audience === configAudience.value || page.audience === 'both'))
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
 const selectConfigPage = (key: string) => {
   const target = pagePresentationOptions.find(page => page.key === key)
@@ -46,7 +45,8 @@ const selectConfigPage = (key: string) => {
 }
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
-  configPage.value = visiblePagePresentationOptions.value[0]?.key || 'home'
+  configPage.value = value === 'operator' ? 'adminWorkbench' : 'home'
+  previewSelectedPropertyID.value = ''
   previewOverlay.value = 'page'
 }
 const assigningAdmin = ref(false)
@@ -97,7 +97,13 @@ const previewProperties = computed(() => {
     : properties.value
   return source.slice(0, 2)
 })
-const previewPrimaryProperty = computed(() => previewProperties.value[0])
+const previewSelectedPropertyID = ref('')
+const previewPrimaryProperty = computed(() => previewProperties.value.find((item) => item.id === previewSelectedPropertyID.value) || previewProperties.value[0])
+function openPreviewProperty(item?: Property) {
+  if (!item) return
+  previewSelectedPropertyID.value = item.id
+  selectConfigPage('propertyDetail')
+}
 const previewIdentity = computed(() => {
   if (configAudience.value === 'operator') {
     const account = admins.value.find((item) => item.status === 'active') || admins.value[0]
@@ -861,7 +867,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="mini-section-title">精选频道</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
                   <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">查看房源</b></div>
-                  <article v-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="selectConfigPage('propertyDetail')"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><section><b>{{ previewPrimaryProperty.title || previewPrimaryProperty.community }}</b><span>{{ previewPrimaryProperty.location || previewPrimaryProperty.community }}</span><small><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></small><strong>¥{{ previewPrimaryProperty.rentMonthly }}/月</strong></section></article>
+                  <article v-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><section><b>{{ previewPrimaryProperty.title || previewPrimaryProperty.community }}</b><span>{{ previewPrimaryProperty.location || previewPrimaryProperty.community }}</span><small><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></small><strong>¥{{ previewPrimaryProperty.rentMonthly }}/月</strong></section></article>
                   <div v-else class="preview-empty">暂无可展示房源</div>
                 </div>
                 <div class="mini-tabbar"><button class="active" @click="selectConfigPage('home')">⌂<small>首页</small></button><button @click="selectConfigPage('properties')">▤<small>房源</small></button><button @click="selectConfigPage('me')">○<small>我的</small></button></div>
@@ -871,7 +877,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="mini-navigation">{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</div>
                 <div class="page-mini-content" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.9),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}">
                   <header><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
-                  <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="selectConfigPage('propertyDetail')"><div :style="previewCoverStyle(item)"></div><section><b>{{ item.title || item.community }}</b><span>{{ item.location || item.community }}</span><small><i v-for="tag in previewPropertyTags(item)" :key="tag">{{ tag }}</i></small><strong>¥{{ item.rentMonthly }}/月</strong></section></article><div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div></template>
+                  <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="openPreviewProperty(item)"><div :style="previewCoverStyle(item)"></div><section><b>{{ item.title || item.community }}</b><span>{{ item.location || item.community }}</span><small><i v-for="tag in previewPropertyTags(item)" :key="tag">{{ tag }}</i></small><strong>¥{{ item.rentMonthly }}/月</strong></section></article><div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div></template>
                   <template v-else-if="configPage === 'propertyDetail'"><div class="preview-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"><span>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</span></div><div class="preview-detail-main"><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><span>{{ previewPrimaryProperty?.location || '发布房源后将同步展示' }}</span><div><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div></div><div class="preview-detail-section"><b>家具与配套</b><span>{{ previewPrimaryProperty?.description || '由房源录入内容同步展示' }}</span></div></template>
                   <template v-else-if="configPage === 'requests' || configPage === 'publish'"><div class="preview-form-card"><label>意向地区</label><span>选择地区与商圈　›</span><label>预算范围</label><span>¥1500 – ¥2500</span><label>入住需求</label><span>填写补充说明</span><button>提交{{ configPage === 'requests' ? '找房需求' : '房源线索' }}</button></div></template>
                   <template v-else-if="configPage === 'me'"><div class="preview-profile" @click="selectConfigPage('authLogin')"><i>{{ previewIdentity.mark }}</i><div><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div></div><div class="preview-tool-grid"><article @click="selectConfigPage('properties')">全部房源<small>继续看房</small></article><article @click="selectConfigPage('footprints')">浏览足迹<small>最近查看</small></article><article @click="selectConfigPage('requests')">找房需求<small>查看进度</small></article><article @click="selectConfigPage('publish')">推荐房源<small>提交房源线索</small></article></div></template>
