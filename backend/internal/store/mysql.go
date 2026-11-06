@@ -468,7 +468,7 @@ func (s *MySQL) ConvertLeadToProperty(ctx context.Context, leadID string, p doma
 }
 
 func (s *MySQL) UpsertUser(ctx context.Context, user domain.User) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE nickname=VALUES(nickname),avatar_url=VALUES(avatar_url),updated_at=CURRENT_TIMESTAMP`, user.ID, user.OpenID, user.Nickname, user.AvatarURL, user.Phone, user.Status)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_id=VALUES(open_id),nickname=IF(VALUES(nickname)='',nickname,VALUES(nickname)),avatar_url=IF(VALUES(avatar_url)='',avatar_url,VALUES(avatar_url)),phone=IF(VALUES(phone)='',phone,VALUES(phone)),status=IF(VALUES(status)='',status,VALUES(status)),updated_at=CURRENT_TIMESTAMP`, user.ID, user.OpenID, user.Nickname, user.AvatarURL, user.Phone, user.Status)
 	return err
 }
 
