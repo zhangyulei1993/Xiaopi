@@ -186,9 +186,11 @@ const environmentHighlights = computed(() => {
   if (!current) return [];
   return [
     current.utilitiesText && { label: "水电", value: current.utilitiesText },
-    current.elevator && { label: "楼内", value: current.elevator },
+    { label: "楼内", value: current.elevator || "步梯" },
+    current.floorInfo && { label: "楼层", value: current.floorInfo },
     Number(current.metroMinutes) > 0 && { label: "通勤", value: `步行至地铁 ${current.metroMinutes} 分钟` },
     current.orientation && { label: "采光", value: `${current.orientation}向` },
+    current.availableDate && { label: "入住", value: current.availableDate },
     current.rulesText && { label: "入住", value: current.rulesText },
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 });
@@ -291,6 +293,7 @@ const reserve = () => {
 };
 const openProperty = (id: string) =>
   uni.redirectTo({ url: `/pages/properties/detail?id=${id}` });
+const openAllProperties = () => uni.switchTab({ url: "/pages/properties/index" });
 const editProperty = () => {
   if (!item.value) return;
   uni.navigateTo({ url: `/pages/admin/property-edit?id=${item.value.id}` });
@@ -457,8 +460,8 @@ const contact = () => {
       /><button v-if="mapExpanded" class="navigate-button" @click="openPropertyLocation">
         ⌁ 导航去这里
       </button></view
-    ><view v-if="amenities.length || environmentHighlights.length" class="card amenity-card"
-      ><view class="detail-section-heading"><view><view class="title small">居住配套</view><small>家具家电与日常居住条件</small></view><text>{{ amenities.length + environmentHighlights.length }} 项</text></view
+    ><view class="card amenity-card"
+      ><view class="detail-section-heading"><view><view class="title small">房屋设施与环境</view><small>家具家电、楼内条件与入住信息</small></view><text>{{ amenities.length + environmentHighlights.length }} 项</text></view
       ><view v-if="amenities.length" class="amenity-grid"
         ><view
           v-for="amenity in amenities"
@@ -468,15 +471,16 @@ const contact = () => {
             ><image :src="amenity.icon" mode="aspectFit" /></view
           ><text class="amenity-name">{{ amenity.name }}</text></view
         ></view
+      ><view v-else class="amenity-empty">家具家电信息待补充，可联系小皮确认</view
       ><view v-if="environmentHighlights.length" class="environment-list"><view v-for="feature in environmentHighlights" :key="`${feature.label}-${feature.value}`"><small>{{ feature.label }}</small><strong>{{ feature.value }}</strong></view></view
       ></view
     ><view class="card"
       ><view class="title small">房源描述</view
       ><view class="desc">{{ propertyDescription || "暂无描述" }}</view></view
-    ><view v-if="nearbyProperties.length" class="card nearby-card"
+    ><view class="card nearby-card"
       ><view class="nearby-heading"
         ><view><view class="title small">附近房源</view><small>距此房源 {{ relatedRadiusKm }} 公里内</small></view
-        ><text>{{ nearbyProperties.length }} 套</text></view
+        ><text>{{ nearbyProperties.length ? `${nearbyProperties.length} 套` : "继续找房" }}</text></view
       ><view
         v-for="property in nearbyProperties"
         :key="property.id"
@@ -484,7 +488,9 @@ const contact = () => {
         @click="openProperty(property.id)"
         ><view><strong>{{ property.title || property.community }}</strong><small>{{ property.community }} · {{ property.layout }}</small></view
         ><view class="nearby-price"><strong>{{ property.rentMonthly }} 元/月</strong><small>{{ property.distance.toFixed(1) }}km</small></view
-      ></view></view
+      ></view
+      ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>附近暂时没有其他可租房源</strong><text>可以继续查看其他地区的新房源</text><button @click="openAllProperties">查看全部房源</button></view
+      ><view v-else class="nearby-more" @click="openAllProperties">查看更多房源 <text>›</text></view></view
     ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool" @click="editProperty">编辑房源</button><button v-if="item.status !== 'offline'" class="admin-detail-tool" open-type="share">分享给他人</button><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
@@ -724,6 +730,7 @@ const contact = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.amenity-empty{padding:22rpx;border-radius:14rpx;background:#f4f3ed;color:#879084;font-size:22rpx;line-height:1.5;text-align:center}.nearby-empty{padding:30rpx 18rpx 10rpx;text-align:center}.nearby-empty strong,.nearby-empty text{display:block}.nearby-empty strong{color:#40543f;font-size:25rpx}.nearby-empty text{margin-top:9rpx;color:#8a9287;font-size:21rpx}.nearby-empty button{width:240rpx;margin:22rpx auto 0;border:0;border-radius:14rpx;background:#edf1e8;color:#40543f;font-size:23rpx;line-height:70rpx}.nearby-empty button::after{border:0}.nearby-more{margin-top:12rpx;padding-top:20rpx;border-top:1rpx solid #eeece7;color:#536a45;font-size:23rpx;text-align:center}.nearby-more text{margin-left:5rpx;font-size:28rpx}
 .desc {
   line-height: 1.8;
   color: #64705f;
