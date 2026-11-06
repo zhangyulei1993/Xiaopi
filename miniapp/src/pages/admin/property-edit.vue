@@ -87,6 +87,20 @@ const form = reactive<Partial<Property>>({
   description: "",
   ownerId: "xiaopi-admin",
 });
+const listingTagOptions = [
+  { key: "unit", label: "门牌" },
+  { key: "floor", label: "楼层" },
+  { key: "layout", label: "户型" },
+  { key: "rentType", label: "整租/合租" },
+  { key: "area", label: "面积" },
+];
+const allowedDisplayTags = ref<string[]>(["floor", "layout", "rentType", "area"]);
+const selectedDisplayTags = ref<string[]>(["layout", "rentType"]);
+const toggleDisplayTag = (key: string) => {
+  selectedDisplayTags.value = selectedDisplayTags.value.includes(key)
+    ? selectedDisplayTags.value.filter((item) => item !== key)
+    : [...selectedDisplayTags.value, key];
+};
 const roomCount = ref("1"),
   customRoomCount = ref(""),
   hallCount = ref("1"),
@@ -291,6 +305,10 @@ const loadChannels = async () => {
   try {
     const config = await getPublicConfig();
     associationRadiusKm.value = Number(config.relatedPropertyRadiusKm) || 3;
+    allowedDisplayTags.value = (config.listingTitle?.enabledFields || [])
+      .filter((key) => key !== "community");
+    selectedDisplayTags.value = selectedDisplayTags.value.filter((key) => allowedDisplayTags.value.includes(key));
+    if (!selectedDisplayTags.value.length) selectedDisplayTags.value = allowedDisplayTags.value.filter((key) => ["layout", "rentType"].includes(key));
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
       if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
@@ -415,6 +433,17 @@ const generatedTitle = computed(() => {
   const community = String(form.community || "").trim();
   return community || "选择小区后自动生成";
 });
+const displayTagValue = (key: string) => {
+  if (key === "unit") return [buildingNo.value, unitNo.value && `${unitNo.value}单元`, roomNo.value && `${roomNo.value}室`].filter(Boolean).join("");
+  if (key === "floor") return form.floorInfo || (selectedFloor.value ? `${selectedFloor.value}层` : "");
+  if (key === "layout") return form.layout || (rentType.value === "合租" ? roomType.value : wholeLayoutText.value);
+  if (key === "rentType") return rentType.value;
+  if (key === "area") return Number(form.areaSqm) ? `${form.areaSqm}㎡` : "";
+  return "";
+};
+const selectedDisplayTagLabels = computed(() => selectedDisplayTags.value
+  .map((key) => displayTagValue(key))
+  .filter(Boolean));
 watch([() => form.community], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
@@ -658,6 +687,9 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
+    selectedDisplayTags.value = property.displayTags?.length
+      ? property.displayTags.filter((key) => allowedDisplayTags.value.includes(key))
+      : allowedDisplayTags.value.filter((key) => ["layout", "rentType"].includes(key));
     paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
     form.listingSource = property.listingSource || "直租";
     transferDepositMultiplier.value = Number(property.transferDeposit) && Number(property.rentMonthly)
@@ -971,6 +1003,7 @@ const save = async (mode: SaveMode = "draft") => {
       buildingNo: buildingNo.value.trim(),
       unitNo: unitNo.value.trim(),
       roomNo: roomNo.value.trim(),
+      displayTags: selectedDisplayTags.value,
       description: `配套设施：${amenities.value.join("、")}\n${details}`.trim(),
     };
     const property = id.value
@@ -1377,7 +1410,8 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="activeSection === 4" class="media-limit-hint"
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
-        ><view><strong>列表展示</strong><small>小区名称作为主标题；户型、楼层、面积、门牌等由后台配置为标签</small></view
+        ><view><strong>列表展示标签</strong><small>小区名称固定为主标题；仅可选择后台已启用的标签</small></view
+        ><view class="title-part-list"><view v-for="option in listingTagOptions.filter(item => allowedDisplayTags.includes(item.key))" :key="option.key" class="title-part" :class="{ active: selectedDisplayTags.includes(option.key) }" @click="toggleDisplayTag(option.key)"><view class="title-part-name"><text>{{ selectedDisplayTags.includes(option.key) ? "✓" : "+" }}</text>{{ option.label }}</view></view></view>
         ><view class="auto-title"><text>主标题预览</text><strong>{{ generatedTitle }}</strong></view></view
       ><view v-if="activeSection === 4" class="final-review"
         ><view class="final-review-head"><view><strong>发布前核对</strong><small>可点上方步骤返回修改</small></view><text>{{ completionCount }}/5</text></view
@@ -1387,6 +1421,7 @@ const mediaUrl = resolveAssetUrl;
           ><view :class="{ ready: sectionReady[3] }"><text>租金入住</text><small>{{ Number(form.rentMonthly) || 0 }}/月 {{ form.depositPayment || "" }}</small></view
           ><view :class="{ ready: sectionReady[4] }"><text>图片素材</text><small>{{ mediaCount }}/9 张图片 · {{ videoCount }} 个视频</small></view
         ></view
+        ><view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>保存前分别查看普通用户与管理员看到的信息</small></view><view class="listing-preview customer-preview"><text>普通用户视角</text><view><strong>{{ generatedTitle }}</strong><small>{{ form.location || "位置待补充" }}</small><view class="preview-tag-row"><i v-for="label in selectedDisplayTagLabels" :key="label">{{ label }}</i><i>{{ form.listingSource || "直租" }}</i><i>{{ form.feeText || "无中介费" }}</i></view><b>¥{{ Number(form.rentMonthly) || 0 }}<small>/月</small></b></view></view><view class="listing-preview admin-preview"><text>管理员视角</text><view><strong>{{ generatedTitle }}</strong><small>门牌 {{ displayTagValue("unit") || "待补充" }} · {{ form.location || "位置待补充" }}</small><view class="preview-tag-row"><i v-for="label in selectedDisplayTagLabels" :key="label">{{ label }}</i><i>{{ form.listingSource || "直租" }}</i></view><b>¥{{ Number(form.rentMonthly) || 0 }}<small>/月</small></b></view></view></view
         ><text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text></view
       ><view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
@@ -1622,6 +1657,7 @@ const mediaUrl = resolveAssetUrl;
 .final-review-grid text,.final-review-grid small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .final-review-grid text { font-size:20rpx;font-weight:700; }
 .final-review-grid small { margin-top:5rpx;font-size:18rpx; }
+.listing-compare{margin-top:18rpx;padding-top:18rpx;border-top:1rpx solid #e2ebe6}.listing-compare-head strong,.listing-compare-head small{display:block}.listing-compare-head strong{color:#31463d;font-size:23rpx}.listing-compare-head small{margin-top:5rpx;color:#7b9187;font-size:18rpx}.listing-preview{margin-top:12rpx;padding:14rpx;border-radius:14rpx;background:#fff;border:1rpx solid #e5ece8}.listing-preview>text{display:block;margin-bottom:9rpx;color:#7c9589;font-size:18rpx;font-weight:700}.listing-preview>view>strong,.listing-preview>view>small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.listing-preview>view>strong{color:#293b31;font-size:23rpx}.listing-preview>view>small{margin-top:5rpx;color:#7a877f;font-size:18rpx}.preview-tag-row{display:flex;gap:7rpx;overflow:hidden;margin-top:10rpx;white-space:nowrap}.preview-tag-row i{flex:none;padding:4rpx 7rpx;border-radius:7rpx;background:#edf3e7;color:#59704e;font-size:17rpx;font-style:normal}.listing-preview b{display:block;margin-top:10rpx;color:#d86749;font-size:27rpx;line-height:1}.listing-preview b small{margin-left:3rpx;font-size:17rpx;font-weight:500}.admin-preview{background:#f5f8f6}.admin-preview>text{color:#395b4b}
 .draft-delete-link { display:block;margin-top:18rpx;color:#bd5a45;font-size:21rpx;text-align:center; }
 .title-part-list { display:flex;flex-wrap:wrap;gap:10rpx;margin-top:16rpx; }
 .title-part { display:flex;align-items:center;overflow:hidden;border:1rpx solid #dfe5da;border-radius:11rpx;background:#fff;color:#708a84;font-size:20rpx; }

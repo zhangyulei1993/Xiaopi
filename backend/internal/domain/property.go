@@ -47,6 +47,7 @@ type Property struct {
 	VerificationDate     string          `json:"verificationDate"`
 	RulesText            string          `json:"rulesText"`
 	Description          string          `json:"description"`
+	DisplayTags          []string        `json:"displayTags"`
 	Status               PropertyStatus  `json:"status"`
 	OwnerID              string          `json:"ownerId"`
 	Media                []PropertyMedia `json:"media"`

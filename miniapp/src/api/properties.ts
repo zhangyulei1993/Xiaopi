@@ -7,6 +7,7 @@ export interface Property {
   location: string;
   areaLabel?: string;
   doorplateLabel?: string;
+  displayTags?: string[];
   buildingNo?: string;
   unitNo?: string;
   roomNo?: string;

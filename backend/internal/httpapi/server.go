@@ -574,6 +574,7 @@ type publicProperty struct {
 	Location             string                 `json:"location"`
 	AreaLabel            string                 `json:"areaLabel"`
 	DoorplateLabel       string                 `json:"doorplateLabel,omitempty"`
+	DisplayTags          []string               `json:"displayTags,omitempty"`
 	Latitude             float64                `json:"latitude"`
 	Longitude            float64                `json:"longitude"`
 	Layout               string                 `json:"layout"`
@@ -660,12 +661,9 @@ func publicListingTitle(item domain.Property) string {
 }
 
 func publicProperties(items []domain.Property, config domain.PublicConfig) []publicProperty {
-	showDoorplate := false
+	allowedTags := make(map[string]bool, len(config.ListingTitle.EnabledFields))
 	for _, field := range config.ListingTitle.EnabledFields {
-		if field == "unit" {
-			showDoorplate = true
-			break
-		}
+		allowedTags[field] = true
 	}
 	result := make([]publicProperty, 0, len(items))
 	for _, item := range items {
@@ -683,12 +681,32 @@ func publicProperties(items []domain.Property, config domain.PublicConfig) []pub
 			Description: item.Description, Status: item.Status, Media: item.Media,
 			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
 		}
-		if showDoorplate {
+		tags := item.DisplayTags
+		// Existing records predate per-listing tag selection. Preserve the prior
+		// configuration-driven presentation until an operator edits the listing.
+		if len(tags) == 0 {
+			tags = config.ListingTitle.EnabledFields
+		}
+		for _, tag := range tags {
+			if tag != "community" && allowedTags[tag] {
+				property.DisplayTags = append(property.DisplayTags, tag)
+			}
+		}
+		if allowedTags["unit"] && containsString(property.DisplayTags, "unit") {
 			property.DoorplateLabel = publicDoorplateLabel(item)
 		}
 		result = append(result, property)
 	}
 	return result
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) isAvailableProperty(ctx context.Context, propertyID string) bool {
