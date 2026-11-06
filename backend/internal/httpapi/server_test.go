@@ -528,15 +528,15 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 func TestPublicDoorplateBadgeFollowsConfigAndNeverStaysInTitle(t *testing.T) {
 	item := domain.Property{
 		ID: "property-1", Status: domain.PropertyAvailable,
-		Title:     "拿铁公寓5栋3单元101室 · 两室一厅",
-		Community: "拿铁公寓", BuildingNo: "5栋", UnitNo: "3", RoomNo: "101",
+		Title:     "拿铁公寓5栋3单元单元101室室 · 两室一厅",
+		Community: "拿铁公寓", BuildingNo: "5栋", UnitNo: "3单元", RoomNo: "101室",
 	}
 	config := domain.DefaultPublicConfig()
 	visible := publicProperties([]domain.Property{item}, config)
 	if len(visible) != 1 || visible[0].DoorplateLabel != "5栋3单元101室" {
 		t.Fatalf("expected configured public doorplate badge, got %#v", visible)
 	}
-	if strings.Contains(visible[0].Title, "101室") {
+	if strings.Contains(visible[0].Title, "101室") || strings.Contains(visible[0].Title, "单元单元") {
 		t.Fatalf("doorplate must never remain in public title: %q", visible[0].Title)
 	}
 	config.ListingTitle.EnabledFields = []string{"community", "layout"}

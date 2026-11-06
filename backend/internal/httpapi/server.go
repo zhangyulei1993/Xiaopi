@@ -625,8 +625,24 @@ func publicDoorplateLabel(item domain.Property) string {
 // that badge is disabled in the admin configuration.
 func publicListingTitle(item domain.Property) string {
 	title := strings.TrimSpace(item.Title)
-	if doorplate := publicDoorplateLabel(item); doorplate != "" {
-		title = strings.ReplaceAll(title, doorplate, "")
+	building := strings.TrimSpace(item.BuildingNo)
+	unit := strings.TrimSpace(item.UnitNo)
+	room := strings.TrimSpace(item.RoomNo)
+	// Older editor builds occasionally persisted duplicate suffixes (for
+	// example "2单元单元1803室室"). Remove both the canonical label and those
+	// historic variants before returning a public title.
+	variants := []string{publicDoorplateLabel(item)}
+	if building != "" && unit != "" && room != "" {
+		variants = append(variants,
+			building+unit+room,
+			building+unit+"单元"+room+"室",
+			building+strings.TrimSuffix(unit, "单元")+"单元"+strings.TrimSuffix(room, "室")+"室",
+		)
+	}
+	for _, doorplate := range variants {
+		if doorplate != "" {
+			title = strings.ReplaceAll(title, doorplate, "")
+		}
 	}
 	title = strings.Trim(title, " ·・-—")
 	for strings.Contains(title, "· ·") || strings.Contains(title, "··") {
