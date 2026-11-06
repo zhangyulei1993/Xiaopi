@@ -55,3 +55,15 @@ func TestPublicConfigNormalizeBeforeValidation(t *testing.T) {
 		t.Fatalf("normalized config should be valid: %v", err)
 	}
 }
+
+func TestPublicConfigNormalizeLegacyShareCard(t *testing.T) {
+	config := DefaultPublicConfig()
+	config.ShareCard = ShareCardConfig{}
+	config.Normalize()
+	if len(config.ShareCard.TitleFields) == 0 || len(config.ShareCard.PosterFields) == 0 {
+		t.Fatalf("legacy config should receive share defaults: %+v", config.ShareCard)
+	}
+	if err := config.Validate(); err != nil {
+		t.Fatalf("normalized share config should be valid: %v", err)
+	}
+}

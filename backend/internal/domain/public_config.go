@@ -33,6 +33,12 @@ type PagePresentation struct {
 	BackgroundImage string `json:"backgroundImage"`
 }
 
+type ShareCardConfig struct {
+	TitlePrefix  string   `json:"titlePrefix"`
+	TitleFields  []string `json:"titleFields"`
+	PosterFields []string `json:"posterFields"`
+}
+
 type PublicConfig struct {
 	HeroTitle               string                      `json:"heroTitle"`
 	HeroSubtitle            string                      `json:"heroSubtitle"`
@@ -43,6 +49,7 @@ type PublicConfig struct {
 	Locations               []MiniappLocation           `json:"locations"`
 	FeaturedChannels        []FeaturedChannel           `json:"featuredChannels"`
 	PagePresentations       map[string]PagePresentation `json:"pagePresentations"`
+	ShareCard               ShareCardConfig             `json:"shareCard"`
 }
 
 func DefaultPublicConfig() PublicConfig {
@@ -73,6 +80,10 @@ func DefaultPublicConfig() PublicConfig {
 			"adminWorkbench":    {Title: "小皮工作台", Subtitle: "房源运营与数据处理"},
 			"adminPropertyEdit": {Title: "编辑房源", Subtitle: "完善房源信息后发布"},
 			"authLogin":         {Title: "微信登录", Subtitle: "登录后管理你的找房服务"},
+		},
+		ShareCard: ShareCardConfig{
+			TitleFields:  []string{"community", "layout"},
+			PosterFields: []string{"rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"},
 		},
 	}
 }
@@ -113,6 +124,36 @@ func (config *PublicConfig) Normalize() {
 		presentation.BackgroundImage = strings.TrimSpace(presentation.BackgroundImage)
 		config.PagePresentations[key] = presentation
 	}
+	config.ShareCard.TitlePrefix = strings.TrimSpace(config.ShareCard.TitlePrefix)
+	if len(config.ShareCard.TitleFields) == 0 {
+		config.ShareCard.TitleFields = append([]string(nil), DefaultPublicConfig().ShareCard.TitleFields...)
+	}
+	if len(config.ShareCard.PosterFields) == 0 {
+		config.ShareCard.PosterFields = append([]string(nil), DefaultPublicConfig().ShareCard.PosterFields...)
+	}
+}
+
+var shareCardFieldLabels = map[string]string{
+	"community": "小区", "layout": "户型/房间", "roomNo": "门牌", "rentMonthly": "月租",
+	"listingSource": "直租/转租", "rentType": "整租/合租", "depositPayment": "押付方式",
+	"areaSqm": "面积", "floorInfo": "楼层", "availableDate": "入住时间",
+}
+
+func validateShareFields(fields []string, minimum, maximum int, name string) error {
+	if len(fields) < minimum || len(fields) > maximum {
+		return fmt.Errorf("%s字段数量必须在 %d 到 %d 个之间", name, minimum, maximum)
+	}
+	seen := map[string]struct{}{}
+	for _, field := range fields {
+		if _, exists := shareCardFieldLabels[field]; !exists {
+			return fmt.Errorf("%s包含不支持的字段", name)
+		}
+		if _, exists := seen[field]; exists {
+			return fmt.Errorf("%s字段不能重复", name)
+		}
+		seen[field] = struct{}{}
+	}
+	return nil
 }
 
 func (config PublicConfig) Validate() error {
@@ -142,6 +183,15 @@ func (config PublicConfig) Validate() error {
 	}
 	if config.RelatedPropertyRadiusKm < 0.5 || config.RelatedPropertyRadiusKm > 20 {
 		return errors.New("附近房源关联距离必须在 0.5 到 20 公里之间")
+	}
+	if utf8.RuneCountInString(config.ShareCard.TitlePrefix) > 12 {
+		return errors.New("分享标题前缀不能超过 12 个字符")
+	}
+	if err := validateShareFields(config.ShareCard.TitleFields, 1, 4, "分享标题"); err != nil {
+		return err
+	}
+	if err := validateShareFields(config.ShareCard.PosterFields, 3, 8, "分享海报"); err != nil {
+		return err
 	}
 	if len(config.Locations) == 0 || len(config.Locations) > 20 {
 		return errors.New("地理位置数量必须在 1 到 20 个之间")

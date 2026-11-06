@@ -21,6 +21,11 @@ const item = ref<Property | null>(null),
   loadFailed = ref(false),
   favorite = ref(false);
 const relatedRadiusKm = ref(3);
+const shareCardConfig = ref({
+  titlePrefix: "",
+  titleFields: ["community", "layout"],
+  posterFields: ["rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"],
+});
 const allProperties = ref<Property[]>([]);
 const activeMediaIndex = ref(0);
 const playingVideoIndex = ref(-1);
@@ -50,6 +55,11 @@ const load = async (id = "") => {
     mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
+    shareCardConfig.value = {
+      titlePrefix: String(config?.shareCard?.titlePrefix || ""),
+      titleFields: config?.shareCard?.titleFields?.length ? config.shareCard.titleFields : ["community", "layout"],
+      posterFields: config?.shareCard?.posterFields?.length ? config.shareCard.posterFields : ["rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"],
+    };
     if (getSession()?.role === "user")
       favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
   } catch (error) {
@@ -141,13 +151,24 @@ const shouldLoadMedia = (index: number) => {
   const current = activeMediaIndex.value;
   return Math.abs(index - current) <= 1 || (index === 0 && current === count - 1) || (index === count - 1 && current === 0);
 };
+const shareFieldMeta: Record<string, { label: string; value: (property: Property) => string }> = {
+  community: { label: "小区", value: (property) => property.community || "" },
+  layout: { label: "户型", value: (property) => String(property.layout || "").split("·")[0] },
+  roomNo: { label: "门牌", value: (property) => [property.buildingNo, property.unitNo, property.roomNo].filter(Boolean).join("") },
+  rentMonthly: { label: "月租", value: (property) => Number(property.rentMonthly) > 0 ? `¥${property.rentMonthly}/月` : "租金面议" },
+  listingSource: { label: "来源", value: (property) => property.listingSource || "直租" },
+  rentType: { label: "出租", value: (property) => property.rentType || "整租" },
+  depositPayment: { label: "押付", value: (property) => property.depositPayment || "押付面议" },
+  areaSqm: { label: "面积", value: (property) => property.areaSqm ? `${property.areaSqm}㎡` : "待补充" },
+  floorInfo: { label: "楼层", value: (property) => property.floorInfo || "待补充" },
+  availableDate: { label: "入住", value: (property) => property.availableDate || "拎包入住" },
+};
+const shareFieldValue = (property: Property, key: string) => shareFieldMeta[key]?.value(property) || "";
 const shareTitle = computed(() => {
   const current = item.value;
   if (!current) return "小皮租房房源";
-  const subject = current.community || current.title || "精选房源";
-  const layout = String(current.layout || "").split("·")[0];
-  const rent = Number(current.rentMonthly) > 0 ? `¥${current.rentMonthly}/月` : "租金面议";
-  return [subject, layout, rent].filter(Boolean).join(" · ");
+  const values = shareCardConfig.value.titleFields.map((key) => shareFieldValue(current, key)).filter(Boolean);
+  return [shareCardConfig.value.titlePrefix, ...values].filter(Boolean).join(" · ") || current.community || "精选房源";
 });
 const shareImageUrl = computed(() => {
   if (shareCardImage.value) return shareCardImage.value;
@@ -186,24 +207,22 @@ const generateShareCard = async () => {
     context.setFillStyle("#ffffff");
     context.fillRect(0, 0, width, height);
     context.drawImage(info.path, sx, sy, sw, sh, 0, 0, width, imageHeight);
-    context.setFillStyle("#d85f42");
-    context.setFontSize(34);
-    context.fillText(`¥ ${Number(current.rentMonthly) || 0}`, 24, 324);
-    context.setFontSize(20);
-    context.fillText("元/月", 160, 324);
-    context.setFillStyle("#7b8579");
-    context.setFontSize(18);
-    context.fillText(current.depositPayment || "押付面议", 230, 324);
+    const posterKeys = shareCardConfig.value.posterFields;
+    const rentEnabled = posterKeys.includes("rentMonthly");
+    context.setFillStyle(rentEnabled ? "#d85f42" : "#26372c");
+    context.setFontSize(32);
+    context.fillText(compactText(rentEnabled ? shareFieldValue(current, "rentMonthly") : shareTitle.value, 24), 24, 324);
+    const secondaryKey = posterKeys.find((key) => key !== "rentMonthly");
+    if (rentEnabled && secondaryKey) {
+      context.setFillStyle("#7b8579");
+      context.setFontSize(18);
+      context.fillText(compactText(shareFieldValue(current, secondaryKey), 14), 250, 324);
+    }
     context.setFillStyle("#26372c");
     context.setFontSize(27);
-    const sourceLabel = current.listingSource || "直租";
-    const subject = compactText(`${current.rentType || "整租"}·${current.community}`, 19);
-    context.fillText(`${sourceLabel}·${subject}`, 24, 366);
-    const columns = [
-      ["面积", current.areaSqm ? `${current.areaSqm}㎡` : "待补充"],
-      ["楼层", current.floorInfo || "待补充"],
-      ["入住", current.availableDate || "拎包入住"],
-    ];
+    context.fillText(compactText(shareTitle.value, 19), 24, 366);
+    const detailKeys = posterKeys.filter((key) => key !== "rentMonthly" && key !== secondaryKey).slice(0, 3);
+    const columns = detailKeys.map((key) => [shareFieldMeta[key]?.label || "信息", shareFieldValue(current, key)]);
     columns.forEach(([label, value], index) => {
       const x = 24 + index * 192;
       context.setFillStyle("#92988f");

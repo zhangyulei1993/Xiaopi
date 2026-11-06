@@ -160,6 +160,11 @@ export interface PublicConfig {
     subtitle?: string;
     backgroundImage?: string;
   }>;
+  shareCard?: {
+    titlePrefix?: string;
+    titleFields?: string[];
+    posterFields?: string[];
+  };
 }
 
 export const wechatLogin = (code: string) =>

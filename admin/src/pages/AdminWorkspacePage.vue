@@ -63,7 +63,13 @@ const channelMapActiveMarker = ref<Record<number, string>>({})
 const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>({})
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
-const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations() })
+const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
+const shareFieldOptions = [
+  { key: 'community', label: '小区名称' }, { key: 'layout', label: '户型 / 房间' }, { key: 'roomNo', label: '门牌信息' },
+  { key: 'rentMonthly', label: '月租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'rentType', label: '整租 / 合租' },
+  { key: 'depositPayment', label: '押付方式' }, { key: 'areaSqm', label: '面积' }, { key: 'floorInfo', label: '楼层' }, { key: 'availableDate', label: '入住时间' },
+]
+const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations(), shareCard: defaultShareCard() })
 
 const api = createAdminApi({ baseUrl: apiBase, onUnauthorized: () => { loggedIn.value = false; password.value = '' } })
 
@@ -73,6 +79,7 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
   next.relatedPropertyRadiusKm = next.relatedPropertyRadiusKm || 3
   next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ ...item, latitude: item.latitude || 0, longitude: item.longitude || 0, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
   next.pagePresentations = { ...defaultPagePresentations(), ...(next.pagePresentations || {}) }
+  next.shareCard = { ...defaultShareCard(), ...(next.shareCard || {}) }
   Object.assign(publicConfig, next)
   // Keep a map visible as soon as the configuration view is opened. Existing
   // channel coordinates are used when present; otherwise this is the Wuhan
@@ -199,7 +206,26 @@ const configErrors = computed(() => {
   })
   const channelKeywords = publicConfig.featuredChannels.map((item) => item.keyword.trim()).filter(Boolean)
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
+  if (!publicConfig.shareCard.titleFields.length || publicConfig.shareCard.titleFields.length > 4) errors.push('分享标题需选择 1 到 4 个字段')
+  if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
   return errors
+})
+
+const shareFieldLabel = (key: string) => shareFieldOptions.find(item => item.key === key)?.label || key
+function toggleShareField(target: 'titleFields' | 'posterFields', key: string, enabled: boolean) {
+  const fields = publicConfig.shareCard[target]
+  if (enabled && !fields.includes(key)) fields.push(key)
+  if (!enabled) publicConfig.shareCard[target] = fields.filter(item => item !== key)
+}
+function moveShareField(target: 'titleFields' | 'posterFields', index: number, offset: number) {
+  const fields = publicConfig.shareCard[target]
+  const next = index + offset
+  if (next < 0 || next >= fields.length) return
+  ;[fields[index], fields[next]] = [fields[next], fields[index]]
+}
+const shareTitlePreview = computed(() => {
+  const examples: Record<string, string> = { community: '拿铁公寓', layout: '两室一厅', roomNo: '5栋3单元101室', rentMonthly: '¥2300/月', listingSource: '直租', rentType: '整租', depositPayment: '押一付一', areaSqm: '68㎡', floorInfo: '中层', availableDate: '拎包入住' }
+  return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.map(key => examples[key])].filter(Boolean).join(' · ')
 })
 
 function addLocation() {
@@ -703,6 +729,20 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(configPage, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[configPage].backgroundImage" @click="publicConfig.pagePresentations[configPage].backgroundImage = ''">移除背景图</button></div>
                 </el-form>
               </section>
+              <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>分享卡配置</h2><p>配置转发给微信好友时的标题与图片卡片内容，勾选顺序就是展示顺序。</p></div></div>
+                <el-form label-position="top" class="basic-config-form"><el-form-item label="标题前缀（选填）"><el-input v-model="publicConfig.shareCard.titlePrefix" maxlength="12" show-word-limit placeholder="例如：精选好房" /></el-form-item></el-form>
+                <div class="share-field-editor">
+                  <header><strong>分享标题</strong><span>默认推荐“小区名称 + 户型 / 房间”，不突出合租或分租。</span></header>
+                  <div class="share-field-options"><el-checkbox v-for="field in shareFieldOptions" :key="`title-${field.key}`" :model-value="publicConfig.shareCard.titleFields.includes(field.key)" :disabled="!publicConfig.shareCard.titleFields.includes(field.key) && publicConfig.shareCard.titleFields.length >= 4" @change="toggleShareField('titleFields', field.key, Boolean($event))">{{ field.label }}</el-checkbox></div>
+                  <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.titleFields" :key="`title-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('titleFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.titleFields.length - 1" @click="moveShareField('titleFields', index, 1)">下移</button></span></article></div>
+                </div>
+                <div class="share-field-editor">
+                  <header><strong>海报详情字段</strong><span>选择 3–8 项，月租会自动作为重点信息展示。</span></header>
+                  <div class="share-field-options"><el-checkbox v-for="field in shareFieldOptions" :key="`poster-${field.key}`" :model-value="publicConfig.shareCard.posterFields.includes(field.key)" :disabled="!publicConfig.shareCard.posterFields.includes(field.key) && publicConfig.shareCard.posterFields.length >= 8" @change="toggleShareField('posterFields', field.key, Boolean($event))">{{ field.label }}</el-checkbox></div>
+                  <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.posterFields" :key="`poster-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('posterFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.posterFields.length - 1" @click="moveShareField('posterFields', index, 1)">下移</button></span></article></div>
+                </div>
+              </section>
             </div>
 
             <aside class="config-preview-column">
@@ -726,6 +766,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="mini-tabbar"><span>⌂<small>首页</small></span><span>▤<small>房源</small></span><span>○<small>我的</small></span></div>
               </div>
               <div v-else class="selected-page-preview" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.88),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}"><span>小程序页面</span><strong>{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</strong><p>{{ publicConfig.pagePresentations[configPage].subtitle || '辅助文本将在页面标题区域展示' }}</p><div></div></div>
+              <div v-if="configPage === 'propertyDetail'" class="share-card-preview"><span>微信分享标题</span><strong>{{ shareTitlePreview || '请选择分享标题字段' }}</strong><div><b>¥2300/月</b><small>拿铁公寓 · 68㎡ · 中层 · 拎包入住</small></div></div>
               <p class="preview-note">预览只反映当前选择的页面配置，实际尺寸会随设备自适应。</p>
             </aside>
           </div>
