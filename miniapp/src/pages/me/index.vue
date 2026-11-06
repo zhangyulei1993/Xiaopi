@@ -161,6 +161,10 @@ const chooseAvatar = (event: { detail: { avatarUrl?: string } }) => {
   uni.getImageInfo({
     src: path,
     success: (image) => {
+      if (image.width === image.height) {
+        uploadAvatar(path);
+        return;
+      }
       uni.setStorageSync("xiaopi-avatar-crop-source", { path, width: image.width, height: image.height });
       uni.navigateTo({ url: "/pages/auth/avatar-crop" });
     },
