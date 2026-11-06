@@ -15,12 +15,19 @@ import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
+import { listingTagValue, uniqueListingTags } from "../../utils/listing-title";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   loading = ref(true),
   loadFailed = ref(false),
   favorite = ref(false);
 const relatedRadiusKm = ref(3);
+// Public detail labels use the same global set as public list cards.  An
+// operator sees exactly that content plus the doorplate when it is enabled
+// for the operator audience; no other detail-only role divergence is allowed.
+const customerDetailTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
+const operatorDoorplateEnabled = ref(false);
+const customerShareTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
 const shareCardConfig = ref({
   titlePrefix: "",
   titleFields: ["community", "layout"],
@@ -55,6 +62,11 @@ const load = async (id = "") => {
     mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
+    customerDetailTagFields.value = config?.listingTitle?.enabledFields?.length
+      ? config.listingTitle.enabledFields
+      : ["community", "layout", "rentType", "fee"];
+    customerShareTagFields.value = customerDetailTagFields.value;
+    operatorDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     shareCardConfig.value = {
       titlePrefix: String(config?.shareCard?.titlePrefix || ""),
       titleFields: config?.shareCard?.titleFields?.length ? config.shareCard.titleFields : ["community", "layout"],
@@ -87,6 +99,15 @@ const mediaItems = computed(() => item.value?.media || []);
 const mediaLabel = (media: { type: string }, index: number) =>
   media.type === "video" ? "视频" : `实拍 ${index + 1}`;
 const isAdmin = computed(() => hasRole("admin"));
+const detailTags = computed(() => {
+  const current = item.value;
+  if (!current) return [];
+  const fields = [
+    ...(isAdmin.value && operatorDoorplateEnabled.value ? ["unit"] : []),
+    ...customerDetailTagFields.value.filter((field) => field !== "community" && field !== "unit"),
+  ];
+  return uniqueListingTags(fields.map((field) => listingTagValue(current, field)));
+});
 const priceText = computed(() =>
   Number(item.value?.rentMonthly) > 0 ? String(item.value?.rentMonthly) : "待补充",
 );
@@ -163,11 +184,13 @@ const shareFieldMeta: Record<string, { label: string; value: (property: Property
   floorInfo: { label: "楼层", value: (property) => property.floorInfo || "待补充" },
   availableDate: { label: "入住", value: (property) => property.availableDate || "拎包入住" },
 };
+const shareFieldTagMap: Record<string, string> = { layout: "layout", roomNo: "unit", listingSource: "listingSource", rentType: "rentType", areaSqm: "area" };
+const isPublicShareField = (key: string) => !shareFieldTagMap[key] || customerShareTagFields.value.includes(shareFieldTagMap[key]);
 const shareFieldValue = (property: Property, key: string) => shareFieldMeta[key]?.value(property) || "";
 const shareTitle = computed(() => {
   const current = item.value;
   if (!current) return "小皮租房房源";
-  const values = shareCardConfig.value.titleFields.map((key) => shareFieldValue(current, key)).filter(Boolean);
+  const values = shareCardConfig.value.titleFields.filter(isPublicShareField).map((key) => shareFieldValue(current, key)).filter(Boolean);
   return [shareCardConfig.value.titlePrefix, ...values].filter(Boolean).join(" · ") || current.community || "精选房源";
 });
 const shareImageUrl = computed(() => {
@@ -207,7 +230,7 @@ const generateShareCard = async () => {
     context.setFillStyle("#ffffff");
     context.fillRect(0, 0, width, height);
     context.drawImage(info.path, sx, sy, sw, sh, 0, 0, width, imageHeight);
-    const posterKeys = shareCardConfig.value.posterFields;
+    const posterKeys = shareCardConfig.value.posterFields.filter(isPublicShareField);
     const rentEnabled = posterKeys.includes("rentMonthly");
     context.setFillStyle(rentEnabled ? "#d85f42" : "#26372c");
     context.setFontSize(32);
@@ -543,6 +566,7 @@ const phoneCustomerService = () =>
       ><view class="title">{{ item.title || item.community }}</view
       ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
+      ><view v-if="detailTags.length" class="tags detail-tags"><text v-for="tag in detailTags" :key="tag">{{ tag }}</text></view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
         ><view><small>户型</small><strong>{{ item.layout || "待补充" }}</strong></view
         ><view><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view

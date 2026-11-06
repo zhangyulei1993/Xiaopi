@@ -113,9 +113,9 @@ const previewIdentity = computed(() => {
   const account = users.value.find((item) => !adminIDs.has(item.id) && item.status !== 'disabled') || users.value[0]
   return { name: account?.nickname || '微信用户', caption: account?.phone ? `已登录 · ${account.phone}` : '普通用户已登录', mark: account?.nickname?.slice(0, 1) || '小' }
 })
-function previewPropertyTags(item?: Property) {
+function previewPropertyTags(item?: Property, configuredFields?: string[]) {
   if (!item) return previewListingTags.value
-  const fields = configAudience.value === 'operator' ? publicConfig.listingTitle.adminEnabledFields : publicConfig.listingTitle.enabledFields
+  const fields = configuredFields || (configAudience.value === 'operator' ? publicConfig.listingTitle.adminEnabledFields : publicConfig.listingTitle.enabledFields)
   const unit = [item.buildingNo, item.unitNo && (String(item.unitNo).includes('单元') ? item.unitNo : `${item.unitNo}单元`), item.roomNo && (String(item.roomNo).includes('室') ? item.roomNo : `${item.roomNo}室`)].filter(Boolean).join('')
   const layout = String(item.layout || '').split(/[·・|｜]/).map((value) => value.trim()).filter((value) => value && !/^(整租|合租|直租|转租|有中介费|无中介费)$/.test(value)).join(' · ')
   const fee = String(item.feeText || '').includes('无中介费') ? '无中介费' : String(item.feeText || '').includes('有中介费') ? '有中介费' : ''
@@ -134,6 +134,16 @@ function previewPropertyTags(item?: Property) {
     .map((key) => values[key])
     .filter((value) => Boolean(value))
     .filter((value) => known.has(value) ? false : (known.add(value), true))
+}
+function previewDetailTags(item?: Property) {
+  const fields = [
+    ...(configAudience.value === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit') ? ['unit'] : []),
+    ...publicConfig.listingTitle.enabledFields.filter(key => key !== 'community' && key !== 'unit'),
+  ]
+  return previewPropertyTags(item, fields)
+}
+function previewShareTags(item?: Property) {
+  return previewPropertyTags(item, publicConfig.listingTitle.enabledFields)
 }
 // Keep the configuration canvas honest: these are the same presentation rules
 // as the miniapp cards (stable community heading, short address, then two tag rows).
@@ -179,6 +189,8 @@ const shareFieldOptions = [
   { key: 'rentMonthly', label: '月租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'rentType', label: '整租 / 合租' },
   { key: 'depositPayment', label: '押付方式' }, { key: 'areaSqm', label: '面积' }, { key: 'floorInfo', label: '楼层' }, { key: 'availableDate', label: '入住时间' },
 ]
+const shareFieldListingMap: Record<string, string> = { layout: 'layout', roomNo: 'unit', listingSource: 'listingSource', rentType: 'rentType', areaSqm: 'area' }
+const shareFieldEnabledForCustomer = (key: string) => !shareFieldListingMap[key] || publicConfig.listingTitle.enabledFields.includes(shareFieldListingMap[key])
 const publicConfig = reactive<PublicConfig>({ heroTitle: '', heroSubtitle: '', heroDescription: '', notice: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations(), shareCard: defaultShareCard(), listingTitle: defaultListingTitle() })
 
 const api = createAdminApi({ baseUrl: apiBase, onUnauthorized: () => { loggedIn.value = false; password.value = '' } })
@@ -318,6 +330,7 @@ const configErrors = computed(() => {
   const channelKeywords = publicConfig.featuredChannels.map((item) => item.keyword.trim()).filter(Boolean)
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
   if (!publicConfig.shareCard.titleFields.length || publicConfig.shareCard.titleFields.length > 4) errors.push('分享标题需选择 1 到 4 个字段')
+  if (publicConfig.shareCard.titleFields.some(key => !shareFieldEnabledForCustomer(key))) errors.push('分享标题含有未在客户标签中启用的字段')
   if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
   if (!publicConfig.listingTitle.customerAllowedFields.length) errors.push('客户视角至少开放一个标签字段')
   if (!publicConfig.listingTitle.enabledFields.length) errors.push('客户列表至少启用一个字段')
@@ -328,6 +341,7 @@ const configErrors = computed(() => {
 
 const shareFieldLabel = (key: string) => shareFieldOptions.find(item => item.key === key)?.label || key
 function toggleShareField(target: 'titleFields' | 'posterFields', key: string, enabled: boolean) {
+  if (enabled && !shareFieldEnabledForCustomer(key)) return
   const fields = publicConfig.shareCard[target]
   if (enabled && !fields.includes(key)) fields.push(key)
   if (!enabled) publicConfig.shareCard[target] = fields.filter(item => item !== key)
@@ -340,7 +354,7 @@ function moveShareField(target: 'titleFields' | 'posterFields', index: number, o
 }
 const shareTitlePreview = computed(() => {
   const examples: Record<string, string> = { community: '拿铁公寓', layout: '两室一厅', roomNo: '5栋3单元101室', rentMonthly: '¥2300/月', listingSource: '直租', rentType: '整租', depositPayment: '押一付一', areaSqm: '68㎡', floorInfo: '中层', availableDate: '拎包入住' }
-  return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.map(key => examples[key])].filter(Boolean).join(' · ')
+  return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.filter(shareFieldEnabledForCustomer).map(key => examples[key])].filter(Boolean).join(' · ')
 })
 function toggleListingTitleField(key: string, enabled: boolean) {
   if (key === 'community') return
@@ -891,20 +905,24 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail'" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>03</span><div><h2>分享卡配置</h2><p>配置转发给微信好友时的标题与图片卡片内容，勾选顺序就是展示顺序。</p></div></div>
+                <div class="section-heading config-section-heading"><span>03</span><div><h2>分享卡配置</h2><p>分享不区分角色，展示字段遵循客户视角标签；勾选顺序就是展示顺序。</p></div></div>
                 <div class="preview-mode-tabs" aria-label="右侧小程序预览模式">
                   <span>右侧小程序预览</span>
                   <div><button :class="{ active: previewOverlay === 'page' }" @click="previewOverlay = 'page'">详情页</button><button :class="{ active: previewOverlay === 'share' }" @click="previewOverlay = 'share'">分享卡</button><button :class="{ active: previewOverlay === 'poster' }" @click="previewOverlay = 'poster'">海报</button></div>
                 </div>
                 <el-form label-position="top" class="basic-config-form"><el-form-item label="标题前缀（选填）"><el-input v-model="publicConfig.shareCard.titlePrefix" maxlength="12" show-word-limit placeholder="例如：精选好房" /></el-form-item></el-form>
                 <div class="share-field-editor">
+                  <header><strong>客户标签来源</strong><span>以下标签直接沿用“客户房源列表标签”配置；管理员门牌不会进入分享卡。</span></header>
+                  <div class="listing-title-preview"><span>当前用于公开分享的标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                </div>
+                <div class="share-field-editor">
                   <header><strong>分享标题</strong><span>默认推荐“小区名称 + 户型 / 房间”，不突出合租或分租。</span></header>
-                  <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.titleFields.includes(field.key) }" :disabled="!publicConfig.shareCard.titleFields.includes(field.key) && publicConfig.shareCard.titleFields.length >= 4" :aria-pressed="publicConfig.shareCard.titleFields.includes(field.key)" @click="toggleShareField('titleFields', field.key, !publicConfig.shareCard.titleFields.includes(field.key))"><i>{{ publicConfig.shareCard.titleFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
+                  <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`title-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.titleFields.includes(field.key) }" :disabled="!publicConfig.shareCard.titleFields.includes(field.key) && (publicConfig.shareCard.titleFields.length >= 4 || !shareFieldEnabledForCustomer(field.key))" :aria-pressed="publicConfig.shareCard.titleFields.includes(field.key)" @click="toggleShareField('titleFields', field.key, !publicConfig.shareCard.titleFields.includes(field.key))"><i>{{ publicConfig.shareCard.titleFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
                   <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.titleFields" :key="`title-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('titleFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.titleFields.length - 1" @click="moveShareField('titleFields', index, 1)">下移</button></span></article></div>
                 </div>
                 <div class="share-field-editor">
                   <header><strong>海报详情字段</strong><span>选择 3–8 项，月租会自动作为重点信息展示。</span></header>
-                  <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`poster-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.posterFields.includes(field.key) }" :disabled="!publicConfig.shareCard.posterFields.includes(field.key) && publicConfig.shareCard.posterFields.length >= 8" :aria-pressed="publicConfig.shareCard.posterFields.includes(field.key)" @click="toggleShareField('posterFields', field.key, !publicConfig.shareCard.posterFields.includes(field.key))"><i>{{ publicConfig.shareCard.posterFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
+                  <div class="share-field-options"><button v-for="field in shareFieldOptions" :key="`poster-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.shareCard.posterFields.includes(field.key) }" :disabled="!publicConfig.shareCard.posterFields.includes(field.key) && (publicConfig.shareCard.posterFields.length >= 8 || !shareFieldEnabledForCustomer(field.key))" :aria-pressed="publicConfig.shareCard.posterFields.includes(field.key)" @click="toggleShareField('posterFields', field.key, !publicConfig.shareCard.posterFields.includes(field.key))"><i>{{ publicConfig.shareCard.posterFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
                   <div class="share-field-order"><article v-for="(key, index) in publicConfig.shareCard.posterFields" :key="`poster-order-${key}`"><i>{{ index + 1 }}</i><strong>{{ shareFieldLabel(key) }}</strong><span><button :disabled="index === 0" @click="moveShareField('posterFields', index, -1)">上移</button><button :disabled="index === publicConfig.shareCard.posterFields.length - 1" @click="moveShareField('posterFields', index, 1)">下移</button></span></article></div>
                 </div>
               </section>
@@ -934,7 +952,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="page-mini-content" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.9),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}">
                   <header><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
                   <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[item.status] || item.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(item) }}</b><span>{{ previewListingAddress(item) }}</span><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article><div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div></template>
-                  <template v-else-if="configPage === 'propertyDetail'"><div class="preview-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"><span>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</span></div><div class="preview-detail-main"><b>¥ {{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><em v-if="previewPrimaryProperty?.listingSource === '转租'" class="preview-transfer-tag">转租 · 剩余 {{ previewPrimaryProperty.remainingLeaseMonths || 0 }} 个月</em><span>{{ previewPrimaryProperty?.location || '发布房源后将同步展示' }}</span><div class="preview-detail-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div></div><div class="preview-detail-section"><b>房屋设施与环境</b><small>家具家电、楼内条件与入住信息</small><div v-if="previewAmenities(previewPrimaryProperty).length" class="preview-amenities"><i v-for="name in previewAmenities(previewPrimaryProperty)" :key="name">⌂ {{ name }}</i></div><span v-else>家具家电信息待补充，可联系小皮确认</span><div class="preview-environment"><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电</small>{{ previewPrimaryProperty.utilitiesText }}</i><i><small>楼内</small>{{ previewPrimaryProperty?.elevator || '步梯' }}</i><i v-if="previewPrimaryProperty?.metroMinutes"><small>通勤</small>地铁 {{ previewPrimaryProperty.metroMinutes }} 分钟</i></div></div><div class="preview-detail-section preview-description"><b>房源描述</b><span>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</span></div></template>
+                  <template v-else-if="configPage === 'propertyDetail'"><div class="preview-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"><span>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</span></div><div class="preview-detail-main"><b>¥ {{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><em v-if="previewPrimaryProperty?.listingSource === '转租'" class="preview-transfer-tag">转租 · 剩余 {{ previewPrimaryProperty.remainingLeaseMonths || 0 }} 个月</em><span>{{ previewPrimaryProperty?.location || '发布房源后将同步展示' }}</span><div v-if="previewDetailTags(previewPrimaryProperty).length" class="preview-detail-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div><div class="preview-detail-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div></div><div class="preview-detail-section"><b>房屋设施与环境</b><small>家具家电、楼内条件与入住信息</small><div v-if="previewAmenities(previewPrimaryProperty).length" class="preview-amenities"><i v-for="name in previewAmenities(previewPrimaryProperty)" :key="name">⌂ {{ name }}</i></div><span v-else>家具家电信息待补充，可联系小皮确认</span><div class="preview-environment"><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电</small>{{ previewPrimaryProperty.utilitiesText }}</i><i><small>楼内</small>{{ previewPrimaryProperty?.elevator || '步梯' }}</i><i v-if="previewPrimaryProperty?.metroMinutes"><small>通勤</small>地铁 {{ previewPrimaryProperty.metroMinutes }} 分钟</i></div></div><div class="preview-detail-section preview-description"><b>房源描述</b><span>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</span></div></template>
                   <template v-else-if="configPage === 'requests' || configPage === 'publish'"><div class="preview-form-card"><label>意向地区</label><span>选择地区与商圈　›</span><label>预算范围</label><span>¥1500 – ¥2500</span><label>入住需求</label><span>填写补充说明</span><button>提交{{ configPage === 'requests' ? '找房需求' : '房源线索' }}</button></div></template>
                   <template v-else-if="configPage === 'me'"><div class="preview-profile" @click="selectConfigPage('authLogin')"><i>{{ previewIdentity.mark }}</i><div><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div></div><div class="preview-tool-grid"><article @click="selectConfigPage('properties')">全部房源<small>继续看房</small></article><article @click="selectConfigPage('footprints')">浏览足迹<small>最近查看</small></article><article @click="selectConfigPage('requests')">找房需求<small>查看进度</small></article><article @click="selectConfigPage('publish')">推荐房源<small>提交房源线索</small></article></div></template>
                   <template v-else-if="configPage === 'footprints'"><article v-for="name in ['拿铁公寓', '凤凰花园三期', '中建大公馆']" :key="name" class="preview-footprint"><div></div><section><b>{{ name }}</b><span>今天浏览 · ¥2300/月</span></section></article></template>
@@ -944,7 +962,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </div>
                 <div class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
-              <div v-if="configPage === 'propertyDetail' && previewOverlay !== 'page'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><template v-if="previewOverlay === 'share'"><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><div class="share-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}/月</b><p>{{ previewPrimaryProperty?.community || '房源小区' }} · {{ previewPropertyTags(previewPrimaryProperty).join(' · ') || '真实好房' }}</p><small>{{ publicConfig.heroTitle || '小皮租房' }}</small></template><template v-else><span>朋友圈海报预览</span><div class="poster-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<span>/月</span></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><p>{{ previewPropertyTags(previewPrimaryProperty).join(' · ') || '真实好房 · 拎包入住' }}</p><i>{{ publicConfig.heroTitle || '小皮租房' }} · 扫码查看房源</i></template></div></div>
+              <div v-if="configPage === 'propertyDetail' && previewOverlay !== 'page'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><template v-if="previewOverlay === 'share'"><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><div class="share-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}/月</b><p>{{ previewPrimaryProperty?.community || '房源小区' }} · {{ previewShareTags(previewPrimaryProperty).join(' · ') || '真实好房' }}</p><small>{{ publicConfig.heroTitle || '小皮租房' }}</small></template><template v-else><span>朋友圈海报预览</span><div class="poster-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<span>/月</span></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><p>{{ previewShareTags(previewPrimaryProperty).join(' · ') || '真实好房 · 拎包入住' }}</p><i>{{ publicConfig.heroTitle || '小皮租房' }} · 扫码查看房源</i></template></div></div>
             </aside>
           </div>
         </template>
