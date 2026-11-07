@@ -150,15 +150,18 @@ func DefaultPublicConfig() PublicConfig {
 			},
 			Nearby: PropertyDetailNearbyConfig{RadiusKm: 3, Relation: "distance", Sort: "distance", Limit: 4},
 			Facilities: []PropertyDetailFacility{
-				{Key: "air_conditioner", Label: "空调", Group: "家具家电", Enabled: true},
 				{Key: "refrigerator", Label: "冰箱", Group: "家具家电", Enabled: true},
 				{Key: "washer", Label: "洗衣机", Group: "家具家电", Enabled: true},
+				{Key: "air_conditioner", Label: "空调", Group: "家具家电", Enabled: true},
 				{Key: "water_heater", Label: "热水器", Group: "家具家电", Enabled: true},
 				{Key: "television", Label: "电视", Group: "家具家电", Enabled: true},
 				{Key: "broadband", Label: "宽带", Group: "家具家电", Enabled: true},
-				{Key: "elevator", Label: "电梯", Group: "居住条件", Enabled: true},
-				{Key: "private_bathroom", Label: "独立卫生间", Group: "居住条件", Enabled: true},
-				{Key: "balcony", Label: "阳台", Group: "居住条件", Enabled: true},
+				{Key: "gas", Label: "燃气", Group: "厨房", Enabled: true},
+				{Key: "hood", Label: "油烟机", Group: "厨房", Enabled: true},
+				{Key: "sofa", Label: "沙发", Group: "家具家电", Enabled: true},
+				{Key: "wardrobe", Label: "衣柜", Group: "家具家电", Enabled: true},
+				{Key: "desk", Label: "书桌", Group: "家具家电", Enabled: true},
+				{Key: "bed", Label: "床", Group: "家具家电", Enabled: true},
 			},
 		},
 	}
@@ -252,14 +255,31 @@ func (config *PublicConfig) Normalize() {
 	if config.PropertyDetail.Nearby.Limit <= 0 {
 		config.PropertyDetail.Nearby.Limit = defaults.Nearby.Limit
 	}
-	if len(config.PropertyDetail.Facilities) == 0 {
-		config.PropertyDetail.Facilities = append([]PropertyDetailFacility(nil), defaults.Facilities...)
+	// The facility library is shared by the property entry page, detail page and
+	// the admin canvas. Older configs contained environment-only entries (such
+	// as elevator); those have their own detail fields and are not amenities.
+	configuredFacilities := make(map[string]PropertyDetailFacility, len(config.PropertyDetail.Facilities))
+	for _, facility := range config.PropertyDetail.Facilities {
+		facility.Key = strings.TrimSpace(facility.Key)
+		facility.Label = strings.TrimSpace(facility.Label)
+		facility.Group = strings.TrimSpace(facility.Group)
+		if facility.Key == "" || facility.Key == "elevator" || facility.Key == "private_bathroom" || facility.Key == "balcony" {
+			continue
+		}
+		configuredFacilities[facility.Key] = facility
 	}
-	for index := range config.PropertyDetail.Facilities {
-		config.PropertyDetail.Facilities[index].Key = strings.TrimSpace(config.PropertyDetail.Facilities[index].Key)
-		config.PropertyDetail.Facilities[index].Label = strings.TrimSpace(config.PropertyDetail.Facilities[index].Label)
-		config.PropertyDetail.Facilities[index].Group = strings.TrimSpace(config.PropertyDetail.Facilities[index].Group)
+	normalizedFacilities := make([]PropertyDetailFacility, 0, len(defaults.Facilities)+len(configuredFacilities))
+	for _, facility := range defaults.Facilities {
+		if saved, exists := configuredFacilities[facility.Key]; exists {
+			facility.Enabled = saved.Enabled
+		}
+		normalizedFacilities = append(normalizedFacilities, facility)
+		delete(configuredFacilities, facility.Key)
 	}
+	for _, facility := range configuredFacilities {
+		normalizedFacilities = append(normalizedFacilities, facility)
+	}
+	config.PropertyDetail.Facilities = normalizedFacilities
 }
 
 var shareCardFieldLabels = map[string]string{

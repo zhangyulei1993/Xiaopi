@@ -111,21 +111,9 @@ const structureStep = ref<StructureStep>("");
 const showStructureSetup = ref(false);
 const ruleSaving = ref(false);
 const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
-const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]),
-  amenityOptions = [
-    "冰箱",
-    "洗衣机",
-    "空调",
-    "热水器",
-    "电视",
-    "宽带",
-    "燃气",
-    "油烟机",
-    "沙发",
-    "衣柜",
-    "书桌",
-    "床",
-  ];
+const defaultAmenityOptions = ["冰箱", "洗衣机", "空调", "热水器", "电视", "宽带", "燃气", "油烟机", "沙发", "衣柜", "书桌", "床"];
+const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]);
+const amenityOptions = ref([...defaultAmenityOptions]);
 const rentTypes = ["整租", "合租"],
   roomTypes = ["主卧", "次卧", "单间", "床位"],
   toilets = ["独卫", "非独卫"],
@@ -722,6 +710,14 @@ const loadProperty = async () => {
     loading.value = false;
   }
 };
+const loadFacilityCatalog = async () => {
+  const config = await getPublicConfig().catch(() => null);
+  const options = config?.propertyDetail?.facilities
+    ?.filter((facility) => facility.enabled)
+    .map((facility) => facility.label)
+    .filter(Boolean);
+  amenityOptions.value = options?.length ? Array.from(new Set(options)) : [...defaultAmenityOptions];
+};
 onLoad(async (query) => {
   if (!hasRole("admin")) {
     uni.showToast({ title: "暂无运营权限", icon: "none" });
@@ -729,7 +725,7 @@ onLoad(async (query) => {
     return;
   }
   id.value = String(query?.id || "");
-  await loadPresentation();
+  await Promise.all([loadPresentation(), loadFacilityCatalog()]);
   syncLayout();
   await loadChannels();
   await loadProperty();

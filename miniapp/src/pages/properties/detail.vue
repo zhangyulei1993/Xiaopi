@@ -22,13 +22,21 @@ const item = ref<Property | null>(null),
   loadFailed = ref(false),
   favorite = ref(false);
 const relatedRadiusKm = ref(3);
+const defaultDetailFacilities = [
+  { key: "refrigerator", label: "冰箱", group: "家具家电", enabled: true }, { key: "washer", label: "洗衣机", group: "家具家电", enabled: true },
+  { key: "air_conditioner", label: "空调", group: "家具家电", enabled: true }, { key: "water_heater", label: "热水器", group: "家具家电", enabled: true },
+  { key: "television", label: "电视", group: "家具家电", enabled: true }, { key: "broadband", label: "宽带", group: "家具家电", enabled: true },
+  { key: "gas", label: "燃气", group: "厨房", enabled: true }, { key: "hood", label: "油烟机", group: "厨房", enabled: true },
+  { key: "sofa", label: "沙发", group: "家具家电", enabled: true }, { key: "wardrobe", label: "衣柜", group: "家具家电", enabled: true },
+  { key: "desk", label: "书桌", group: "家具家电", enabled: true }, { key: "bed", label: "床", group: "家具家电", enabled: true },
+];
 const detailConfig = ref({
   modules: [
     { key: "overview", title: "房屋概况", enabled: true }, { key: "location", title: "位置与周边", enabled: true },
     { key: "facilities", title: "房屋设施与环境", enabled: true }, { key: "description", title: "房源描述", enabled: true }, { key: "nearby", title: "附近房源", enabled: true },
   ],
   nearby: { radiusKm: 3, relation: "distance", sort: "distance", limit: 4 },
-  facilities: [] as Array<{ key: string; label: string; group: string; enabled: boolean }>,
+  facilities: defaultDetailFacilities,
 });
 // Public detail labels use the same global set as public list cards.  An
 // operator sees exactly that content plus the doorplate when it is enabled
@@ -74,7 +82,7 @@ const load = async (id = "") => {
     detailConfig.value = {
       modules: config?.propertyDetail?.modules?.length ? config.propertyDetail.modules : detailConfig.value.modules,
       nearby: { ...detailConfig.value.nearby, ...(config?.propertyDetail?.nearby || {}) },
-      facilities: config?.propertyDetail?.facilities || [],
+      facilities: config?.propertyDetail?.facilities?.length ? config.propertyDetail.facilities : defaultDetailFacilities,
     };
     featuredChannels.value = config?.featuredChannels || [];
     customerDetailTagFields.value = config?.listingTitle?.customerDetailFields?.length
