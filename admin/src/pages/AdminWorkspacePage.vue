@@ -1303,19 +1303,15 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="detail-module-master-grid" aria-label="房源详情模块总控">
                   <article v-for="module in detailModuleOptions" :key="`module-master-${module.key}`" :class="{ active: detailSectionTab === module.key, disabled: !detailModule(module.key).enabled }" @click="selectDetailSectionTab(module.key)">
                     <span><b>{{ module.label }}</b><small>{{ module.helper }}</small></span>
-                    <el-switch :model-value="detailModule(module.key).enabled" active-text="启用" inactive-text="停用" @click.stop @update:model-value="toggleDetailModule(module.key, $event)" />
+                    <aside><em>{{ detailModule(module.key).enabled ? '已启用' : '已停用' }}</em><el-switch :model-value="detailModule(module.key).enabled" @click.stop @update:model-value="toggleDetailModule(module.key, $event)" /></aside>
                   </article>
                 </div>
               </section>
               <section v-if="configPage === 'propertyDetail' && detailConfigTab === 'detail'" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>房源详情模块</h2><p>这里配置录入和详情展示模块；标签规则统一在“小程序基础配置 → 房源标签规则”维护。</p></div><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">配置标签规则</el-button></div>
-                <div class="detail-section-tabs" role="tablist" aria-label="详情内容模块">
-                    <button v-for="section in detailModuleOptions" :key="section.key" type="button" :class="{ active: detailSectionTab === section.key, disabled: !detailModule(section.key).enabled }" @click="selectDetailSectionTab(section.key)">{{ section.label }}<small>{{ detailModule(section.key).enabled ? '已启用' : '已停用' }}</small></button>
-                  </div>
                   <div v-if="detailSectionTab === 'overview'" class="share-field-editor listing-title-editor">
                     <header><strong>顶部概况</strong><span>控制面积、朝向、楼内配置等附加字段的录入与展示。小区、户型、租金仍是发布房源的基础信息，会始终保留。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('overview').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>启用概况附加字段采集与展示</span><el-switch v-model="detailModule('overview').enabled" active-text="启用" inactive-text="停用" /></div>
                     <div class="layout-choice-row detail-layout-choice"><div><strong>详情标签排版</strong><small>仅改变标题下标签的视觉排列；管理员门牌仍单独显示，不混入公开标签。</small></div><el-radio-group v-model="publicConfig.listingTitle.detailTagLayout"><el-radio-button value="wrap">自动折行</el-radio-button><el-radio-button value="grouped">分组底板</el-radio-button></el-radio-group></div>
                     <div class="tag-arranger detail-tag-arranger"><header><strong>拖动详情标签</strong><span>拖到上/下行调整位置；同一行拖到标签前调整左右顺序。</span><button type="button" class="tag-arranger-preset" @click="applyRecommendedDetailTagArrangement">推荐排序</button></header><div class="tag-arranger-lanes"><section class="tag-arranger-lane" @dragover.prevent @drop.prevent="moveDetailTag('top')"><div class="tag-arranger-lane-title"><b>第一行</b><small>租赁身份</small></div><div class="tag-arranger-items"><button v-for="key in detailTopTagFields" :key="`detail-top-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveDetailTag('top', key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button><span v-if="!detailTopTagFields.length" class="tag-drop-empty">拖到这里</span></div></section><section class="tag-arranger-lane" @dragover.prevent @drop.prevent="moveDetailTag('bottom')"><div class="tag-arranger-lane-title"><b>第二行</b><small>房屋参数</small></div><div class="tag-arranger-items"><button v-for="key in detailBottomTagFields" :key="`detail-bottom-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveDetailTag('bottom', key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button><span v-if="!detailBottomTagFields.length" class="tag-drop-empty">拖到这里</span></div></section></div></div>
                     <div class="basic-config-note"><b>详情标签已由基础配置统一控制</b><span>客户详情可展示字段：{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">调整标签</el-button></div>
@@ -1323,22 +1319,18 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
                     <header><strong>位置与周边</strong><span>小区与地图坐标用于归属地区和附近房源关联，始终保留；本模块控制通勤等周边补充字段及详情展示。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('location').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>启用周边补充字段与详情展示</span><el-switch v-model="detailModule('location').enabled" active-text="启用" inactive-text="停用" /></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
                     <header><strong>设施与环境</strong><span>本页只控制该模块是否出现在录入页和详情页；设施的名称、分类、可勾选项统一由“小程序基础配置”维护。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('facilities').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>启用设施勾选与详情展示</span><el-switch v-model="detailModule('facilities').enabled" active-text="启用" inactive-text="停用" /></div>
                     <div class="basic-config-note"><b>当前设施库：{{ publicConfig.propertyDetail.facilities.filter(item => item.enabled).length }} 项已启用</b><span>进入“小程序基础配置 → 房屋设施库”后，点击整张设施卡即可调整录入和详情可用项。</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'facilities'">配置设施库</el-button></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'description'" class="share-field-editor listing-title-editor">
                     <header><strong>房源描述</strong><span>关闭后，录入页不再显示房源说明和入住规则输入；已有历史内容会保留，但不会展示。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('description').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>启用描述录入与详情展示</span><el-switch v-model="detailModule('description').enabled" active-text="启用" inactive-text="停用" /></div>
                   </div>
                   <div v-else class="share-field-editor listing-title-editor">
                     <header><strong>附近推荐房源</strong><span>这是纯展示模块，不增加录入项；仅推荐可租房源，并自动排除当前房源。</span></header>
-                    <div class="module-toggle-row"><span>客户详情展示附近推荐</span><el-switch v-model="detailModule('nearby').enabled" active-text="显示" inactive-text="隐藏" /></div>
                     <el-form label-position="top" class="basic-config-form detail-nearby-form"><el-form-item label="模块标题"><el-input v-model="detailModule('nearby').title" maxlength="12" /></el-form-item><el-form-item label="关联逻辑"><el-radio-group v-model="publicConfig.propertyDetail.nearby.relation"><el-radio value="distance">按地图距离</el-radio><el-radio value="channel">按精选频道</el-radio></el-radio-group></el-form-item><el-form-item label="关联范围"><el-select v-model="publicConfig.propertyDetail.nearby.radiusKm"><el-option v-for="value in [1, 3, 5, 10]" :key="value" :label="`${value} 公里`" :value="value" /></el-select></el-form-item><el-form-item label="排序方式"><el-radio-group v-model="publicConfig.propertyDetail.nearby.sort"><el-radio value="distance">距离优先</el-radio><el-radio value="newest">最新发布优先</el-radio></el-radio-group></el-form-item><el-form-item label="展示数量"><el-radio-group v-model="publicConfig.propertyDetail.nearby.limit"><el-radio v-for="value in [2, 4, 6]" :key="value" :value="value">{{ value }} 套</el-radio></el-radio-group></el-form-item></el-form>
                   </div>
               </section>
