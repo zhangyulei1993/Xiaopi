@@ -128,7 +128,12 @@ const normalizeDetailFacilities = (facilities: typeof defaultPropertyDetail exte
   const stored = new Map((facilities || []).filter(item => !['elevator', 'private_bathroom', 'balcony'].includes(item.key)).map(item => [item.key, item]))
   return facilityCatalog.filter(item => defaultFacilityKeys.has(item.key) || stored.has(item.key)).map(item => {
     const current = stored.get(item.key)
-    return { key: item.key, label: item.label, group: item.group, enabled: current?.enabled ?? true }
+    return {
+      key: item.key,
+      label: current?.label?.trim() || item.label,
+      group: current?.group?.trim() || item.group,
+      enabled: current?.enabled ?? true,
+    }
   })
 }
 const listingTitleFieldOptions = [
@@ -1045,10 +1050,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <div class="module-toggle-row"><span>客户详情展示位置与地图</span><el-switch v-model="detailModule('location').enabled" active-text="显示" inactive-text="隐藏" /></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
-                    <header><strong>设施与环境</strong><span>勾选后才会进入房源录入与客户详情。设施来自预置库；本轮不提供删除，取消勾选即可暂不使用。</span></header>
+                    <header><strong>设施与环境</strong><span>此处是管理员录入页与详情页共用的设施库：启用多少项，录入页就仅能勾选多少项。可修改名称与分类；取消启用不会删除历史房源数据。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('facilities').title" maxlength="12" /></el-form-item></el-form>
                     <div class="module-toggle-row"><span>客户详情展示设施与环境</span><el-switch v-model="detailModule('facilities').enabled" active-text="显示" inactive-text="隐藏" /></div>
-                    <div class="facility-config-list"><label v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key" class="facility-choice" :class="{ checked: facility.enabled }"><el-checkbox v-model="facility.enabled" /><i class="facility-option-icon">{{ detailFacilityIcon(facility.key) }}</i><span><strong>{{ facility.label }}</strong><small>{{ facility.group }}</small></span></label></div>
+                    <div class="facility-config-list"><label v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key" class="facility-choice facility-choice-editable" :class="{ checked: facility.enabled }"><el-checkbox v-model="facility.enabled" /><i class="facility-option-icon">{{ detailFacilityIcon(facility.key) }}</i><span><el-input v-model.trim="facility.label" maxlength="12" aria-label="设施名称" /><el-input v-model.trim="facility.group" maxlength="12" aria-label="设施分类" /></span></label></div>
                     <div class="facility-add-row"><span>添加预置设施</span><el-select v-model="facilityToAdd" placeholder="从预置列表选择" :disabled="!availableFacilityCatalog.length || publicConfig.propertyDetail.facilities.length >= 24" @change="addDetailFacility"><el-option v-for="facility in availableFacilityCatalog" :key="facility.key" :label="`${facility.label} · ${facility.group}`" :value="facility.key" /></el-select></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'description'" class="share-field-editor listing-title-editor">

@@ -272,6 +272,15 @@ func (config *PublicConfig) Normalize() {
 	for _, facility := range defaults.Facilities {
 		if saved, exists := configuredFacilities[facility.Key]; exists {
 			facility.Enabled = saved.Enabled
+			// The default catalogue provides a stable key and sensible fallback,
+			// but operations owns the label and category shown to publishers.
+			// Preserve those edits instead of silently reverting them on save.
+			if saved.Label != "" {
+				facility.Label = saved.Label
+			}
+			if saved.Group != "" {
+				facility.Group = saved.Group
+			}
 		}
 		normalizedFacilities = append(normalizedFacilities, facility)
 		delete(configuredFacilities, facility.Key)

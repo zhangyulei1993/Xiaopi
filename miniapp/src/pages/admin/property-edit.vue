@@ -114,6 +114,19 @@ const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, househ
 const defaultAmenityOptions = ["冰箱", "洗衣机", "空调", "热水器", "电视", "宽带", "燃气", "油烟机", "沙发", "衣柜", "书桌", "床"];
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]);
 const amenityOptions = ref([...defaultAmenityOptions]);
+const configuredDetailModules = ref<{ key: string; title: string; enabled: boolean }[]>([
+  { key: "overview", title: "房屋概况", enabled: true },
+  { key: "location", title: "位置与周边", enabled: true },
+  { key: "facilities", title: "房屋设施与环境", enabled: true },
+  { key: "description", title: "房源描述", enabled: true },
+  { key: "nearby", title: "附近房源", enabled: true },
+]);
+// Preserve data from an existing property when an operator temporarily turns a
+// module off. It is hidden from the entry form, not destructively erased.
+const preservedAmenities = ref<string[]>([]);
+const preservedDescription = ref("");
+const detailModuleEnabled = (key: string) =>
+  configuredDetailModules.value.find((module) => module.key === key)?.enabled !== false;
 const rentTypes = ["整租", "合租"],
   roomTypes = ["主卧", "次卧", "单间", "床位"],
   toilets = ["独卫", "非独卫"],
@@ -398,7 +411,7 @@ const sectionReady = computed(() => [
     geoReady.value,
   ),
   Boolean(form.layout?.trim()),
-  amenities.value.length > 0,
+  !detailModuleEnabled("facilities") || amenities.value.length > 0,
   Boolean(Number(form.rentMonthly) > 0 && form.depositPayment?.trim()),
   mediaCount.value > 0,
 ]);
@@ -698,8 +711,10 @@ const loadProperty = async () => {
     if (boundChannelIndex >= 0) selectedChannelIndex.value = boundChannelIndex;
     else if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
     const match = property.description.match(/^配套设施：([^\n]*)\n?/);
-    amenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
-    form.description = property.description.replace(/^配套设施：[^\n]*\n?/, "");
+    preservedAmenities.value = match?.[1] ? match[1].split("、").filter(Boolean) : [];
+    preservedDescription.value = property.description.replace(/^配套设施：[^\n]*\n?/, "");
+    amenities.value = detailModuleEnabled("facilities") ? [...preservedAmenities.value] : [];
+    form.description = detailModuleEnabled("description") ? preservedDescription.value : "";
     await loadBuildingRules();
   } catch (error) {
     uni.showToast({
@@ -712,11 +727,16 @@ const loadProperty = async () => {
 };
 const loadFacilityCatalog = async () => {
   const config = await getPublicConfig().catch(() => null);
+  if (config?.propertyDetail?.modules?.length) {
+    configuredDetailModules.value = config.propertyDetail.modules;
+  }
   const options = config?.propertyDetail?.facilities
     ?.filter((facility) => facility.enabled)
     .map((facility) => facility.label)
     .filter(Boolean);
-  amenityOptions.value = options?.length ? Array.from(new Set(options)) : [...defaultAmenityOptions];
+  amenityOptions.value = detailModuleEnabled("facilities")
+    ? (options?.length ? Array.from(new Set(options)) : [...defaultAmenityOptions])
+    : [];
 };
 onLoad(async (query) => {
   if (!hasRole("admin")) {
@@ -988,7 +1008,12 @@ const save = async (mode: SaveMode = "draft") => {
   saving.value = true;
   uploadProgress.value = "保存房源信息";
   try {
-    const details = String(form.description || "").trim();
+    const details = detailModuleEnabled("description")
+      ? String(form.description || "").trim()
+      : preservedDescription.value;
+    const selectedAmenities = detailModuleEnabled("facilities")
+      ? amenities.value
+      : preservedAmenities.value;
     // List tags are now global presentation rules from the admin backend.
     // Do not carry a legacy per-property displayTags value back into updates.
     const { displayTags: _legacyDisplayTags, ...propertyFields } = form;
@@ -1004,7 +1029,7 @@ const save = async (mode: SaveMode = "draft") => {
       buildingNo: buildingNo.value.trim(),
       unitNo: unitNo.value.trim(),
       roomNo: roomNo.value.trim(),
-      description: `配套设施：${amenities.value.join("、")}\n${details}`.trim(),
+      description: [selectedAmenities.length ? `配套设施：${selectedAmenities.join("、")}` : "", details].filter(Boolean).join("\n"),
     };
     const property = id.value
       ? await updateProperty({ ...payload, id: id.value })
@@ -1252,12 +1277,12 @@ const mediaUrl = resolveAssetUrl;
           ></view
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
-        ><view class="detail-grid"
-          ><view class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
+        ><view v-if="detailModuleEnabled('overview') || detailModuleEnabled('location')" class="detail-grid"
+          ><template v-if="detailModuleEnabled('overview')"><view class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
           ><view class="field auto-floor"><text>楼层</text><strong>{{ automaticFloorInfo || form.floorInfo || "选择门牌后自动生成" }}</strong></view
           ><view class="field"><text>朝向</text><input v-model.trim="form.orientation" maxlength="32" placeholder="如：南" /></view
-          ><view class="field option-field"><text>楼内配置</text><checkbox-group @change="toggleElevator"><label><checkbox value="elevator" :checked="form.elevator === '有电梯'" color="#40543f" />有电梯</label></checkbox-group></view
-          ><view class="field metro-field"><text>步行至地铁（分钟）</text><input v-model.number="form.metroMinutes" type="number" placeholder="如：8" /></view></view
+          ><view class="field option-field"><text>楼内配置</text><checkbox-group @change="toggleElevator"><label><checkbox value="elevator" :checked="form.elevator === '有电梯'" color="#40543f" />有电梯</label></checkbox-group></view></template
+          ><view v-if="detailModuleEnabled('location')" class="field metro-field"><text>步行至地铁（分钟）</text><input v-model.number="form.metroMinutes" type="number" placeholder="如：8" /></view></view
         ></view
       ><view v-show="activeSection === 2" class="section-card"
         ><view class="section-head"
@@ -1265,7 +1290,7 @@ const mediaUrl = resolveAssetUrl;
           ><view
             ><strong>配套与描述</strong></view
           ></view
-        ><checkbox-group
+        ><checkbox-group v-if="detailModuleEnabled('facilities')"
           class="amenity-grid"
           @change="amenities = $event.detail.value"
           ><label
@@ -1282,16 +1307,17 @@ const mediaUrl = resolveAssetUrl;
               mode="aspectFit"
             /><text>{{ option }}</text></label
           ></checkbox-group
-        ><view class="description">
+        ><view v-if="detailModuleEnabled('description')" class="description">
           <textarea
             v-model.trim="form.description"
             maxlength="800"
             placeholder="填写采光、楼层、朝向、入住要求、周边交通等信息"
           ></textarea
           ><text>{{ String(form.description || "").length }}/800</text></view
-        ><view class="field"
+        ><view v-if="detailModuleEnabled('description')" class="field"
           ><text>入住规则</text
           ><input v-model.trim="form.rulesText" maxlength="200" placeholder="如：可做饭，宠物需沟通，女生优先" /></view
+        ><view v-if="!detailModuleEnabled('facilities') && !detailModuleEnabled('description')" class="module-entry-disabled">当前后台未启用“设施与环境”或“房源描述”，此步无需填写。</view>
         ></view
       ><view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
@@ -2373,6 +2399,16 @@ const mediaUrl = resolveAssetUrl;
 }
 .save-actions button[disabled] {
   opacity: 0.5;
+}
+.module-entry-disabled {
+  padding: 34rpx 26rpx;
+  border: 1rpx dashed #cfddd3;
+  border-radius: 18rpx;
+  background: #f7faf6;
+  color: #738073;
+  font-size: 25rpx;
+  line-height: 1.55;
+  text-align: center;
 }
 .editor-page .page-presentation-head{margin-bottom:26rpx}.editor-hero{margin:8rpx -32rpx 0;padding-top:34rpx;padding-bottom:58rpx}.step-nav{margin-top:-30rpx;margin-bottom:28rpx}.section-card{margin-bottom:24rpx;padding:36rpx 30rpx 42rpx}.section-head{margin-bottom:22rpx}.field{margin-top:20rpx;padding:22rpx}.map-section-heading{margin-top:38rpx;margin-bottom:18rpx}
 .editor-hero view:first-child>text{font-size:40rpx;line-height:1.25}.step-item small{font-size:21rpx;line-height:1.25}.section-head strong{font-size:33rpx;line-height:1.3}.field>text{font-size:25rpx;line-height:1.25}.field input{font-size:28rpx;line-height:1.4}.map-section-heading strong{font-size:32rpx;line-height:1.3}.location-search-box input{font-size:27rpx}.channel-scope>text{font-size:25rpx}.channel-picker{padding:22rpx}.channel-picker strong{font-size:28rpx;line-height:1.3}.channel-picker small{margin-top:7rpx;line-height:1.45}.map-picker-footer{padding:20rpx 22rpx}.map-picker-footer small{margin-top:8rpx;line-height:1.5}.picker-item{min-height:116rpx}.picker-item strong{font-size:29rpx;line-height:1.25}.picker-item small{margin-top:7rpx;line-height:1.2}
