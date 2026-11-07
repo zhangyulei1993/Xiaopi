@@ -197,6 +197,15 @@ function moveDetailTag(targetKey?: string) {
   publicConfig.listingTitle.detailTagOrder = order
   draggingTag.value = ''
 }
+function applyRecommendedListTagArrangement() {
+  const preferred = ['rentType', 'listingSource', 'layout', 'fee', 'area', 'floor']
+  publicConfig.listingTitle.listTagOrder = arrangedFields(preferred, publicConfig.listingTitle.enabledFields)
+  publicConfig.listingTitle.listTagTopFields = ['rentType', 'listingSource'].filter(key => publicConfig.listingTitle.enabledFields.includes(key))
+}
+function applyRecommendedDetailTagArrangement() {
+  const preferred = ['listingSource', 'rentType', 'fee', 'layout', 'area', 'floor']
+  publicConfig.listingTitle.detailTagOrder = arrangedFields(preferred, publicConfig.listingTitle.customerDetailFields)
+}
 const previewTagExamples: Record<string, string> = { unit: '5栋3单元101室', floor: '18楼', layout: '两室一厅', rentType: '整租', listingSource: '直租', fee: '无中介费', area: '68㎡' }
 const previewListFields = computed(() => [
   ...publicConfig.listingTitle.enabledFields.filter(key => key !== 'community' && key !== 'unit'),
@@ -1207,7 +1216,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   </el-radio-group>
                 </div>
                 <div class="tag-arranger">
-                  <header><strong>拖动编排标签</strong><span>拖到上/下行调整上下位置；在同一行拖到标签前调整左右顺序。</span></header>
+                  <header><strong>拖动编排标签</strong><span>拖到上/下行调整上下位置；在同一行拖到标签前调整左右顺序。</span><button type="button" class="tag-arranger-preset" @click="applyRecommendedListTagArrangement">推荐排序</button></header>
                   <div class="tag-arranger-lanes">
                     <section class="tag-arranger-lane" @dragover.prevent @drop.prevent="moveTagToListRow('top')">
                       <div class="tag-arranger-lane-title"><b>第一行</b><small>主标签行</small></div>
@@ -1271,7 +1280,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('overview').title" maxlength="12" /></el-form-item></el-form>
                     <div class="module-toggle-row"><span>启用概况附加字段采集与展示</span><el-switch v-model="detailModule('overview').enabled" active-text="启用" inactive-text="停用" /></div>
                     <div class="layout-choice-row detail-layout-choice"><div><strong>详情标签排版</strong><small>仅改变标题下标签的视觉排列；管理员门牌仍单独显示，不混入公开标签。</small></div><el-radio-group v-model="publicConfig.listingTitle.detailTagLayout"><el-radio-button value="wrap">自动折行</el-radio-button><el-radio-button value="grouped">分组底板</el-radio-button></el-radio-group></div>
-                    <div class="tag-arranger detail-tag-arranger"><header><strong>拖动详情标签顺序</strong><span>拖到某个标签前即可调整左右顺序；空间不足时会按此顺序自动换行。</span></header><div class="tag-arranger-items" @dragover.prevent @drop.prevent="moveDetailTag()"><button v-for="key in detailOrderedTagFields" :key="`detail-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveDetailTag(key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button><span v-if="!detailOrderedTagFields.length" class="tag-drop-empty">基础配置中未开启可展示标签</span></div></div>
+                    <div class="tag-arranger detail-tag-arranger"><header><strong>拖动详情标签顺序</strong><span>拖到某个标签前即可调整左右顺序；空间不足时会按此顺序自动换行。</span><button type="button" class="tag-arranger-preset" @click="applyRecommendedDetailTagArrangement">推荐排序</button></header><div class="tag-arranger-items" @dragover.prevent @drop.prevent="moveDetailTag()"><button v-for="key in detailOrderedTagFields" :key="`detail-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveDetailTag(key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button><span v-if="!detailOrderedTagFields.length" class="tag-drop-empty">基础配置中未开启可展示标签</span></div></div>
                     <div class="basic-config-note"><b>详情标签已由基础配置统一控制</b><span>客户详情可展示字段：{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">调整标签</el-button></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
