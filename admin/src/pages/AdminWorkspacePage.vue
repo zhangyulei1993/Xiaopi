@@ -37,6 +37,13 @@ const tagMagnifierOpen = ref(false)
 type ConfigAudience = 'customer' | 'operator'
 type DetailConfigTab = 'detail' | 'share' | 'poster'
 type DetailSectionTab = 'overview' | 'location' | 'facilities' | 'description' | 'nearby'
+const detailModuleOptions: { key: DetailSectionTab; label: string; helper: string }[] = [
+  { key: 'overview', label: '顶部概况', helper: '面积、朝向、入住信息' },
+  { key: 'location', label: '位置与周边', helper: '位置、地图与通勤' },
+  { key: 'facilities', label: '设施与环境', helper: '设施勾选与环境条件' },
+  { key: 'description', label: '房源描述', helper: '描述与入住说明' },
+  { key: 'nearby', label: '附近推荐', helper: '同区域可租房源' },
+]
 const configAudience = ref<ConfigAudience>('customer')
 const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
@@ -56,6 +63,11 @@ function selectDetailSectionTab(value: DetailSectionTab) {
   detailConfigTab.value = 'detail'
   previewOverlay.value = 'page'
   window.requestAnimationFrame(() => document.querySelector(`[data-canvas-area="${value}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
+function toggleDetailModule(key: DetailSectionTab, enabled: boolean) {
+  const module = detailModule(key)
+  module.enabled = enabled
+  selectDetailSectionTab(key)
 }
 function selectBasicConfigTab(value: BasicConfigTab) {
   basicConfigTab.value = value
@@ -1277,7 +1289,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="listing-title-preview"><span>当前客户展示标签</span><strong>{{ publicConfig.listingTitle.enabledFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                 </div>
               </section>
-              <section v-if="configAudience === 'customer' && configPage === 'propertyDetail'" class="surface detail-config-workspace" aria-label="房源详情配置工作区">
+              <section v-if="configPage === 'propertyDetail'" class="surface detail-config-workspace" aria-label="房源详情配置工作区">
                 <span>配置对象</span>
                 <div class="detail-config-tabs" role="tablist" aria-label="房源详情配置选项卡">
                   <button type="button" :class="{ active: detailConfigTab === 'detail' }" role="tab" :aria-selected="detailConfigTab === 'detail'" @click="selectDetailConfigTab('detail')">房源详情</button>
@@ -1287,13 +1299,18 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <el-select v-model="previewSelectedPropertyID" class="detail-preview-property" placeholder="选择真实房源">
                   <el-option v-for="property in previewPropertyOptions" :key="property.id" :label="`${property.community || property.title} · ¥${property.rentMonthly || 0}/月`" :value="property.id" />
                 </el-select>
-                <small>切换后仅编辑当前效果，右侧小程序画布会同步预览。</small>
+                <small>模块开关会同步影响管理员录入项、客户详情页与右侧画布；关闭只隐藏录入与展示，不删除已有房源数据。</small>
+                <div class="detail-module-master-grid" aria-label="房源详情模块总控">
+                  <article v-for="module in detailModuleOptions" :key="`module-master-${module.key}`" :class="{ active: detailSectionTab === module.key, disabled: !detailModule(module.key).enabled }" @click="selectDetailSectionTab(module.key)">
+                    <span><b>{{ module.label }}</b><small>{{ module.helper }}</small></span>
+                    <el-switch :model-value="detailModule(module.key).enabled" active-text="启用" inactive-text="停用" @click.stop @update:model-value="toggleDetailModule(module.key, $event)" />
+                  </article>
+                </div>
               </section>
-              <section v-if="configPage === 'propertyDetail' && (configAudience === 'operator' || detailConfigTab === 'detail')" class="surface form-section config-section share-card-config">
+              <section v-if="configPage === 'propertyDetail' && detailConfigTab === 'detail'" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>房源详情模块</h2><p>这里配置录入和详情展示模块；标签规则统一在“小程序基础配置 → 房源标签规则”维护。</p></div><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">配置标签规则</el-button></div>
-                <template v-if="configAudience === 'customer'">
-                  <div class="detail-section-tabs" role="tablist" aria-label="详情内容模块">
-                    <button v-for="section in [{ key: 'overview', label: '顶部概况' }, { key: 'location', label: '位置与周边' }, { key: 'facilities', label: '设施与环境' }, { key: 'description', label: '房源描述' }, { key: 'nearby', label: '附近推荐' }]" :key="section.key" type="button" :class="{ active: detailSectionTab === section.key }" @click="selectDetailSectionTab(section.key as DetailSectionTab)">{{ section.label }}</button>
+                <div class="detail-section-tabs" role="tablist" aria-label="详情内容模块">
+                    <button v-for="section in detailModuleOptions" :key="section.key" type="button" :class="{ active: detailSectionTab === section.key, disabled: !detailModule(section.key).enabled }" @click="selectDetailSectionTab(section.key)">{{ section.label }}<small>{{ detailModule(section.key).enabled ? '已启用' : '已停用' }}</small></button>
                   </div>
                   <div v-if="detailSectionTab === 'overview'" class="share-field-editor listing-title-editor">
                     <header><strong>顶部概况</strong><span>控制面积、朝向、楼内配置等附加字段的录入与展示。小区、户型、租金仍是发布房源的基础信息，会始终保留。</span></header>
@@ -1324,9 +1341,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <div class="module-toggle-row"><span>客户详情展示附近推荐</span><el-switch v-model="detailModule('nearby').enabled" active-text="显示" inactive-text="隐藏" /></div>
                     <el-form label-position="top" class="basic-config-form detail-nearby-form"><el-form-item label="模块标题"><el-input v-model="detailModule('nearby').title" maxlength="12" /></el-form-item><el-form-item label="关联逻辑"><el-radio-group v-model="publicConfig.propertyDetail.nearby.relation"><el-radio value="distance">按地图距离</el-radio><el-radio value="channel">按精选频道</el-radio></el-radio-group></el-form-item><el-form-item label="关联范围"><el-select v-model="publicConfig.propertyDetail.nearby.radiusKm"><el-option v-for="value in [1, 3, 5, 10]" :key="value" :label="`${value} 公里`" :value="value" /></el-select></el-form-item><el-form-item label="排序方式"><el-radio-group v-model="publicConfig.propertyDetail.nearby.sort"><el-radio value="distance">距离优先</el-radio><el-radio value="newest">最新发布优先</el-radio></el-radio-group></el-form-item><el-form-item label="展示数量"><el-radio-group v-model="publicConfig.propertyDetail.nearby.limit"><el-radio v-for="value in [2, 4, 6]" :key="value" :value="value">{{ value }} 套</el-radio></el-radio-group></el-form-item></el-form>
                   </div>
-                </template>
-                <div v-else class="listing-title-preview"><span>客户详情当前标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
-                <div v-if="configAudience === 'operator'" class="listing-title-preview"><span>管理员详情附加信息</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '额外显示门牌' : '不额外显示门牌' }}</strong></div>
               </section>
               <section v-if="configAudience === 'customer' && configPage === 'propertyDetail' && detailConfigTab === 'share'" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>03</span><div><h2>微信分享卡</h2><p>好友分享不区分角色，统一采用客户公开标签；右侧画布显示聊天中的实际卡片效果。</p></div></div>

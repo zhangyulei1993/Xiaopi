@@ -11,6 +11,7 @@ import { ElOption, ElSelect } from 'element-plus/es/components/select/index.mjs'
 import { ElPopconfirm } from 'element-plus/es/components/popconfirm/index.mjs'
 import { ElTable, ElTableColumn } from 'element-plus/es/components/table/index.mjs'
 import { ElTag } from 'element-plus/es/components/tag/index.mjs'
+import { ElSwitch } from 'element-plus/es/components/switch/index.mjs'
 import 'element-plus/es/components/alert/style/css'
 import 'element-plus/es/components/avatar/style/css'
 import 'element-plus/es/components/button/style/css'
@@ -23,6 +24,7 @@ import 'element-plus/es/components/menu/style/css'
 import 'element-plus/es/components/option/style/css'
 import 'element-plus/es/components/popconfirm/style/css'
 import 'element-plus/es/components/select/style/css'
+import 'element-plus/es/components/switch/style/css'
 import 'element-plus/es/components/table/style/css'
 import 'element-plus/es/components/tag/style/css'
 import { createApp } from 'vue'
@@ -35,7 +37,7 @@ import './style.css'
 // before installation leaves hash-history navigation pending and renders a
 // blank page on a fresh visit.
 const app = createApp(App)
-for (const component of [ElAlert, ElAvatar, ElButton, ElEmpty, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMenu, ElMenuItem, ElMenuItemGroup, ElOption, ElPopconfirm, ElSelect, ElTable, ElTableColumn, ElTag]) {
+for (const component of [ElAlert, ElAvatar, ElButton, ElEmpty, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMenu, ElMenuItem, ElMenuItemGroup, ElOption, ElPopconfirm, ElSelect, ElSwitch, ElTable, ElTableColumn, ElTag]) {
   app.component(component.name!, component)
 }
 app.use(router).mount('#app')
