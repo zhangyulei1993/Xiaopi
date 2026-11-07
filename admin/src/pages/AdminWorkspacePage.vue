@@ -1037,32 +1037,32 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <button v-for="section in [{ key: 'overview', label: '顶部概况' }, { key: 'location', label: '位置与周边' }, { key: 'facilities', label: '设施与环境' }, { key: 'description', label: '房源描述' }, { key: 'nearby', label: '附近推荐' }]" :key="section.key" type="button" :class="{ active: detailSectionTab === section.key }" @click="selectDetailSectionTab(section.key as DetailSectionTab)">{{ section.label }}</button>
                   </div>
                   <div v-if="detailSectionTab === 'overview'" class="share-field-editor listing-title-editor">
-                    <header><strong>顶部概况</strong><span>对应详情页价格、主标题、地址、标签和房屋参数区域；以下设置与右侧画布实时同步。</span></header>
+                    <header><strong>顶部概况</strong><span>控制面积、朝向、楼内配置等附加字段的录入与展示。小区、户型、租金仍是发布房源的基础信息，会始终保留。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('overview').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>客户详情展示顶部概况</span><el-switch v-model="detailModule('overview').enabled" active-text="显示" inactive-text="隐藏" /></div>
+                    <div class="module-toggle-row"><span>启用概况附加字段采集与展示</span><el-switch v-model="detailModule('overview').enabled" active-text="启用" inactive-text="停用" /></div>
                     <header class="detail-subheading"><strong>客户详情展示标签</strong><span>与客户列表独立配置，但都只能使用非客户视角开放的标签列。</span></header>
                     <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`customer-detail-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community' || !publicConfig.listingTitle.customerAllowedFields.includes(field.key)" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key)" @click="toggleCustomerDetailField(field.key, !publicConfig.listingTitle.customerDetailFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
                     <div class="listing-title-preview"><span>当前客户详情标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
-                    <header><strong>位置与周边</strong><span>位置坐标仍由房源录入时确定；这里可编辑模块标题并决定是否在客户详情中展示。</span></header>
+                    <header><strong>位置与周边</strong><span>小区与地图坐标用于归属地区和附近房源关联，始终保留；本模块控制通勤等周边补充字段及详情展示。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('location').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>客户详情展示位置与地图</span><el-switch v-model="detailModule('location').enabled" active-text="显示" inactive-text="隐藏" /></div>
+                    <div class="module-toggle-row"><span>启用周边补充字段与详情展示</span><el-switch v-model="detailModule('location').enabled" active-text="启用" inactive-text="停用" /></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
                     <header><strong>设施与环境</strong><span>此处是管理员录入页与详情页共用的设施库：启用多少项，录入页就仅能勾选多少项。可修改名称与分类；取消启用不会删除历史房源数据。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('facilities').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>客户详情展示设施与环境</span><el-switch v-model="detailModule('facilities').enabled" active-text="显示" inactive-text="隐藏" /></div>
+                    <div class="module-toggle-row"><span>启用设施勾选与详情展示</span><el-switch v-model="detailModule('facilities').enabled" active-text="启用" inactive-text="停用" /></div>
                     <div class="facility-config-list"><label v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key" class="facility-choice facility-choice-editable" :class="{ checked: facility.enabled }"><el-checkbox v-model="facility.enabled" /><i class="facility-option-icon">{{ detailFacilityIcon(facility.key) }}</i><span><el-input v-model.trim="facility.label" maxlength="12" aria-label="设施名称" /><el-input v-model.trim="facility.group" maxlength="12" aria-label="设施分类" /></span></label></div>
                     <div class="facility-add-row"><span>添加预置设施</span><el-select v-model="facilityToAdd" placeholder="从预置列表选择" :disabled="!availableFacilityCatalog.length || publicConfig.propertyDetail.facilities.length >= 24" @change="addDetailFacility"><el-option v-for="facility in availableFacilityCatalog" :key="facility.key" :label="`${facility.label} · ${facility.group}`" :value="facility.key" /></el-select></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'description'" class="share-field-editor listing-title-editor">
-                    <header><strong>房源描述</strong><span>发布者填写的房源说明；未填写内容时客户页自动展示“暂无描述”。</span></header>
+                    <header><strong>房源描述</strong><span>关闭后，录入页不再显示房源说明和入住规则输入；已有历史内容会保留，但不会展示。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('description').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="module-toggle-row"><span>客户详情展示房源描述</span><el-switch v-model="detailModule('description').enabled" active-text="显示" inactive-text="隐藏" /></div>
+                    <div class="module-toggle-row"><span>启用描述录入与详情展示</span><el-switch v-model="detailModule('description').enabled" active-text="启用" inactive-text="停用" /></div>
                   </div>
                   <div v-else class="share-field-editor listing-title-editor">
-                    <header><strong>附近推荐房源</strong><span>仅推荐可租房源，自动排除当前房源；优先按房源坐标进行匹配。</span></header>
+                    <header><strong>附近推荐房源</strong><span>这是纯展示模块，不增加录入项；仅推荐可租房源，并自动排除当前房源。</span></header>
                     <div class="module-toggle-row"><span>客户详情展示附近推荐</span><el-switch v-model="detailModule('nearby').enabled" active-text="显示" inactive-text="隐藏" /></div>
                     <el-form label-position="top" class="basic-config-form detail-nearby-form"><el-form-item label="模块标题"><el-input v-model="detailModule('nearby').title" maxlength="12" /></el-form-item><el-form-item label="关联逻辑"><el-radio-group v-model="publicConfig.propertyDetail.nearby.relation"><el-radio value="distance">按地图距离</el-radio><el-radio value="channel">按精选频道</el-radio></el-radio-group></el-form-item><el-form-item label="关联范围"><el-select v-model="publicConfig.propertyDetail.nearby.radiusKm"><el-option v-for="value in [1, 3, 5, 10]" :key="value" :label="`${value} 公里`" :value="value" /></el-select></el-form-item><el-form-item label="排序方式"><el-radio-group v-model="publicConfig.propertyDetail.nearby.sort"><el-radio value="distance">距离优先</el-radio><el-radio value="newest">最新发布优先</el-radio></el-radio-group></el-form-item><el-form-item label="展示数量"><el-radio-group v-model="publicConfig.propertyDetail.nearby.limit"><el-radio v-for="value in [2, 4, 6]" :key="value" :value="value">{{ value }} 套</el-radio></el-radio-group></el-form-item></el-form>
                   </div>
