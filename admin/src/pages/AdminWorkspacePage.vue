@@ -988,7 +988,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <div class="listing-title-preview"><span>当前客户详情标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
-                    <header><strong>位置与周边</strong><span>位置坐标仍由房源录入时确定；这里控制客户详情页的模块标题与地图入口。</span></header>
+                    <header><strong>位置与周边</strong><span>位置坐标仍由房源录入时确定；这里仅控制客户详情页的模块标题与显示开关。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('location').title" maxlength="12" /></el-form-item><el-form-item label="展示方式"><el-radio-group v-model="detailModule('location').enabled"><el-radio :value="true">显示位置与地图</el-radio><el-radio :value="false">隐藏整个模块</el-radio></el-radio-group></el-form-item></el-form>
                   </div>
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
