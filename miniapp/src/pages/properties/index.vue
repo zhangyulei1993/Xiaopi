@@ -161,7 +161,10 @@ const load = async () => {
     properties.value = items;
     configuredLocations.value = config?.locations || [];
     configuredChannels.value = config?.featuredChannels || [];
-    listingTitleFields.value = config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : listingTitleFields.value;
+    // [] is an explicit configuration: do not restore hidden public labels.
+    if (Array.isArray(config?.listingTitle?.enabledFields)) {
+      listingTitleFields.value = config!.listingTitle!.enabledFields!;
+    }
     adminDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")

@@ -219,23 +219,25 @@ func (config *PublicConfig) Normalize() {
 	if len(config.ShareCard.PosterFields) == 0 {
 		config.ShareCard.PosterFields = append([]string(nil), DefaultPublicConfig().ShareCard.PosterFields...)
 	}
-	if len(config.ListingTitle.EnabledFields) == 0 {
+	// An omitted legacy field is nil. An explicit [] means operations has
+	// intentionally hidden all optional public tags, and must stay empty.
+	if config.ListingTitle.EnabledFields == nil {
 		config.ListingTitle.EnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.EnabledFields...)
 	}
-	if len(config.ListingTitle.CustomerDetailFields) == 0 {
+	if config.ListingTitle.CustomerDetailFields == nil {
 		// Legacy configurations had one public tag list; preserve that result
 		// as the initial detail setting until operations changes it explicitly.
 		config.ListingTitle.CustomerDetailFields = append([]string(nil), config.ListingTitle.EnabledFields...)
 	}
-	if len(config.ListingTitle.CustomerShareFields) == 0 {
+	if config.ListingTitle.CustomerShareFields == nil {
 		// Older configurations shared the list labels with share surfaces.
 		config.ListingTitle.CustomerShareFields = append([]string(nil), config.ListingTitle.EnabledFields...)
 	}
-	if len(config.ListingTitle.CustomerPosterFields) == 0 {
+	if config.ListingTitle.CustomerPosterFields == nil {
 		// A legacy share setting becomes the starting point for Moments.
 		config.ListingTitle.CustomerPosterFields = append([]string(nil), config.ListingTitle.CustomerShareFields...)
 	}
-	if len(config.ListingTitle.CustomerAllowedFields) == 0 {
+	if config.ListingTitle.CustomerAllowedFields == nil {
 		config.ListingTitle.CustomerAllowedFields = append([]string(nil), DefaultPublicConfig().ListingTitle.CustomerAllowedFields...)
 	}
 	// Historical configurations held a full administrator tag set. The public

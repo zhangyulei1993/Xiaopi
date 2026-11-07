@@ -58,6 +58,7 @@ const playingVideoIndex = ref(-1);
 const videoDimensions = ref<Record<number, { width: number; height: number }>>({});
 const mapExpanded = ref(false);
 const shareCardImage = ref("");
+const timelinePosterImage = ref("");
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "propertyDetail",
   "房源详情",
@@ -88,14 +89,17 @@ const load = async (id = "") => {
       facilities: config?.propertyDetail?.facilities?.length ? config.propertyDetail.facilities : defaultDetailFacilities,
     };
     featuredChannels.value = config?.featuredChannels || [];
-    customerDetailTagFields.value = config?.listingTitle?.customerDetailFields?.length
-      ? config.listingTitle.customerDetailFields
-      : (config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : ["community", "layout", "rentType", "fee"]);
-    customerShareTagFields.value = config?.listingTitle?.customerShareFields?.length
-      ? config.listingTitle.customerShareFields
+    const publicFields = Array.isArray(config?.listingTitle?.enabledFields)
+      ? config!.listingTitle!.enabledFields!
+      : ["community", "layout", "rentType", "fee"];
+    customerDetailTagFields.value = Array.isArray(config?.listingTitle?.customerDetailFields)
+      ? config!.listingTitle!.customerDetailFields!
+      : publicFields;
+    customerShareTagFields.value = Array.isArray(config?.listingTitle?.customerShareFields)
+      ? config!.listingTitle!.customerShareFields!
       : customerDetailTagFields.value;
-    customerPosterTagFields.value = config?.listingTitle?.customerPosterFields?.length
-      ? config.listingTitle.customerPosterFields
+    customerPosterTagFields.value = Array.isArray(config?.listingTitle?.customerPosterFields)
+      ? config!.listingTitle!.customerPosterFields!
       : customerShareTagFields.value;
     operatorDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     shareCardConfig.value = {
@@ -271,12 +275,15 @@ const generateShareCard = async () => {
     context.setFillStyle("#ffffff");
     context.fillRect(0, 0, width, height);
     context.drawImage(info.path, sx, sy, sw, sh, 0, 0, width, imageHeight);
-    const posterKeys = shareCardConfig.value.posterFields.filter((key) => isPublicShareField(key, "poster"));
-    const rentEnabled = posterKeys.includes("rentMonthly");
+    // Friends and Moments deliberately use separate public-label sets.
+    const shareKeys = ["rentMonthly", ...customerShareTagFields.value]
+      .filter((key, index, values) => key !== "community" && values.indexOf(key) === index)
+      .filter((key) => isPublicShareField(key));
+    const rentEnabled = shareKeys.includes("rentMonthly");
     context.setFillStyle(rentEnabled ? "#d85f42" : "#26372c");
     context.setFontSize(32);
     context.fillText(compactText(rentEnabled ? shareFieldValue(current, "rentMonthly") : posterTitle.value, 24), 24, 324);
-    const secondaryKey = posterKeys.find((key) => key !== "rentMonthly");
+    const secondaryKey = shareKeys.find((key) => key !== "rentMonthly");
     if (rentEnabled && secondaryKey) {
       context.setFillStyle("#7b8579");
       context.setFontSize(18);
@@ -285,7 +292,7 @@ const generateShareCard = async () => {
     context.setFillStyle("#26372c");
     context.setFontSize(27);
     context.fillText(compactText(posterTitle.value, 19), 24, 366);
-    const detailKeys = posterKeys.filter((key) => key !== "rentMonthly" && key !== secondaryKey).slice(0, 3);
+    const detailKeys = shareKeys.filter((key) => key !== "rentMonthly" && key !== secondaryKey).slice(0, 3);
     const columns = detailKeys.map((key) => [shareFieldMeta[key]?.label || "信息", shareFieldValue(current, key)]);
     columns.forEach(([label, value], index) => {
       const x = 24 + index * 192;
@@ -311,8 +318,42 @@ const generateShareCard = async () => {
       }),
     );
     shareCardImage.value = result.tempFilePath;
+
+    const posterWidth = 750, posterHeight = 1120, posterCoverHeight = 570;
+    const poster = uni.createCanvasContext("timeline-poster-canvas");
+    poster.setFillStyle("#f6f4ee");
+    poster.fillRect(0, 0, posterWidth, posterHeight);
+    poster.drawImage(info.path, sx, sy, sw, sh, 0, 0, posterWidth, posterCoverHeight);
+    poster.setFillStyle("#ffffff");
+    poster.fillRect(28, 520, posterWidth - 56, 520);
+    const posterKeys = shareCardConfig.value.posterFields.filter((key) => isPublicShareField(key, "poster"));
+    const posterRentEnabled = posterKeys.includes("rentMonthly");
+    poster.setFillStyle(posterRentEnabled ? "#d85f42" : "#26372c");
+    poster.setFontSize(42);
+    poster.fillText(compactText(posterRentEnabled ? shareFieldValue(current, "rentMonthly") : posterTitle.value, 18), 60, 650);
+    poster.setFillStyle("#26372c");
+    poster.setFontSize(32);
+    poster.fillText(compactText(posterTitle.value, 18), 60, 716);
+    posterKeys.filter((key) => key !== "rentMonthly").slice(0, 3).forEach((key, index) => {
+      const x = 60 + index * 215;
+      poster.setFillStyle("#8b9488");
+      poster.setFontSize(20);
+      poster.fillText(shareFieldMeta[key]?.label || "信息", x, 790);
+      poster.setFillStyle("#26372c");
+      poster.setFontSize(25);
+      poster.fillText(compactText(shareFieldValue(current, key), 8), x, 830);
+    });
+    poster.setFillStyle("#40543f");
+    poster.setFontSize(24);
+    poster.fillText(`${brandName.value} · 扫码查看房源详情`, 60, 970);
+    await new Promise<void>((resolve) => poster.draw(false, resolve));
+    const posterResult = await new Promise<UniApp.CanvasToTempFilePathRes>((resolve, reject) =>
+      uni.canvasToTempFilePath({ canvasId: "timeline-poster-canvas", width: posterWidth, height: posterHeight, destWidth: 1500, destHeight: 2240, fileType: "jpg", quality: 0.92, success: resolve, fail: reject }),
+    );
+    timelinePosterImage.value = posterResult.tempFilePath;
   } catch {
     shareCardImage.value = "";
+    timelinePosterImage.value = "";
   }
 };
 const propertyMessagePath = computed(
@@ -336,10 +377,19 @@ const friendSharePayload = () => {
 const timelineSharePayload = () => ({
   title: posterTitle.value,
   query: `id=${encodeURIComponent(item.value?.id || "")}`,
-  imageUrl: shareImageUrl.value,
+  imageUrl: timelinePosterImage.value || shareImageUrl.value,
 });
 onShareAppMessage(() => friendSharePayload());
 onShareTimeline(() => timelineSharePayload());
+const shareToTimeline = async () => {
+  if (!timelinePosterImage.value) await generateShareCard();
+  if (timelinePosterImage.value && typeof uni.showShareImageMenu === "function") {
+    uni.showShareImageMenu({ path: timelinePosterImage.value });
+    return;
+  }
+  if (timelinePosterImage.value) uni.previewImage({ current: timelinePosterImage.value, urls: [timelinePosterImage.value] });
+  uni.showToast({ title: "长按保存海报，或点右上角分享到朋友圈", icon: "none" });
+};
 const handleMediaChange = (event: { detail: { current: number } }) => {
   activeMediaIndex.value = event.detail.current;
   playingVideoIndex.value = -1;
@@ -573,6 +623,7 @@ const phoneCustomerService = () =>
     >房源加载失败，请返回重试</view
   ><view v-else-if="item" class="page detail-page" :style="pageStyle">
     <canvas canvas-id="share-card-canvas" class="share-card-canvas" :width="600" :height="480"></canvas>
+    <canvas canvas-id="timeline-poster-canvas" class="share-card-canvas" :width="750" :height="1120"></canvas>
     <view class="detail-page-head"><view>{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
       ><text class="detail-cover-icon">⌂</text><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
@@ -697,12 +748,12 @@ const phoneCustomerService = () =>
       ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>附近暂时没有其他可租房源</strong><text>可以继续查看其他地区的新房源</text><button @click="openAllProperties">查看全部房源</button></view
       ><view v-else class="nearby-more" @click="openAllProperties">查看更多房源 <text>›</text></view></view
     ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
-      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status === 'offline' }"><button v-if="item.status !== 'offline'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享房源</text></button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
+      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status === 'offline' }"><button v-if="item.status !== 'offline'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button v-if="item.status !== 'offline'" class="admin-timeline-primary" @click="shareToTimeline">朋友圈</button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="service-persona"><view class="service-persona-avatar">皮</view><view><strong>{{ brandName }}客服</strong></view></view
-      ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享</text></button
+      ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button class="user-timeline" @click="shareToTimeline"><text>朋友圈</text></button
       ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
     ></view
@@ -997,13 +1048,14 @@ const phoneCustomerService = () =>
 .media-thumb{position:relative}.media-thumb small{position:absolute;right:5rpx;bottom:4rpx;max-width:90%;overflow:hidden;padding:3rpx 5rpx;border-radius:6rpx;background:rgba(25,37,27,.64);color:#fff;font-size:16rpx;line-height:1;text-overflow:ellipsis;white-space:nowrap}.service-card{box-sizing:border-box;display:flex;width:100%;align-items:center;gap:16rpx;margin-right:0;margin-left:0;padding:22rpx 24rpx;border:1rpx solid #e6eadb;background:#fbfcf7;text-align:left;line-height:1.3}.service-card::after{border:0}.service-card:active{background:#f1f4ed;transform:scale(.99)}.service-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:50%;background:#40543f;color:#fff;font-size:30rpx;font-weight:800}.service-copy{min-width:0;flex:1}.service-copy strong,.service-copy text{display:block}.service-copy strong{color:#33452f;font-size:26rpx}.service-copy text{overflow:hidden;margin-top:5rpx;color:#7b8579;font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.service-status{display:flex;flex:none;align-items:center;gap:5rpx;color:#5d744d;font-size:20rpx;font-weight:700}.service-status text{font-size:28rpx;line-height:1}
 /* Admin detail actions: lifecycle decisions are prominent; tools stay quiet and separate. */
 .admin-detail-bar { position:fixed; z-index:6; right:0; bottom:0; left:0; padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
-.admin-detail-lead { display:grid; grid-template-columns:minmax(0,1fr) 180rpx; gap:12rpx; }
+.admin-detail-lead { display:grid; grid-template-columns:minmax(0,1fr) 152rpx 180rpx; gap:12rpx; }
 .admin-detail-lead.share-disabled { grid-template-columns:1fr; }
-.admin-share-primary,.admin-edit-primary { box-sizing:border-box; display:flex; min-width:0; min-height:82rpx; align-items:center; justify-content:center; gap:10rpx; margin:0; padding:0 18rpx; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:1; }
+.admin-share-primary,.admin-timeline-primary,.admin-edit-primary { box-sizing:border-box; display:flex; min-width:0; min-height:82rpx; align-items:center; justify-content:center; gap:10rpx; margin:0; padding:0 18rpx; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:1; }
 .admin-share-primary { border:1rpx solid #40543f; background:#40543f; color:#fff; }
+.admin-timeline-primary { border:1rpx solid #d9e0d4; background:#f1f4ed; color:#4e6048; }
 .admin-share-primary image { width:29rpx; height:29rpx; filter:brightness(0) invert(1); }
 .admin-edit-primary { border:1rpx solid #d9e0d4; background:#f1f4ed; color:#4e6048; }
-.admin-share-primary::after,.admin-edit-primary::after { border:0; }
+.admin-share-primary::after,.admin-timeline-primary::after,.admin-edit-primary::after { border:0; }
 .admin-detail-main { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:10rpx; margin-top:10rpx; }
 .admin-detail-primary { min-width:0; margin:0; padding:0 16rpx; border:1rpx solid transparent; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:82rpx; }
 .admin-detail-primary::after,.admin-detail-tool::after { border:0; }
@@ -1013,14 +1065,15 @@ const phoneCustomerService = () =>
 .admin-detail-tool { position:relative; min-width:0; margin:0; padding:4rpx 22rpx; border:0; border-radius:0; background:transparent; color:#687464; font-size:20rpx; line-height:1.3; }
 .admin-detail-tool + .admin-detail-tool::before { position:absolute; top:8rpx; bottom:8rpx; left:0; width:1rpx; background:#e0e4dc; content:""; }
 .admin-detail-tool.delete { color:#b96d57; }
-.admin-share-primary:active,.admin-edit-primary:active,.admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
+.admin-share-primary:active,.admin-timeline-primary:active,.admin-edit-primary:active,.admin-detail-primary:active,.admin-detail-tool:active { opacity:.78; transform:scale(.985); }
 
 /* Tenant detail actions: identify the service first, then expose the three direct actions. */
-.user-action-bar { display:grid; grid-template-columns:minmax(168rpx,1.2fr) 88rpx minmax(142rpx,1fr) minmax(132rpx,.92fr); gap:10rpx; align-items:center; padding:14rpx 22rpx calc(14rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
+.user-action-bar { display:grid; grid-template-columns:minmax(130rpx,1fr) 80rpx 80rpx minmax(126rpx,.92fr) minmax(112rpx,.8fr); gap:8rpx; align-items:center; padding:14rpx 18rpx calc(14rpx + env(safe-area-inset-bottom)); border-top:1rpx solid #e7e9e2; background:rgba(255,255,255,.98); box-shadow:0 -10rpx 28rpx rgba(45,55,43,.08); }
 .service-persona{display:flex;min-width:0;align-items:center;gap:11rpx}.service-persona-avatar{display:grid;width:62rpx;height:62rpx;flex:none;place-items:center;border-radius:18rpx;background:#40543f;color:#fff;font-size:28rpx;font-weight:800}.service-persona>view:last-child{min-width:0}.service-persona strong,.service-persona small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.service-persona strong{color:#29382d;font-size:23rpx;line-height:1.25}.service-persona small{margin-top:5rpx;color:#8a9287;font-size:18rpx;line-height:1.2}
-.user-share,.user-contact,.user-phone { box-sizing:border-box; display:flex; min-width:0; min-height:76rpx; align-items:center; justify-content:center; margin:0; padding:0; border:0; border-radius:17rpx; line-height:1; }
-.user-share::after,.user-contact::after,.user-phone::after { border:0; }
+.user-share,.user-timeline,.user-contact,.user-phone { box-sizing:border-box; display:flex; min-width:0; min-height:76rpx; align-items:center; justify-content:center; margin:0; padding:0; border:0; border-radius:17rpx; line-height:1; }
+.user-share::after,.user-timeline::after,.user-contact::after,.user-phone::after { border:0; }
 .user-share{flex-direction:column;gap:4rpx;background:transparent;color:#40543f}.user-share image{width:31rpx;height:31rpx}.user-share text{font-size:19rpx;font-weight:700;white-space:nowrap}
+.user-timeline{background:transparent;color:#40543f;font-size:19rpx;font-weight:700;white-space:nowrap}
 .user-contact{background:#40543f;color:#fff;font-weight:750}.user-phone{background:#748c69;color:#fff;font-weight:750}.user-contact text,.user-phone text{font-size:23rpx;white-space:nowrap}
 .share-card-canvas{position:fixed;left:-2000px;top:-2000px;width:600px;height:480px;opacity:0;pointer-events:none}
 .user-share:active,.user-contact:active,.user-phone:active { opacity:.8; transform:scale(.985); }
