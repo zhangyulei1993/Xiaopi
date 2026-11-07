@@ -55,6 +55,35 @@ type ListingTitleConfig struct {
 	AdminEnabledFields []string `json:"adminEnabledFields"`
 }
 
+// PropertyDetailConfig controls the content blocks of a property detail page.
+// It deliberately keeps common blocks lightweight while allowing the nearby
+// recommendation and facility catalog to carry their own operational rules.
+type PropertyDetailModule struct {
+	Key     string `json:"key"`
+	Title   string `json:"title"`
+	Enabled bool   `json:"enabled"`
+}
+
+type PropertyDetailNearbyConfig struct {
+	RadiusKm float64 `json:"radiusKm"`
+	Relation string  `json:"relation"` // distance | channel
+	Sort     string  `json:"sort"`     // distance | newest
+	Limit    int     `json:"limit"`
+}
+
+type PropertyDetailFacility struct {
+	Key     string `json:"key"`
+	Label   string `json:"label"`
+	Group   string `json:"group"`
+	Enabled bool   `json:"enabled"`
+}
+
+type PropertyDetailConfig struct {
+	Modules    []PropertyDetailModule     `json:"modules"`
+	Nearby     PropertyDetailNearbyConfig `json:"nearby"`
+	Facilities []PropertyDetailFacility   `json:"facilities"`
+}
+
 type PublicConfig struct {
 	HeroTitle               string                      `json:"heroTitle"`
 	HeroSubtitle            string                      `json:"heroSubtitle"`
@@ -67,6 +96,7 @@ type PublicConfig struct {
 	PagePresentations       map[string]PagePresentation `json:"pagePresentations"`
 	ShareCard               ShareCardConfig             `json:"shareCard"`
 	ListingTitle            ListingTitleConfig          `json:"listingTitle"`
+	PropertyDetail          PropertyDetailConfig        `json:"propertyDetail"`
 }
 
 func DefaultPublicConfig() PublicConfig {
@@ -109,6 +139,27 @@ func DefaultPublicConfig() PublicConfig {
 			EnabledFields:         []string{"community", "layout", "rentType", "fee"},
 			CustomerDetailFields:  []string{"community", "layout", "rentType", "fee"},
 			AdminEnabledFields:    []string{"unit"},
+		},
+		PropertyDetail: PropertyDetailConfig{
+			Modules: []PropertyDetailModule{
+				{Key: "overview", Title: "房屋概况", Enabled: true},
+				{Key: "location", Title: "位置与周边", Enabled: true},
+				{Key: "facilities", Title: "房屋设施与环境", Enabled: true},
+				{Key: "description", Title: "房源描述", Enabled: true},
+				{Key: "nearby", Title: "附近房源", Enabled: true},
+			},
+			Nearby: PropertyDetailNearbyConfig{RadiusKm: 3, Relation: "distance", Sort: "distance", Limit: 4},
+			Facilities: []PropertyDetailFacility{
+				{Key: "air_conditioner", Label: "空调", Group: "家具家电", Enabled: true},
+				{Key: "refrigerator", Label: "冰箱", Group: "家具家电", Enabled: true},
+				{Key: "washer", Label: "洗衣机", Group: "家具家电", Enabled: true},
+				{Key: "water_heater", Label: "热水器", Group: "家具家电", Enabled: true},
+				{Key: "television", Label: "电视", Group: "家具家电", Enabled: true},
+				{Key: "broadband", Label: "宽带", Group: "家具家电", Enabled: true},
+				{Key: "elevator", Label: "电梯", Group: "居住条件", Enabled: true},
+				{Key: "private_bathroom", Label: "独立卫生间", Group: "居住条件", Enabled: true},
+				{Key: "balcony", Label: "阳台", Group: "居住条件", Enabled: true},
+			},
 		},
 	}
 }
@@ -180,6 +231,34 @@ func (config *PublicConfig) Normalize() {
 		config.ListingTitle.AdminEnabledFields = []string{"unit"}
 	} else {
 		config.ListingTitle.AdminEnabledFields = []string{}
+	}
+	defaults := DefaultPublicConfig().PropertyDetail
+	if len(config.PropertyDetail.Modules) == 0 {
+		config.PropertyDetail.Modules = append([]PropertyDetailModule(nil), defaults.Modules...)
+	}
+	for index := range config.PropertyDetail.Modules {
+		config.PropertyDetail.Modules[index].Key = strings.TrimSpace(config.PropertyDetail.Modules[index].Key)
+		config.PropertyDetail.Modules[index].Title = strings.TrimSpace(config.PropertyDetail.Modules[index].Title)
+	}
+	if config.PropertyDetail.Nearby.RadiusKm <= 0 {
+		config.PropertyDetail.Nearby.RadiusKm = defaults.Nearby.RadiusKm
+	}
+	if config.PropertyDetail.Nearby.Relation == "" {
+		config.PropertyDetail.Nearby.Relation = defaults.Nearby.Relation
+	}
+	if config.PropertyDetail.Nearby.Sort == "" {
+		config.PropertyDetail.Nearby.Sort = defaults.Nearby.Sort
+	}
+	if config.PropertyDetail.Nearby.Limit <= 0 {
+		config.PropertyDetail.Nearby.Limit = defaults.Nearby.Limit
+	}
+	if len(config.PropertyDetail.Facilities) == 0 {
+		config.PropertyDetail.Facilities = append([]PropertyDetailFacility(nil), defaults.Facilities...)
+	}
+	for index := range config.PropertyDetail.Facilities {
+		config.PropertyDetail.Facilities[index].Key = strings.TrimSpace(config.PropertyDetail.Facilities[index].Key)
+		config.PropertyDetail.Facilities[index].Label = strings.TrimSpace(config.PropertyDetail.Facilities[index].Label)
+		config.PropertyDetail.Facilities[index].Group = strings.TrimSpace(config.PropertyDetail.Facilities[index].Group)
 	}
 }
 
@@ -291,6 +370,37 @@ func (config PublicConfig) Validate() error {
 		if field != "unit" {
 			return errors.New("管理员附加标签只支持门牌")
 		}
+	}
+	validDetailModules := map[string]struct{}{"overview": {}, "location": {}, "facilities": {}, "description": {}, "nearby": {}}
+	if len(config.PropertyDetail.Modules) != len(validDetailModules) {
+		return errors.New("房源详情模块配置不完整")
+	}
+	seenModules := map[string]struct{}{}
+	for _, module := range config.PropertyDetail.Modules {
+		if _, exists := validDetailModules[module.Key]; !exists || module.Title == "" || utf8.RuneCountInString(module.Title) > 12 {
+			return errors.New("房源详情模块配置不正确")
+		}
+		if _, exists := seenModules[module.Key]; exists {
+			return errors.New("房源详情模块不能重复")
+		}
+		seenModules[module.Key] = struct{}{}
+	}
+	nearby := config.PropertyDetail.Nearby
+	if nearby.RadiusKm < 0.5 || nearby.RadiusKm > 20 || (nearby.Relation != "distance" && nearby.Relation != "channel") || (nearby.Sort != "distance" && nearby.Sort != "newest") || nearby.Limit < 1 || nearby.Limit > 8 {
+		return errors.New("附近房源推荐规则不正确")
+	}
+	if len(config.PropertyDetail.Facilities) == 0 || len(config.PropertyDetail.Facilities) > 24 {
+		return errors.New("设施类型数量必须在 1 到 24 项之间")
+	}
+	seenFacilities := map[string]struct{}{}
+	for _, facility := range config.PropertyDetail.Facilities {
+		if facility.Key == "" || facility.Label == "" || facility.Group == "" || utf8.RuneCountInString(facility.Label) > 12 || utf8.RuneCountInString(facility.Group) > 12 {
+			return errors.New("设施类型配置不完整")
+		}
+		if _, exists := seenFacilities[facility.Key]; exists {
+			return errors.New("设施类型不能重复")
+		}
+		seenFacilities[facility.Key] = struct{}{}
 	}
 	if len(config.Locations) == 0 || len(config.Locations) > 20 {
 		return errors.New("地理位置数量必须在 1 到 20 个之间")

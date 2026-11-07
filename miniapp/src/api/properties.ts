@@ -173,6 +173,11 @@ export interface PublicConfig {
     customerDetailFields?: string[];
     adminEnabledFields?: string[];
   };
+  propertyDetail?: {
+    modules?: { key: string; title: string; enabled: boolean }[];
+    nearby?: { radiusKm?: number; relation?: "distance" | "channel"; sort?: "distance" | "newest"; limit?: number };
+    facilities?: { key: string; label: string; group: string; enabled: boolean }[];
+  };
 }
 
 export const wechatLogin = (code: string) =>

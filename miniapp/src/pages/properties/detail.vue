@@ -22,6 +22,14 @@ const item = ref<Property | null>(null),
   loadFailed = ref(false),
   favorite = ref(false);
 const relatedRadiusKm = ref(3);
+const detailConfig = ref({
+  modules: [
+    { key: "overview", title: "房屋概况", enabled: true }, { key: "location", title: "位置与周边", enabled: true },
+    { key: "facilities", title: "房屋设施与环境", enabled: true }, { key: "description", title: "房源描述", enabled: true }, { key: "nearby", title: "附近房源", enabled: true },
+  ],
+  nearby: { radiusKm: 3, relation: "distance", sort: "distance", limit: 4 },
+  facilities: [] as Array<{ key: string; label: string; group: string; enabled: boolean }>,
+});
 // Public detail labels use the same global set as public list cards.  An
 // operator sees exactly that content plus the doorplate when it is enabled
 // for the operator audience; no other detail-only role divergence is allowed.
@@ -34,6 +42,7 @@ const shareCardConfig = ref({
   posterFields: ["rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"],
 });
 const allProperties = ref<Property[]>([]);
+const featuredChannels = ref<Array<{ latitude?: number; longitude?: number; radiusKm?: number }>>([]);
 const activeMediaIndex = ref(0);
 const playingVideoIndex = ref(-1);
 const videoDimensions = ref<Record<number, { width: number; height: number }>>({});
@@ -62,6 +71,12 @@ const load = async (id = "") => {
     mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
+    detailConfig.value = {
+      modules: config?.propertyDetail?.modules?.length ? config.propertyDetail.modules : detailConfig.value.modules,
+      nearby: { ...detailConfig.value.nearby, ...(config?.propertyDetail?.nearby || {}) },
+      facilities: config?.propertyDetail?.facilities || [],
+    };
+    featuredChannels.value = config?.featuredChannels || [];
     customerDetailTagFields.value = config?.listingTitle?.customerDetailFields?.length
       ? config.listingTitle.customerDetailFields
       : (config?.listingTitle?.enabledFields?.length ? config.listingTitle.enabledFields : ["community", "layout", "rentType", "fee"]);
@@ -110,6 +125,9 @@ const detailTags = computed(() => {
   ];
   return uniqueListingTags(fields.map((field) => listingTagValue(current, field)));
 });
+const detailModule = (key: string) => detailConfig.value.modules.find((module) => module.key === key);
+const detailModuleEnabled = (key: string) => detailModule(key)?.enabled !== false;
+const detailModuleTitle = (key: string, fallback: string) => detailModule(key)?.title || fallback;
 const priceText = computed(() =>
   Number(item.value?.rentMonthly) > 0 ? String(item.value?.rentMonthly) : "待补充",
 );
@@ -331,10 +349,11 @@ const previewImage = (url: string) => {
 const amenities = computed(() => {
   const match = String(item.value?.description || "").match(/配套设施[ \t]*[：:][ \t]*([^\n]*)/);
   if (!match?.[1]) return [];
+  const enabledLabels = detailConfig.value.facilities.filter((facility) => facility.enabled).map((facility) => facility.label);
   return match[1]
     .split(/[、,，]/)
     .map((name) => name.trim())
-    .filter(Boolean)
+    .filter((name) => name && (!enabledLabels.length || enabledLabels.includes(name)))
     .map((name) => ({
       name,
       icon: amenityIcon(name),
@@ -368,7 +387,7 @@ const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
 };
 const nearbyProperties = computed(() => {
   if (!item.value || !hasLocation.value) return [];
-  return allProperties.value
+  const candidates = allProperties.value
     .filter(
       (property) =>
         property.id !== item.value?.id &&
@@ -385,9 +404,19 @@ const nearbyProperties = computed(() => {
         Number(property.longitude),
       ),
     }))
-    .filter((property) => property.distance <= relatedRadiusKm.value)
-    .sort((left, right) => left.distance - right.distance)
-    .slice(0, 4);
+    .filter((property) => property.distance <= Number(detailConfig.value.nearby.radiusKm || relatedRadiusKm.value));
+  const sameChannel = (property: Property) => featuredChannels.value.some((channel) => {
+    if (!channel.latitude || !channel.longitude || !item.value?.latitude || !item.value?.longitude) return false;
+    const radius = Number(channel.radiusKm) || 3;
+    return distanceKm(Number(item.value.latitude), Number(item.value.longitude), Number(channel.latitude), Number(channel.longitude)) <= radius
+      && distanceKm(Number(property.latitude), Number(property.longitude), Number(channel.latitude), Number(channel.longitude)) <= radius;
+  });
+  return candidates
+    .filter((property) => detailConfig.value.nearby.relation !== "channel" || sameChannel(property))
+    .sort((left, right) => detailConfig.value.nearby.sort === "newest"
+      ? String(right.id).localeCompare(String(left.id))
+      : left.distance - right.distance)
+    .slice(0, Number(detailConfig.value.nearby.limit) || 4);
 });
 const propertyMarkers = computed(() =>
   hasLocation.value && item.value
@@ -557,7 +586,7 @@ const phoneCustomerService = () =>
         @click="selectMedia(index)"
         ><image v-if="media.type === 'image'" :src="mediaUrl(media.url)" mode="aspectFill" /><text v-else>视频</text><small>{{ mediaLabel(media, index) }}</small></view></view
       ></scroll-view
-    ><view class="card overview"
+    ><view v-if="detailModuleEnabled('overview')" class="card overview"
       ><view v-if="isAdminPreview" class="admin-preview-tag">{{ adminPreviewLabel }}</view
       ><view class="overview-top"
         ><view class="price" :class="{ pending: priceText === '待补充' }">{{ priceText }} <text class="price-unit">{{ priceUnit }}</text></view
@@ -565,6 +594,7 @@ const phoneCustomerService = () =>
           >{{ favorite ? "♥" : "♡"
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
         ></view
+      ><view class="title small detail-overview-heading">{{ detailModuleTitle('overview', '房屋概况') }}</view
       ><view class="title">{{ item.title || item.community }}</view
       ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
@@ -588,10 +618,10 @@ const phoneCustomerService = () =>
         ><view v-if="item.rulesText" class="wide"><small>入住规则</small><strong>{{ item.rulesText }}</strong></view
         ><view v-if="item.verificationDate" class="wide"><small>最近核验</small><strong>{{ item.verificationDate }}</strong></view></view
       ></view
-    ><view v-if="hasLocation" class="card location-card"
+    ><view v-if="detailModuleEnabled('location') && hasLocation" class="card location-card"
       ><view class="location-heading"
         ><view
-          ><strong>位置与周边</strong><small>{{ item.location }}</small></view></view
+          ><strong>{{ detailModuleTitle('location', '位置与周边') }}</strong><small>{{ item.location }}</small></view></view
       ><view class="map-summary" @click="mapExpanded = !mapExpanded"
         ><view><strong>{{ mapExpanded ? "收起地图" : "查看地图位置" }}</strong><small>已保存房源定位</small></view
         ><text>{{ mapExpanded ? "⌃" : "›" }}</text></view
@@ -605,8 +635,8 @@ const phoneCustomerService = () =>
       /><button v-if="mapExpanded" class="navigate-button" @click="openPropertyLocation">
         ⌁ 导航去这里
       </button></view
-    ><view class="card amenity-card"
-      ><view class="detail-section-heading"><view><view class="title small">房屋设施与环境</view><small>家具家电、楼内条件与入住信息</small></view><text>{{ amenities.length + environmentHighlights.length }} 项</text></view
+    ><view v-if="detailModuleEnabled('facilities')" class="card amenity-card"
+      ><view class="detail-section-heading"><view><view class="title small">{{ detailModuleTitle('facilities', '房屋设施与环境') }}</view><small>家具家电、楼内条件与入住信息</small></view><text>{{ amenities.length + environmentHighlights.length }} 项</text></view
       ><view v-if="amenities.length" class="facility-group-label">家具家电</view
       ><view v-if="amenities.length" class="amenity-grid"
         ><view
@@ -621,12 +651,12 @@ const phoneCustomerService = () =>
       ><view v-if="environmentHighlights.length" class="facility-group-label environment-label">居住条件</view
       ><view v-if="environmentHighlights.length" class="environment-list"><view v-for="feature in environmentHighlights" :key="`${feature.label}-${feature.value}`"><small>{{ feature.label }}</small><strong>{{ feature.value }}</strong></view></view
       ></view
-    ><view class="card"
-      ><view class="title small">房源描述</view
+    ><view v-if="detailModuleEnabled('description')" class="card"
+      ><view class="title small">{{ detailModuleTitle('description', '房源描述') }}</view
       ><view class="desc">{{ propertyDescription || "暂无描述" }}</view></view
-    ><view class="card nearby-card"
+    ><view v-if="detailModuleEnabled('nearby')" class="card nearby-card"
       ><view class="nearby-heading"
-        ><view><view class="title small">附近房源</view><small>距此房源 {{ relatedRadiusKm }} 公里内</small></view
+        ><view><view class="title small">{{ detailModuleTitle('nearby', '附近房源') }}</view><small>距此房源 {{ detailConfig.nearby.radiusKm || relatedRadiusKm }} 公里内</small></view
         ><text>{{ nearbyProperties.length ? `${nearbyProperties.length} 套` : "继续找房" }}</text></view
       ><view
         v-for="property in nearbyProperties"
