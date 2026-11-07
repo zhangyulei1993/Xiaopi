@@ -264,7 +264,13 @@ function previewPropertyTags(item?: Property, configuredFields?: string[]) {
     .filter((value) => known.has(value) ? false : (known.add(value), true))
 }
 function previewDetailTags(item?: Property) {
-  const fields = publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community' && key !== 'unit')
+  // Keep the right canvas and the local magnifier on the exact same ordering
+  // source as the draggable editor.  The customer field list decides what is
+  // allowed; detailTagOrder decides where each allowed tag is rendered.
+  const fields = arrangedFields(
+    publicConfig.listingTitle.detailTagOrder,
+    publicConfig.listingTitle.customerDetailFields,
+  )
   return previewPropertyTags(item, fields)
 }
 function previewShareTags(item?: Property) {
