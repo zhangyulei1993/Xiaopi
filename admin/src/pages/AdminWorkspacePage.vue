@@ -242,6 +242,11 @@ const previewDetailAmenities = computed(() => {
   const source = match?.[1]?.split(/[、,，]/).map(item => item.trim()).filter(Boolean) || []
   return source.map(label => publicConfig.propertyDetail.facilities.find(facility => facility.enabled && facility.label === label)).filter((facility): facility is { key: string; label: string; group: string; enabled: boolean } => Boolean(facility))
 })
+// The compact compatibility preview and the full phone canvas must read the
+// same source.  Keep this alias while the former preview markup is still in
+// the component so switching into the detail page can never dereference an
+// outdated, undefined facilities collection.
+const previewConfiguredFacilities = computed(() => previewDetailAmenities.value)
 const previewDetailFacilityGroups = computed(() => {
   const groups = new Map<string, typeof previewDetailAmenities.value>()
   previewDetailAmenities.value.forEach((facility) => groups.set(facility.group, [...(groups.get(facility.group) || []), facility]))
