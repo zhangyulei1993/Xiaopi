@@ -935,9 +935,6 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="publish-state"><i :class="{ dirty: configDirty }" /><div><strong>{{ configDirty ? '存在未发布修改' : '线上配置已同步' }}</strong><span>基础配置会同步到录入页、详情页和页面画布。</span></div></div>
             <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
           </section>
-          <section v-if="tab === '小程序基础配置'" class="surface basic-config-tabs" aria-label="小程序基础配置分类">
-            <button type="button" @click="selectBasicConfigTab('brand')">品牌与联系</button><button type="button" class="active">地区与关联范围</button><button type="button" @click="selectBasicConfigTab('tags')">房源标签规则</button><button type="button" @click="selectBasicConfigTab('facilities')">房屋设施库</button>
-          </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section class="surface basic-config-tabs" aria-label="小程序基础配置分类">
             <button type="button" :class="{ active: basicConfigTab === 'brand' }" @click="selectBasicConfigTab('brand')">品牌与联系</button>
@@ -948,7 +945,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <section v-if="basicConfigTab === 'brand'" class="surface form-section basic-config-panel">
             <div class="section-heading"><span>01</span><div><h2>品牌与联系</h2><p>全局品牌名和联系方式，不属于某一个页面。</p></div></div>
             <el-form label-position="top" class="basic-config-form"><div class="form-row two-columns"><el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item><el-form-item label="联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /></el-form-item></div></el-form>
-            <div class="basic-config-note"><b>角色展示规则</b><span>普通用户与管理员共用同一套房源标签、列表和详情；管理员仅可额外显示精确门牌（如“5栋3单元101室”）。该开关在“页面配置 → 非客户视角 → 房源列表”中管理。</span></div>
+            <div class="basic-config-note"><b>角色展示规则</b><span>普通用户与管理员共用同一套房源标签、列表和详情；管理员仅可额外显示精确门牌（如“5栋3单元101室”）。该开关在“基础配置 → 房源标签规则”中管理。</span></div>
           </section>
           <section v-else-if="basicConfigTab === 'coverage'" class="surface form-section basic-config-panel">
             <div class="section-heading"><span>02</span><div><h2>地区与关联范围</h2><p>用于频道归属、房源附近推荐和默认筛选；页面文案与背景仍在“页面配置”里管理。</p></div></div>
