@@ -296,6 +296,7 @@ button, input, textarea { font: inherit; }
 .preview-home-property-card { margin-top: 9px; }
 .preview-property-card, .preview-profile, .preview-tool-grid article { cursor: pointer; }
 
+.basic-preview-phone{position:relative}.basic-preview-phone button{padding:7px 11px;border-radius:8px;background:#748c69;cursor:pointer}.basic-phone-popover{position:absolute;z-index:3;right:0;bottom:calc(100% + 7px);display:grid;min-width:156px;gap:3px;padding:10px 11px;border:1px solid #dfe8dc;border-radius:11px;background:#fff;box-shadow:0 8px 22px rgba(43,62,47,.16)}.basic-phone-popover:after{position:absolute;right:20px;top:100%;width:9px;height:9px;transform:rotate(45deg) translate(-4px,-4px);border-right:1px solid #dfe8dc;border-bottom:1px solid #dfe8dc;background:#fff;content:''}.basic-phone-popover small{margin:0;color:#7b887b;font-size:8px}.basic-phone-popover strong{color:#2d4336;font-size:13px;letter-spacing:.3px}.basic-phone-popover span{color:#8a958c;font-size:7px}
 @media (max-width: 1180px) {
   .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .miniapp-config-shell { grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; }

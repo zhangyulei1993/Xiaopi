@@ -41,6 +41,7 @@ const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
 type BasicConfigTab = 'brand' | 'coverage' | 'tags' | 'facilities'
 const basicConfigTab = ref<BasicConfigTab>('brand')
+const basicPhonePreviewOpen = ref(false)
 const editingFacilityKey = ref('')
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
 function selectDetailConfigTab(value: DetailConfigTab) {
@@ -55,6 +56,7 @@ function selectDetailSectionTab(value: DetailSectionTab) {
 }
 function selectBasicConfigTab(value: BasicConfigTab) {
   basicConfigTab.value = value
+  basicPhonePreviewOpen.value = false
   if (value === 'coverage') configPage.value = 'home'
 }
 function toggleFacility(facility: { enabled: boolean }) { facility.enabled = !facility.enabled }
@@ -998,7 +1000,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="basic-preview-usage"><span>① 顶部导航 · 品牌名称</span><div class="basic-preview-nav">{{ publicConfig.heroTitle || '小皮租房' }}</div></div>
                   <div class="basic-preview-usage"><span>② 微信登录 · 品牌名称</span><div class="basic-preview-login"><i>皮</i><b>{{ publicConfig.heroTitle || '小皮租房' }}</b><small>登录后开始找房</small></div></div>
                   <div class="basic-preview-usage"><span>③ 房源详情 · 品牌名称</span><div class="basic-preview-service"><i>皮</i><div><b>{{ publicConfig.heroTitle || '小皮租房' }}</b><small>咨询费用、入住时间和看房安排</small></div><em>在线咨询 ›</em></div></div>
-                  <div class="basic-preview-usage"><span>④ 房源详情 / 找房需求 · 服务联系电话</span><div class="basic-preview-phone"><div><b>{{ publicConfig.heroTitle || '小皮租房' }}客服</b><small>{{ publicConfig.contactPhone || '联系电话待配置' }}</small></div><button>打电话</button></div></div>
+                  <div class="basic-preview-usage"><span>④ 房源详情 / 找房需求 · 服务联系电话</span><div class="basic-preview-phone"><div><b>{{ publicConfig.heroTitle || '小皮租房' }}客服</b><small>点击后调用系统拨号</small></div><button @click="basicPhonePreviewOpen = !basicPhonePreviewOpen">打电话</button><div v-if="basicPhonePreviewOpen" class="basic-phone-popover"><small>拨打服务电话</small><strong>{{ publicConfig.contactPhone || '联系电话待配置' }}</strong><span>真实小程序会交由系统拨号确认</span></div></div></div>
                   <div class="basic-preview-usage"><span>⑤ 分享卡与海报落款 · 品牌名称</span><div class="basic-preview-share-footer">⌁ {{ publicConfig.heroTitle || '小皮租房' }} · 小程序</div></div>
                 </template>
                 <template v-else-if="basicConfigTab === 'coverage'">
