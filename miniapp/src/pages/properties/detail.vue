@@ -357,7 +357,17 @@ const amenities = computed(() => {
     .map((name) => ({
       name,
       icon: amenityIcon(name),
+      group: detailConfig.value.facilities.find((facility) => facility.label === name)?.group || "其他设施",
     }));
+});
+const amenityGroups = computed(() => {
+  const groups = new Map<string, typeof amenities.value>();
+  amenities.value.forEach((amenity) => {
+    const current = groups.get(amenity.group) || [];
+    current.push(amenity);
+    groups.set(amenity.group, current);
+  });
+  return Array.from(groups, ([title, items]) => ({ title, items }));
 });
 const environmentHighlights = computed(() => {
   const current = item.value;
@@ -606,7 +616,7 @@ const phoneCustomerService = () =>
         ></view
       ></view
     ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
-    ><view v-if="item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租'" class="card detail-info"
+    ><view v-if="detailModuleEnabled('overview') && (item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租')" class="card detail-info"
       ><view class="title small">入住与房屋信息</view
       ><view class="detail-info-grid"
         ><view v-if="item.depositPayment"><small>押付方式</small><strong>{{ item.depositPayment }}</strong></view
@@ -637,17 +647,14 @@ const phoneCustomerService = () =>
       </button></view
     ><view v-if="detailModuleEnabled('facilities')" class="card amenity-card"
       ><view class="detail-section-heading"><view><view class="title small">{{ detailModuleTitle('facilities', '房屋设施与环境') }}</view><small>家具家电、楼内条件与入住信息</small></view><text>{{ amenities.length + environmentHighlights.length }} 项</text></view
-      ><view v-if="amenities.length" class="facility-group-label">家具家电</view
-      ><view v-if="amenities.length" class="amenity-grid"
-        ><view
-          v-for="amenity in amenities"
-          :key="amenity.name"
-          class="amenity-item"
-          ><view class="amenity-icon"
-            ><image :src="amenity.icon" mode="aspectFit" /></view
+      ><template v-if="amenityGroups.length"><view v-for="group in amenityGroups" :key="group.title" class="facility-group"
+        ><view class="facility-group-label">{{ group.title }}</view
+        ><view class="amenity-grid"
+          ><view v-for="amenity in group.items" :key="amenity.name" class="amenity-item"
+          ><view class="amenity-icon"><image :src="amenity.icon" mode="aspectFit" /></view
           ><text class="amenity-name">{{ amenity.name }}</text></view
-        ></view
-      ><view v-else class="amenity-empty">家具家电信息待补充，可联系小皮确认</view
+        ></view></view
+      ></template><view v-else class="amenity-empty">家具家电信息待补充，可联系小皮确认</view
       ><view v-if="environmentHighlights.length" class="facility-group-label environment-label">居住条件</view
       ><view v-if="environmentHighlights.length" class="environment-list"><view v-for="feature in environmentHighlights" :key="`${feature.label}-${feature.value}`"><small>{{ feature.label }}</small><strong>{{ feature.value }}</strong></view></view
       ></view

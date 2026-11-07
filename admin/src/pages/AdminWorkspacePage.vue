@@ -384,6 +384,9 @@ const configErrors = computed(() => {
   if (!publicConfig.listingTitle.enabledFields.every(field => publicConfig.listingTitle.customerAllowedFields.includes(field))) errors.push('客户展示标签必须先在“客户可选标签”中开启')
   if (!publicConfig.listingTitle.customerDetailFields.length) errors.push('客户详情至少启用一个字段')
   if (!publicConfig.listingTitle.customerDetailFields.every(field => publicConfig.listingTitle.customerAllowedFields.includes(field))) errors.push('客户详情标签必须先在“客户可选标签”中开启')
+  if (publicConfig.propertyDetail.modules.some(item => !item.title.trim())) errors.push('房源详情模块标题不能为空')
+  if (!publicConfig.propertyDetail.facilities.length) errors.push('至少保留一个设施类型')
+  if (publicConfig.propertyDetail.facilities.some(item => !item.label.trim() || !item.group.trim())) errors.push('设施名称和分类不能为空')
   return errors
 })
 
@@ -399,6 +402,15 @@ function moveShareField(target: 'titleFields' | 'posterFields', index: number, o
   const next = index + offset
   if (next < 0 || next >= fields.length) return
   ;[fields[index], fields[next]] = [fields[next], fields[index]]
+}
+function addDetailFacility() {
+  if (publicConfig.propertyDetail.facilities.length >= 24) return
+  const next = publicConfig.propertyDetail.facilities.length + 1
+  publicConfig.propertyDetail.facilities.push({ key: `custom_${Date.now()}`, label: `自定义设施${next}`, group: '其他', enabled: true })
+}
+function removeDetailFacility(index: number) {
+  if (publicConfig.propertyDetail.facilities.length <= 1) return
+  publicConfig.propertyDetail.facilities.splice(index, 1)
 }
 const shareTitlePreview = computed(() => {
   const examples: Record<string, string> = { community: '拿铁公寓', layout: '两室一厅', roomNo: '5栋3单元101室', rentMonthly: '¥2300/月', listingSource: '直租', rentType: '整租', depositPayment: '押一付一', areaSqm: '68㎡', floorInfo: '中层', availableDate: '拎包入住' }
@@ -994,7 +1006,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
                     <header><strong>设施与环境</strong><span>启用的设施会在管理员录入及客户详情中使用；名称和分类可按运营口径调整。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('facilities').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="facility-config-list"><div v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key"><el-checkbox v-model="facility.enabled" /><el-input v-model="facility.label" maxlength="12" placeholder="设施名称" /><el-input v-model="facility.group" maxlength="12" placeholder="所属分类" /></div></div>
+                    <div class="facility-config-list"><div v-for="(facility, index) in publicConfig.propertyDetail.facilities" :key="facility.key"><el-checkbox v-model="facility.enabled" /><el-input v-model="facility.label" maxlength="12" placeholder="设施名称" /><el-input v-model="facility.group" maxlength="12" placeholder="所属分类" /><button type="button" class="facility-remove" :disabled="publicConfig.propertyDetail.facilities.length <= 1" @click="removeDetailFacility(index)">删除</button></div></div><el-button class="add-facility" plain :disabled="publicConfig.propertyDetail.facilities.length >= 24" @click="addDetailFacility">＋ 新增设施</el-button>
                   </div>
                   <div v-else-if="detailSectionTab === 'description'" class="share-field-editor listing-title-editor">
                     <header><strong>房源描述</strong><span>发布者填写的房源说明；未填写内容时自动展示“暂无描述”。</span></header>
