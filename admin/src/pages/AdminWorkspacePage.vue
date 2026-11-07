@@ -924,13 +924,16 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <PropertiesPage v-else-if="tab === '房源列表'" :properties="properties" :filtered-properties="filteredProperties" :filter="propertyFilter" :statuses="propertyStatuses" :loading="loading" :normalized-status="normalizedPropertyStatus" :status-label="statusLabel" :cover="propertyCover" @refresh="load" @filter="propertyFilter = $event" @status="setPropertyStatus" />
 
-        <template v-else-if="tab === '小程序基础配置'">
+        <template v-else-if="tab === '小程序基础配置' && basicConfigTab !== 'coverage'">
           <section class="page-header">
             <div><span>内容与运营</span><h1>小程序基础配置</h1><p>配置所有页面共用的数据、可选项与角色展示边界。</p></div>
           </section>
           <section class="surface config-toolbar">
             <div class="publish-state"><i :class="{ dirty: configDirty }" /><div><strong>{{ configDirty ? '存在未发布修改' : '线上配置已同步' }}</strong><span>基础配置会同步到录入页、详情页和页面画布。</span></div></div>
             <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
+          </section>
+          <section v-if="tab === '小程序基础配置'" class="surface basic-config-tabs" aria-label="小程序基础配置分类">
+            <button type="button" @click="basicConfigTab = 'brand'">品牌与联系</button><button type="button" class="active">地区与关联范围</button><button type="button" @click="basicConfigTab = 'tags'">房源标签规则</button><button type="button" @click="basicConfigTab = 'facilities'">房屋设施库</button>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section class="surface basic-config-tabs" aria-label="小程序基础配置分类">
@@ -984,11 +987,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
         </template>
 
-        <template v-else-if="tab === '小程序页面配置'">
+        <template v-else-if="tab === '小程序页面配置' || (tab === '小程序基础配置' && basicConfigTab === 'coverage')">
           <div class="miniapp-config-shell">
           <div class="miniapp-config-main">
           <section class="page-header">
-            <div><span>内容与运营</span><h1>小程序页面配置</h1><p>按真实页面编辑文案、模块和展示方式；右侧画布会跟随定位。</p></div>
+            <div><span>内容与运营</span><h1>{{ tab === '小程序基础配置' ? '小程序基础配置 · 地区与频道' : '小程序页面配置' }}</h1><p>{{ tab === '小程序基础配置' ? '配置地区入口、精选频道、地图中心与关联半径；小程序端数据结构保持不变。' : '按真实页面编辑文案、模块和展示方式；右侧画布会跟随定位。' }}</p></div>
           </section>
           <section class="surface config-toolbar">
             <div class="publish-state">
@@ -998,7 +1001,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
             <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
           </section>
-          <section class="surface page-config-nav">
+          <section v-if="tab === '小程序页面配置'" class="surface page-config-nav">
             <div class="config-audience-heading"><strong>选择使用视角</strong><span>先按角色筛选，再以真实小程序页面进行配置</span></div>
             <div class="config-audience-switch"><button type="button" :class="{ active: configAudience === 'customer' }" @click="switchConfigAudience('customer')"><b>客户视角</b><small>找房、关注与联系</small></button><button type="button" :class="{ active: configAudience === 'operator' }" @click="switchConfigAudience('operator')"><b>非客户视角</b><small>运营、录入与管理</small></button></div>
           </section>
@@ -1009,7 +1012,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
           <div v-loading="loading" class="config-workspace">
             <div class="config-editor">
-              <section v-if="configPage === 'home'" class="surface form-section config-section">
+              <section v-if="configPage === 'home' && tab === '小程序页面配置'" class="surface form-section config-section">
                 <div class="section-heading"><span>01</span><div><h2>首页页面配置</h2><p>页面文案与背景只在这里编辑；品牌、地区和房源基础字段请前往“小程序基础配置”。</p></div></div>
                 <el-form label-position="top" class="basic-config-form">
                   <el-form-item label="首页主标题" required><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></el-form-item>
@@ -1163,7 +1166,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </div>
           </div>
 
-            <aside class="config-preview-column">
+            <aside v-if="tab === '小程序页面配置'" class="config-preview-column">
               <div v-if="configPage === 'home'" class="phone-preview">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
