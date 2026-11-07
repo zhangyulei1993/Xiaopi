@@ -50,6 +50,10 @@ type ListingTitleConfig struct {
 	// CustomerDetailFields independently controls the customer detail page.
 	// It is constrained by CustomerAllowedFields just like list labels.
 	CustomerDetailFields []string `json:"customerDetailFields"`
+	// CustomerShareFields independently controls the public labels used by
+	// friend sharing and Moments posters. It is also constrained by the
+	// customer-facing field pool, so private values cannot leak into sharing.
+	CustomerShareFields []string `json:"customerShareFields"`
 	// AdminEnabledFields is the optional doorplate supplement for operator
 	// cards and details. All other labels are shared with the customer view.
 	AdminEnabledFields []string `json:"adminEnabledFields"`
@@ -138,6 +142,7 @@ func DefaultPublicConfig() PublicConfig {
 			CustomerAllowedFields: []string{"community", "floor", "layout", "rentType", "listingSource", "fee", "area"},
 			EnabledFields:         []string{"community", "layout", "rentType", "fee"},
 			CustomerDetailFields:  []string{"community", "layout", "rentType", "fee"},
+			CustomerShareFields:   []string{"community", "layout", "rentType", "fee"},
 			AdminEnabledFields:    []string{"unit"},
 		},
 		PropertyDetail: PropertyDetailConfig{
@@ -217,6 +222,10 @@ func (config *PublicConfig) Normalize() {
 		// Legacy configurations had one public tag list; preserve that result
 		// as the initial detail setting until operations changes it explicitly.
 		config.ListingTitle.CustomerDetailFields = append([]string(nil), config.ListingTitle.EnabledFields...)
+	}
+	if len(config.ListingTitle.CustomerShareFields) == 0 {
+		// Older configurations shared the list labels with share surfaces.
+		config.ListingTitle.CustomerShareFields = append([]string(nil), config.ListingTitle.EnabledFields...)
 	}
 	if len(config.ListingTitle.CustomerAllowedFields) == 0 {
 		config.ListingTitle.CustomerAllowedFields = append([]string(nil), DefaultPublicConfig().ListingTitle.CustomerAllowedFields...)
@@ -393,6 +402,14 @@ func (config PublicConfig) Validate() error {
 	for _, field := range config.ListingTitle.CustomerDetailFields {
 		if _, exists := allowed[field]; !exists {
 			return errors.New("客户详情标签必须先在客户可选标签中开启")
+		}
+	}
+	if err := validateListingTitleFields(config.ListingTitle.CustomerShareFields); err != nil {
+		return err
+	}
+	for _, field := range config.ListingTitle.CustomerShareFields {
+		if _, exists := allowed[field]; !exists {
+			return errors.New("客户分享标签必须先在客户可选标签中开启")
 		}
 	}
 	for _, field := range config.ListingTitle.AdminEnabledFields {

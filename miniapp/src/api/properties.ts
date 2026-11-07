@@ -171,6 +171,7 @@ export interface PublicConfig {
     customerAllowedFields?: string[];
     enabledFields?: string[];
     customerDetailFields?: string[];
+    customerShareFields?: string[];
     adminEnabledFields?: string[];
   };
   propertyDetail?: {
