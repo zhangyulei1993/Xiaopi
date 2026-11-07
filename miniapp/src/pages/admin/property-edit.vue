@@ -599,8 +599,8 @@ const syncLayout = () => {
   toiletType.value = privateBathroom.value ? "独卫" : "非独卫";
   bayWindow.value = hasBayWindow.value ? "有飘窗" : "无飘窗";
   form.layout = rentType.value === "整租"
-    ? `${wholeLayoutText.value} · 整租`
-    : `合租 · ${roomType.value} · ${toiletType.value} · ${bayWindow.value}`;
+    ? wholeLayoutText.value
+    : [roomType.value, toiletType.value, bayWindow.value].filter(Boolean).join(" · ");
   form.rentType = rentType.value;
 };
 const pickLayoutValue = (values: string[], index: string | number) =>
@@ -655,31 +655,28 @@ const toggleBayWindow = (event: { detail?: { value?: string[] } }) => {
   hasBayWindow.value = Boolean(event.detail?.value?.length);
   syncLayout();
 };
-const parseLayout = (value = "") => {
-  const parts = value.split(" · ");
-  if (parts[1] === "整租") {
+const parseLayout = (value = "", rentTypeHint = "") => {
+  const parts = value.split(/\s*[·・|｜]\s*/).map((part) => part.trim()).filter(Boolean);
+  const legacyRentType = parts.find((part) => part === "整租" || part === "合租");
+  const resolvedRentType = rentTypeHint === "整租" || rentTypeHint === "合租"
+    ? rentTypeHint
+    : legacyRentType || (parts.some((part) => roomTypes.includes(part)) ? "合租" : "整租");
+  if (resolvedRentType === "整租") {
     const roomHall = parts[0] || "";
     const numberOf = (suffix: string, fallback: number) => Number(roomHall.match(new RegExp(`(\\d+)${suffix}`))?.[1] || fallback);
     const legacyNumber = (value: string, fallback: number) => ({ 一: 1, 两: 2, 三: 3, 四: 4, 五: 5 }[value[0]] || fallback);
     const roomMatch = roomHall.match(/(\d+|[一二三四五])室/);
     roomCount.value = String(roomMatch ? (/\d/.test(roomMatch[1]) ? Number(roomMatch[1]) : legacyNumber(roomMatch[1], 1)) : 1);
     hallCount.value = String(numberOf("厅", roomHall.includes("无厅") ? 0 : 1));
-    kitchenCount.value = roomHall.includes("厨") || parts.some((part) => part.includes("厨房")) ? "1" : "0";
-    bathroomCount.value = String(numberOf("卫", parts[2]?.includes("卫") ? legacyNumber(parts[2], 1) : 1));
+    kitchenCount.value = String(numberOf("厨", roomHall.includes("厨") || parts.some((part) => part.includes("厨房")) ? 1 : 0));
+    bathroomCount.value = String(numberOf("卫", 1));
     balcony.value = String(numberOf("阳台", roomHall.includes("阳台") || parts.some((part) => part.includes("阳台")) ? 1 : 0));
     rentType.value = "整租";
-  } else if (parts[0] === "合租") {
+  } else {
     rentType.value = "合租";
-    roomType.value = parts[1] || "主卧";
-    toiletType.value = parts[2] || "独卫";
-    bayWindow.value = parts[3] || "有飘窗";
-    privateBathroom.value = toiletType.value === "独卫";
-    hasBayWindow.value = bayWindow.value === "有飘窗";
-  } else if (parts[1] === "合租") {
-    rentType.value = "合租";
-    roomType.value = parts[2] || "主卧";
-    toiletType.value = parts[3] || "独卫";
-    bayWindow.value = parts[4] || "有飘窗";
+    roomType.value = parts.find((part) => roomTypes.includes(part)) || "主卧";
+    toiletType.value = parts.find((part) => part === "独卫" || part === "非独卫") || "独卫";
+    bayWindow.value = parts.find((part) => part === "有飘窗" || part === "无飘窗") || "有飘窗";
     privateBathroom.value = toiletType.value === "独卫";
     hasBayWindow.value = bayWindow.value === "有飘窗";
   }
@@ -706,7 +703,7 @@ const loadProperty = async () => {
     locationQuery.value = property.community || property.location || "";
     currentStatus.value = property.status;
     existingMedia.value = property.media || [];
-    parseLayout(property.layout);
+    parseLayout(property.layout, property.rentType);
     const boundChannelIndex = channels.value.findIndex((channel) => channel.title === property.areaLabel);
     if (boundChannelIndex >= 0) selectedChannelIndex.value = boundChannelIndex;
     else if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));

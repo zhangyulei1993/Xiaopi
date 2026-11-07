@@ -15,7 +15,7 @@ import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
-import { listingTagValue, uniqueListingTags } from "../../utils/listing-title";
+import { listingLayout, listingTagValue, uniqueListingTags } from "../../utils/listing-title";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   loading = ref(true),
@@ -202,7 +202,7 @@ const shouldLoadMedia = (index: number) => {
 };
 const shareFieldMeta: Record<string, { label: string; value: (property: Property) => string }> = {
   community: { label: "小区", value: (property) => property.community || "" },
-  layout: { label: "户型", value: (property) => String(property.layout || "").split("·")[0] },
+  layout: { label: "户型", value: (property) => listingLayout(property) },
   roomNo: { label: "门牌", value: (property) => [property.buildingNo, property.unitNo, property.roomNo].filter(Boolean).join("") },
   rentMonthly: { label: "月租", value: (property) => Number(property.rentMonthly) > 0 ? `¥${property.rentMonthly}/月` : "租金面议" },
   listingSource: { label: "来源", value: (property) => property.listingSource || "直租" },
@@ -618,7 +618,7 @@ const phoneCustomerService = () =>
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view v-if="detailTags.length" class="tags detail-tags"><text v-for="tag in detailTags" :key="tag">{{ tag }}</text></view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
-        ><view><small>户型</small><strong>{{ item.layout || "待补充" }}</strong></view
+        ><view><small>户型</small><strong>{{ listingLayout(item) || "待补充" }}</strong></view
         ><view><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
         ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ></view
@@ -679,7 +679,7 @@ const phoneCustomerService = () =>
         class="nearby-item"
         @click="openProperty(property.id)"
         ><view class="nearby-cover"><image v-if="propertyCover(property)" :src="propertyCover(property)" mode="aspectFill" /><text v-else>小皮</text></view
-        ><view class="nearby-content"><strong>{{ property.title || property.community }}</strong><small>{{ property.layout }} · {{ property.areaLabel || property.community }}</small><view class="nearby-footer"><view class="nearby-price"><strong>¥{{ property.rentMonthly }}<small>/月</small></strong></view><text>{{ property.distance.toFixed(1) }}km</text></view></view
+        ><view class="nearby-content"><strong>{{ property.title || property.community }}</strong><small>{{ listingLayout(property) }} · {{ property.areaLabel || property.community }}</small><view class="nearby-footer"><view class="nearby-price"><strong>¥{{ property.rentMonthly }}<small>/月</small></strong></view><text>{{ property.distance.toFixed(1) }}km</text></view></view
       ></view
       ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>附近暂时没有其他可租房源</strong><text>可以继续查看其他地区的新房源</text><button @click="openAllProperties">查看全部房源</button></view
       ><view v-else class="nearby-more" @click="openAllProperties">查看更多房源 <text>›</text></view></view
