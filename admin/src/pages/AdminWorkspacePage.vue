@@ -927,7 +927,9 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <PropertiesPage v-else-if="tab === '房源列表'" :properties="properties" :filtered-properties="filteredProperties" :filter="propertyFilter" :statuses="propertyStatuses" :loading="loading" :normalized-status="normalizedPropertyStatus" :status-label="statusLabel" :cover="propertyCover" @refresh="load" @filter="propertyFilter = $event" @status="setPropertyStatus" />
 
-        <template v-else-if="tab === '小程序基础配置' && basicConfigTab !== 'coverage'">
+        <template v-else-if="tab === '小程序基础配置'">
+          <div class="miniapp-config-shell basic-config-shell">
+          <div class="miniapp-config-main">
           <section class="page-header">
             <div><span>内容与运营</span><h1>小程序基础配置</h1><p>配置所有页面共用的数据、可选项与角色展示边界。</p></div>
           </section>
@@ -985,9 +987,46 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </div>
             <div class="facility-add-row"><span>添加预置设施</span><el-select v-model="facilityToAdd" placeholder="从预置列表选择" :disabled="!availableFacilityCatalog.length || publicConfig.propertyDetail.facilities.length >= 24" @change="addDetailFacility"><el-option v-for="facility in availableFacilityCatalog" :key="facility.key" :label="`${facility.label} · ${facility.group}`" :value="facility.key" /></el-select></div>
           </section>
+          </div>
+          <aside class="config-preview-column basic-config-preview-column" aria-label="小程序基础配置效果预览">
+            <div class="basic-preview-heading"><strong>实时效果</strong><span>{{ basicConfigTab === 'brand' ? '品牌与联系' : basicConfigTab === 'coverage' ? '地区与频道' : basicConfigTab === 'tags' ? '房源卡片标签' : '房屋设施' }}</span></div>
+            <div class="phone-preview basic-phone-preview">
+              <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+              <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
+              <div class="basic-preview-content">
+                <template v-if="basicConfigTab === 'brand'">
+                  <div class="basic-preview-brand"><i>皮</i><strong>{{ publicConfig.heroTitle || '小皮租房' }}</strong><span>真实房源，放心查看</span></div>
+                  <div class="basic-preview-service"><b>小皮租房服务</b><span>{{ publicConfig.contactPhone || '联系电话待配置' }}</span><em>在线咨询 ›</em></div>
+                </template>
+                <template v-else-if="basicConfigTab === 'coverage'">
+                  <div class="basic-preview-caption">首页地区入口</div>
+                  <div class="mini-locations"><span class="active">附近</span><span v-for="(item, index) in publicConfig.locations.slice(0, 3)" :key="`basic-location-${index}`">{{ item.label || '未命名' }}</span></div>
+                  <div class="basic-preview-caption">精选频道</div>
+                  <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`basic-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article></div>
+                  <div class="basic-preview-radius">附近房源默认关联 <b>{{ publicConfig.relatedPropertyRadiusKm || 3 }} 公里</b></div>
+                </template>
+                <template v-else-if="basicConfigTab === 'tags'">
+                  <div class="basic-preview-caption">客户视角 · 房源卡片</div>
+                  <article v-if="previewPrimaryProperty" class="preview-property-card basic-preview-property"><div :style="previewCoverStyle(previewPrimaryProperty)"><em>可租</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewPropertyTags(previewPrimaryProperty).length" class="preview-tag-row secondary"><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></small><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
+                  <div v-else class="preview-empty">暂无可预览房源</div>
+                  <div class="basic-preview-caption">管理员额外信息</div>
+                  <div class="basic-preview-operator"><b>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '5栋3单元101室' : '未额外展示门牌' }}</b><span>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '管理员列表与详情可见' : '与客户标签一致' }}</span></div>
+                </template>
+                <template v-else>
+                  <div class="basic-preview-caption">房源详情 · 设施与环境</div>
+                  <div class="basic-preview-facilities"><i v-for="facility in publicConfig.propertyDetail.facilities.filter(item => item.enabled).slice(0, 8)" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b><span>{{ facility.label }}</span></i></div>
+                  <div v-if="!publicConfig.propertyDetail.facilities.some(item => item.enabled)" class="preview-empty">暂未启用设施</div>
+                  <div class="basic-preview-hint">录入房源时，仅展示这里已启用的设施选项。</div>
+                </template>
+              </div>
+              <div class="mini-tabbar"><button class="active">⌂<small>首页</small></button><button>▤<small>房源</small></button><button>○<small>我的</small></button></div>
+            </div>
+            <p class="preview-note">左侧修改会立即反映到此处；保存发布后同步到小程序。</p>
+          </aside>
+          </div>
         </template>
 
-        <template v-else-if="tab === '小程序页面配置' || (tab === '小程序基础配置' && basicConfigTab === 'coverage')">
+        <template v-else-if="tab === '小程序页面配置'">
           <div class="miniapp-config-shell">
           <div class="miniapp-config-main">
           <section class="page-header">
