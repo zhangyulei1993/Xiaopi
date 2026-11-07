@@ -39,7 +39,7 @@ type DetailSectionTab = 'overview' | 'location' | 'facilities' | 'description' |
 const configAudience = ref<ConfigAudience>('customer')
 const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
-type BasicConfigTab = 'brand' | 'coverage' | 'facilities'
+type BasicConfigTab = 'brand' | 'coverage' | 'tags' | 'facilities'
 const basicConfigTab = ref<BasicConfigTab>('brand')
 const editingFacilityKey = ref('')
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
@@ -936,6 +936,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <section class="surface basic-config-tabs" aria-label="小程序基础配置分类">
             <button type="button" :class="{ active: basicConfigTab === 'brand' }" @click="selectBasicConfigTab('brand')">品牌与联系</button>
             <button type="button" :class="{ active: basicConfigTab === 'coverage' }" @click="selectBasicConfigTab('coverage')">地区与关联范围</button>
+            <button type="button" :class="{ active: basicConfigTab === 'tags' }" @click="selectBasicConfigTab('tags')">房源标签规则</button>
             <button type="button" :class="{ active: basicConfigTab === 'facilities' }" @click="selectBasicConfigTab('facilities')">房屋设施库</button>
           </section>
           <section v-if="basicConfigTab === 'brand'" class="surface form-section basic-config-panel">
@@ -947,6 +948,25 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="section-heading"><span>02</span><div><h2>地区与关联范围</h2><p>用于频道归属、房源附近推荐和默认筛选；页面文案与背景仍在“页面配置”里管理。</p></div></div>
             <el-form label-position="top" class="basic-config-form"><el-form-item label="附近房源默认关联距离"><el-select v-model="publicConfig.relatedPropertyRadiusKm" style="width:100%"><el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" /></el-select><div class="form-tip">按地图坐标关联；详情页可在页面配置中单独调整展示范围。</div></el-form-item></el-form>
             <div class="basic-config-note"><b>地区入口与精选频道</b><span>它们是首页与筛选页的共用数据。点击“页面配置 → 首页”可维护显示名称、地图位置、频道排序和页面样式。</span></div>
+          </section>
+          <section v-else-if="basicConfigTab === 'tags'" class="surface form-section basic-config-panel">
+            <div class="section-heading"><span>03</span><div><h2>房源标签规则</h2><p>这里是标签配置唯一入口：首页推荐、房源列表、房源详情、微信分享卡和朋友圈海报均读取本规则。</p></div></div>
+            <div class="share-field-editor listing-title-editor">
+              <header><strong>第一步：开放给客户视角的可选标签</strong><span>管理员在此定义客户可选择哪些公开字段；开启门牌会出现住址暴露提醒。</span></header>
+              <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`basic-customer-allowed-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.customerAllowedFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community'" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.customerAllowedFields.includes(field.key)" @click="toggleCustomerAllowedListingField(field.key, !publicConfig.listingTitle.customerAllowedFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.customerAllowedFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+              <div class="listing-title-preview"><span>客户可配置范围</span><strong>{{ publicConfig.listingTitle.customerAllowedFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+            </div>
+            <div class="share-field-editor listing-title-editor">
+              <header><strong>第二步：客户公开展示标签</strong><span>这些标签会同时进入客户首页推荐、列表、详情和分享素材；小区名称始终是标题。</span></header>
+              <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`basic-customer-visible-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community' || !publicConfig.listingTitle.customerAllowedFields.includes(field.key)" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+              <header class="detail-subheading"><strong>客户详情补充标签</strong><span>详情页可在已开放范围内独立减法；不会影响客户列表和分享。</span></header>
+              <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`basic-customer-detail-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community' || !publicConfig.listingTitle.customerAllowedFields.includes(field.key)" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key)" @click="toggleCustomerDetailField(field.key, !publicConfig.listingTitle.customerDetailFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
+            </div>
+            <div class="share-field-editor listing-title-editor">
+              <header><strong>管理员视角的唯一差异</strong><span>管理员与客户复用公开标签；只可额外显示精确门牌，列表和详情同步生效。</span></header>
+              <div class="share-field-options"><button type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.adminEnabledFields.includes('unit') }" :aria-pressed="publicConfig.listingTitle.adminEnabledFields.includes('unit')" @click="toggleAdminDoorplate(!publicConfig.listingTitle.adminEnabledFields.includes('unit'))"><i>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '✓' : '' }}</i><span>额外显示门牌</span></button></div>
+              <div class="listing-title-preview"><span>管理员最终效果</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '客户公开标签 + 5栋3单元101室' : '与客户公开标签完全一致' }}</strong></div>
+            </div>
           </section>
           <section v-else class="surface form-section basic-config-panel facility-library-panel">
             <div class="section-heading"><span>03</span><div><h2>房屋设施库</h2><p>点击整张卡片启用或停用。启用项会进入管理员录入页的设施勾选，并可在房源详情展示；停用不删除历史房源数据。</p></div></div>
@@ -1044,7 +1064,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(configPage, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[configPage].backgroundImage" @click="publicConfig.pagePresentations[configPage].backgroundImage = ''">移除背景图</button></div>
                 </el-form>
               </section>
-              <section v-if="configAudience === 'operator' && configPage === 'properties'" class="surface form-section config-section share-card-config">
+              <section v-if="false" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>全局房源标签规则</h2><p>只需在这里配置一次；客户列表、客户详情、管理员房源与所有公开分享都会复用。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
                   <header><strong>客户视角：允许配置的标签</strong><span>在这里开启后会立即加入客户列表和详情，并同步右侧画布；客户视角可再分别取消。发布者不参与标签选择。</span></header>
@@ -1057,7 +1077,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="listing-title-preview"><span>管理员最终效果</span><strong>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '客户公开标签 + 5栋3单元101室' : '与客户公开标签完全一致' }}</strong></div>
                 </div>
               </section>
-              <section v-else-if="configAudience === 'customer' && configPage === 'properties'" class="surface form-section config-section share-card-config">
+              <section v-if="false" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>客户公开标签</h2><p>配置一次即同步列表、首页推荐、详情、好友分享与朋友圈海报；发布者无需、也不能为单套房源选择标签。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
                   <header><strong>客户实际展示标签</strong><span>小区名称始终作为主标题。灰色项尚未在非客户视角开放，需先回到非客户视角开启。</span></header>
@@ -1078,7 +1098,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <small>切换后仅编辑当前效果，右侧小程序画布会同步预览。</small>
               </section>
               <section v-if="configPage === 'propertyDetail' && (configAudience === 'operator' || detailConfigTab === 'detail')" class="surface form-section config-section share-card-config">
-                <div class="section-heading config-section-heading"><span>02</span><div><h2>房源详情标签</h2><p v-if="configAudience === 'customer'">从管理员开放的标签列中选择详情展示字段；右侧详情效果立即同步。</p><p v-else>详情字段由客户视角配置；管理员仅可在其基础上额外展示门牌。</p></div><el-button v-if="configAudience === 'operator'" plain @click="switchConfigAudience('customer'); selectConfigPage('propertyDetail')">配置客户详情标签</el-button></div>
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>房源详情模块</h2><p>这里配置录入和详情展示模块；标签规则统一在“小程序基础配置 → 房源标签规则”维护。</p></div><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">配置标签规则</el-button></div>
                 <template v-if="configAudience === 'customer'">
                   <div class="detail-section-tabs" role="tablist" aria-label="详情内容模块">
                     <button v-for="section in [{ key: 'overview', label: '顶部概况' }, { key: 'location', label: '位置与周边' }, { key: 'facilities', label: '设施与环境' }, { key: 'description', label: '房源描述' }, { key: 'nearby', label: '附近推荐' }]" :key="section.key" type="button" :class="{ active: detailSectionTab === section.key }" @click="selectDetailSectionTab(section.key as DetailSectionTab)">{{ section.label }}</button>
@@ -1087,9 +1107,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <header><strong>顶部概况</strong><span>控制面积、朝向、楼内配置等附加字段的录入与展示。小区、户型、租金仍是发布房源的基础信息，会始终保留。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('overview').title" maxlength="12" /></el-form-item></el-form>
                     <div class="module-toggle-row"><span>启用概况附加字段采集与展示</span><el-switch v-model="detailModule('overview').enabled" active-text="启用" inactive-text="停用" /></div>
-                    <header class="detail-subheading"><strong>客户详情展示标签</strong><span>与客户列表独立配置，但都只能使用非客户视角开放的标签列。</span></header>
-                    <div class="share-field-options"><button v-for="field in listingTitleFieldOptions" :key="`customer-detail-${field.key}`" type="button" class="field-check" :class="{ checked: field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key), locked: field.key === 'community' }" :disabled="field.key === 'community' || !publicConfig.listingTitle.customerAllowedFields.includes(field.key)" :aria-pressed="field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key)" @click="toggleCustomerDetailField(field.key, !publicConfig.listingTitle.customerDetailFields.includes(field.key))"><i>{{ field.key === 'community' || publicConfig.listingTitle.customerDetailFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.key === 'community' ? '小区主标题' : field.label }}</span></button></div>
-                    <div class="listing-title-preview"><span>当前客户详情标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
+                    <div class="basic-config-note"><b>详情标签已由基础配置统一控制</b><span>客户详情可展示字段：{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">调整标签</el-button></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
                     <header><strong>位置与周边</strong><span>小区与地图坐标用于归属地区和附近房源关联，始终保留；本模块控制通勤等周边补充字段及详情展示。</span></header>
