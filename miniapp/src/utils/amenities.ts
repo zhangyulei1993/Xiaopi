@@ -17,6 +17,7 @@ export const amenityIcons: Record<string, string> = {
   智能门锁: "/static/amenities/smart-lock.svg",
   阳台: "/static/amenities/balcony.svg",
   独立卫浴: "/static/amenities/bathroom.svg",
+  独立卫生间: "/static/amenities/bathroom.svg",
 };
 
 export const amenityIcon = (name: string) =>

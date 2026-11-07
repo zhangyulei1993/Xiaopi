@@ -108,6 +108,20 @@ const defaultPropertyDetail = () => ({
     { key: 'elevator', label: '电梯', group: '居住条件', enabled: true }, { key: 'private_bathroom', label: '独立卫生间', group: '居住条件', enabled: true }, { key: 'balcony', label: '阳台', group: '居住条件', enabled: true },
   ],
 })
+const facilityCatalog = [
+  { key: 'air_conditioner', label: '空调', group: '家具家电', icon: '❄' }, { key: 'refrigerator', label: '冰箱', group: '家具家电', icon: '▥' },
+  { key: 'washer', label: '洗衣机', group: '家具家电', icon: '◉' }, { key: 'water_heater', label: '热水器', group: '家具家电', icon: '♨' },
+  { key: 'television', label: '电视', group: '家具家电', icon: '▣' }, { key: 'broadband', label: '宽带', group: '家具家电', icon: '⌁' },
+  { key: 'elevator', label: '电梯', group: '居住条件', icon: '↕' }, { key: 'private_bathroom', label: '独立卫生间', group: '居住条件', icon: '◌' },
+  { key: 'balcony', label: '阳台', group: '居住条件', icon: '▱' }, { key: 'bed', label: '床', group: '家具家电', icon: '▰' },
+  { key: 'wardrobe', label: '衣柜', group: '家具家电', icon: '▤' }, { key: 'desk', label: '书桌', group: '家具家电', icon: '▱' },
+  { key: 'sofa', label: '沙发', group: '家具家电', icon: '▰' }, { key: 'hood', label: '油烟机', group: '厨房', icon: '⌂' },
+  { key: 'gas', label: '燃气灶', group: '厨房', icon: '⌁' }, { key: 'smart_lock', label: '智能门锁', group: '安全', icon: '◈' },
+  { key: 'parking', label: '车位', group: '配套服务', icon: 'P' },
+]
+const facilityToAdd = ref('')
+const availableFacilityCatalog = computed(() => facilityCatalog.filter(item => !publicConfig.propertyDetail.facilities.some(facility => facility.key === item.key)))
+const detailFacilityIcon = (key: string) => facilityCatalog.find(item => item.key === key)?.icon || '•'
 const listingTitleFieldOptions = [
   { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
   { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'fee', label: '有无中介费' }, { key: 'area', label: '面积' },
@@ -403,14 +417,11 @@ function moveShareField(target: 'titleFields' | 'posterFields', index: number, o
   if (next < 0 || next >= fields.length) return
   ;[fields[index], fields[next]] = [fields[next], fields[index]]
 }
-function addDetailFacility() {
-  if (publicConfig.propertyDetail.facilities.length >= 24) return
-  const next = publicConfig.propertyDetail.facilities.length + 1
-  publicConfig.propertyDetail.facilities.push({ key: `custom_${Date.now()}`, label: `自定义设施${next}`, group: '其他', enabled: true })
-}
-function removeDetailFacility(index: number) {
-  if (publicConfig.propertyDetail.facilities.length <= 1) return
-  publicConfig.propertyDetail.facilities.splice(index, 1)
+function addDetailFacility(key: string) {
+  const item = facilityCatalog.find(candidate => candidate.key === key)
+  if (!item || publicConfig.propertyDetail.facilities.some(facility => facility.key === key) || publicConfig.propertyDetail.facilities.length >= 24) return
+  publicConfig.propertyDetail.facilities.push({ key: item.key, label: item.label, group: item.group, enabled: true })
+  facilityToAdd.value = ''
 }
 const shareTitlePreview = computed(() => {
   const examples: Record<string, string> = { community: '拿铁公寓', layout: '两室一厅', roomNo: '5栋3单元101室', rentMonthly: '¥2300/月', listingSource: '直租', rentType: '整租', depositPayment: '押一付一', areaSqm: '68㎡', floorInfo: '中层', availableDate: '拎包入住' }
@@ -1000,17 +1011,20 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <div class="listing-title-preview"><span>当前客户详情标签</span><strong>{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</strong></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
-                    <header><strong>位置与周边</strong><span>位置坐标仍由房源录入时确定；这里仅控制客户详情页的模块标题与显示开关。</span></header>
-                    <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('location').title" maxlength="12" /></el-form-item><el-form-item label="展示方式"><el-radio-group v-model="detailModule('location').enabled"><el-radio :value="true">显示位置与地图</el-radio><el-radio :value="false">隐藏整个模块</el-radio></el-radio-group></el-form-item></el-form>
+                    <header><strong>位置与周边</strong><span>位置坐标仍由房源录入时确定；这里可编辑模块标题并决定是否在客户详情中展示。</span></header>
+                    <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('location').title" maxlength="12" /></el-form-item></el-form>
+                    <div class="module-toggle-row"><span>客户详情展示位置与地图</span><el-switch v-model="detailModule('location').enabled" active-text="显示" inactive-text="隐藏" /></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
-                    <header><strong>设施与环境</strong><span>启用的设施会在管理员录入及客户详情中使用；名称和分类可按运营口径调整。</span></header>
+                    <header><strong>设施与环境</strong><span>勾选后才会进入房源录入与客户详情。设施来自预置库；本轮不提供删除，取消勾选即可暂不使用。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('facilities').title" maxlength="12" /></el-form-item></el-form>
-                    <div class="facility-config-list"><div v-for="(facility, index) in publicConfig.propertyDetail.facilities" :key="facility.key"><el-checkbox v-model="facility.enabled" /><el-input v-model="facility.label" maxlength="12" placeholder="设施名称" /><el-input v-model="facility.group" maxlength="12" placeholder="所属分类" /><button type="button" class="facility-remove" :disabled="publicConfig.propertyDetail.facilities.length <= 1" @click="removeDetailFacility(index)">删除</button></div></div><el-button class="add-facility" plain :disabled="publicConfig.propertyDetail.facilities.length >= 24" @click="addDetailFacility">＋ 新增设施</el-button>
+                    <div class="facility-config-list"><label v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key" class="facility-choice" :class="{ checked: facility.enabled }"><el-checkbox v-model="facility.enabled" /><i class="facility-option-icon">{{ detailFacilityIcon(facility.key) }}</i><span><strong>{{ facility.label }}</strong><small>{{ facility.group }}</small></span></label></div>
+                    <div class="facility-add-row"><span>添加预置设施</span><el-select v-model="facilityToAdd" placeholder="从预置列表选择" :disabled="!availableFacilityCatalog.length || publicConfig.propertyDetail.facilities.length >= 24" @change="addDetailFacility"><el-option v-for="facility in availableFacilityCatalog" :key="facility.key" :label="`${facility.label} · ${facility.group}`" :value="facility.key" /></el-select></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'description'" class="share-field-editor listing-title-editor">
-                    <header><strong>房源描述</strong><span>发布者填写的房源说明；未填写内容时自动展示“暂无描述”。</span></header>
-                    <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('description').title" maxlength="12" /></el-form-item><el-form-item label="展示方式"><el-radio-group v-model="detailModule('description').enabled"><el-radio :value="true">显示描述</el-radio><el-radio :value="false">隐藏模块</el-radio></el-radio-group></el-form-item></el-form>
+                    <header><strong>房源描述</strong><span>发布者填写的房源说明；未填写内容时客户页自动展示“暂无描述”。</span></header>
+                    <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('description').title" maxlength="12" /></el-form-item></el-form>
+                    <div class="module-toggle-row"><span>客户详情展示房源描述</span><el-switch v-model="detailModule('description').enabled" active-text="显示" inactive-text="隐藏" /></div>
                   </div>
                   <div v-else class="share-field-editor listing-title-editor">
                     <header><strong>附近推荐房源</strong><span>仅推荐可租房源，自动排除当前房源；优先按房源坐标进行匹配。</span></header>
