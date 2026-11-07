@@ -69,6 +69,9 @@ type ListingTitleConfig struct {
 	ListTagOrder     []string `json:"listTagOrder"`
 	ListTagTopFields []string `json:"listTagTopFields"`
 	DetailTagOrder   []string `json:"detailTagOrder"`
+	// DetailTagTopFields fixes the first tag row on the detail page so a
+	// layout does not drift when the device width changes.
+	DetailTagTopFields []string `json:"detailTagTopFields"`
 }
 
 // PropertyDetailConfig controls the content blocks of a property detail page.
@@ -162,6 +165,7 @@ func DefaultPublicConfig() PublicConfig {
 			ListTagOrder:          []string{"rentType", "listingSource", "layout", "fee", "floor", "area"},
 			ListTagTopFields:      []string{"rentType", "listingSource"},
 			DetailTagOrder:        []string{"layout", "rentType", "listingSource", "fee", "floor", "area"},
+			DetailTagTopFields:    []string{"listingSource", "rentType", "fee"},
 		},
 		PropertyDetail: PropertyDetailConfig{
 			Modules: []PropertyDetailModule{
@@ -268,6 +272,9 @@ func (config *PublicConfig) Normalize() {
 	}
 	if config.ListingTitle.DetailTagOrder == nil {
 		config.ListingTitle.DetailTagOrder = append([]string(nil), DefaultPublicConfig().ListingTitle.DetailTagOrder...)
+	}
+	if config.ListingTitle.DetailTagTopFields == nil {
+		config.ListingTitle.DetailTagTopFields = append([]string(nil), DefaultPublicConfig().ListingTitle.DetailTagTopFields...)
 	}
 	// Historical configurations held a full administrator tag set. The public
 	// set is now shared globally, so preserve only the optional doorplate bit.
@@ -497,6 +504,9 @@ func (config PublicConfig) Validate() error {
 	}
 	if err := validateOptionalListingTitleFields(config.ListingTitle.DetailTagOrder); err != nil {
 		return errors.New("详情标签排序不支持")
+	}
+	if err := validateOptionalListingTitleFields(config.ListingTitle.DetailTagTopFields); err != nil {
+		return errors.New("详情第一行标签不支持")
 	}
 	validDetailModules := map[string]struct{}{"overview": {}, "location": {}, "facilities": {}, "description": {}, "nearby": {}}
 	if len(config.PropertyDetail.Modules) != len(validDetailModules) {

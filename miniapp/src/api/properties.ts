@@ -179,6 +179,7 @@ export interface PublicConfig {
     listTagOrder?: string[];
     listTagTopFields?: string[];
     detailTagOrder?: string[];
+    detailTagTopFields?: string[];
   };
   propertyDetail?: {
     modules?: { key: string; title: string; enabled: boolean }[];
