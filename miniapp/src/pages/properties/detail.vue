@@ -45,6 +45,7 @@ const detailConfig = ref({
 const customerDetailTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
 const operatorDoorplateEnabled = ref(false);
 const customerShareTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
+const customerPosterTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
 const shareCardConfig = ref({
   titlePrefix: "",
   titleFields: ["community", "layout"],
@@ -93,6 +94,9 @@ const load = async (id = "") => {
     customerShareTagFields.value = config?.listingTitle?.customerShareFields?.length
       ? config.listingTitle.customerShareFields
       : customerDetailTagFields.value;
+    customerPosterTagFields.value = config?.listingTitle?.customerPosterFields?.length
+      ? config.listingTitle.customerPosterFields
+      : customerShareTagFields.value;
     operatorDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     shareCardConfig.value = {
       titlePrefix: String(config?.shareCard?.titlePrefix || ""),
@@ -215,12 +219,19 @@ const shareFieldMeta: Record<string, { label: string; value: (property: Property
   availableDate: { label: "入住", value: (property) => property.availableDate || "拎包入住" },
 };
 const shareFieldTagMap: Record<string, string> = { layout: "layout", roomNo: "unit", listingSource: "listingSource", rentType: "rentType", areaSqm: "area" };
-const isPublicShareField = (key: string) => !shareFieldTagMap[key] || customerShareTagFields.value.includes(shareFieldTagMap[key]);
+const isPublicShareField = (key: string, surface: "share" | "poster" = "share") =>
+  !shareFieldTagMap[key] || (surface === "poster" ? customerPosterTagFields.value : customerShareTagFields.value).includes(shareFieldTagMap[key]);
 const shareFieldValue = (property: Property, key: string) => shareFieldMeta[key]?.value(property) || "";
 const shareTitle = computed(() => {
   const current = item.value;
   if (!current) return `${brandName.value}房源`;
   const values = shareCardConfig.value.titleFields.filter(isPublicShareField).map((key) => shareFieldValue(current, key)).filter(Boolean);
+  return [shareCardConfig.value.titlePrefix, ...values].filter(Boolean).join(" · ") || current.community || "精选房源";
+});
+const posterTitle = computed(() => {
+  const current = item.value;
+  if (!current) return `${brandName.value}房源`;
+  const values = shareCardConfig.value.titleFields.filter((key) => isPublicShareField(key, "poster")).map((key) => shareFieldValue(current, key)).filter(Boolean);
   return [shareCardConfig.value.titlePrefix, ...values].filter(Boolean).join(" · ") || current.community || "精选房源";
 });
 const shareImageUrl = computed(() => {
@@ -260,11 +271,11 @@ const generateShareCard = async () => {
     context.setFillStyle("#ffffff");
     context.fillRect(0, 0, width, height);
     context.drawImage(info.path, sx, sy, sw, sh, 0, 0, width, imageHeight);
-    const posterKeys = shareCardConfig.value.posterFields.filter(isPublicShareField);
+    const posterKeys = shareCardConfig.value.posterFields.filter((key) => isPublicShareField(key, "poster"));
     const rentEnabled = posterKeys.includes("rentMonthly");
     context.setFillStyle(rentEnabled ? "#d85f42" : "#26372c");
     context.setFontSize(32);
-    context.fillText(compactText(rentEnabled ? shareFieldValue(current, "rentMonthly") : shareTitle.value, 24), 24, 324);
+    context.fillText(compactText(rentEnabled ? shareFieldValue(current, "rentMonthly") : posterTitle.value, 24), 24, 324);
     const secondaryKey = posterKeys.find((key) => key !== "rentMonthly");
     if (rentEnabled && secondaryKey) {
       context.setFillStyle("#7b8579");
@@ -273,7 +284,7 @@ const generateShareCard = async () => {
     }
     context.setFillStyle("#26372c");
     context.setFontSize(27);
-    context.fillText(compactText(shareTitle.value, 19), 24, 366);
+    context.fillText(compactText(posterTitle.value, 19), 24, 366);
     const detailKeys = posterKeys.filter((key) => key !== "rentMonthly" && key !== secondaryKey).slice(0, 3);
     const columns = detailKeys.map((key) => [shareFieldMeta[key]?.label || "信息", shareFieldValue(current, key)]);
     columns.forEach(([label, value], index) => {
@@ -323,7 +334,7 @@ const friendSharePayload = () => {
   };
 };
 const timelineSharePayload = () => ({
-  title: shareTitle.value,
+  title: posterTitle.value,
   query: `id=${encodeURIComponent(item.value?.id || "")}`,
   imageUrl: shareImageUrl.value,
 });

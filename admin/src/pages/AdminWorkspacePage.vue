@@ -119,7 +119,7 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'] })
+const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], customerPosterFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'] })
 const defaultPropertyDetail = () => ({
   modules: [
     { key: 'overview', title: '房屋概况', enabled: true }, { key: 'location', title: '位置与周边', enabled: true },
@@ -227,6 +227,11 @@ function previewDetailTags(item?: Property) {
 }
 function previewShareTags(item?: Property) {
   const fields = publicConfig.listingTitle.customerShareFields
+    .filter(key => key !== 'community' && key !== 'unit')
+  return previewPropertyTags(item, fields)
+}
+function previewPosterTags(item?: Property) {
+  const fields = publicConfig.listingTitle.customerPosterFields
     .filter(key => key !== 'community' && key !== 'unit')
   return previewPropertyTags(item, fields)
 }
@@ -454,6 +459,8 @@ const configErrors = computed(() => {
   if (!publicConfig.listingTitle.customerDetailFields.every(field => publicConfig.listingTitle.customerAllowedFields.includes(field))) errors.push('客户详情标签必须先在“客户可选标签”中开启')
   if (!publicConfig.listingTitle.customerShareFields.length) errors.push('客户分享至少启用一个字段')
   if (!publicConfig.listingTitle.customerShareFields.every(field => publicConfig.listingTitle.customerAllowedFields.includes(field))) errors.push('客户分享标签必须先在“客户可选标签”中开启')
+  if (!publicConfig.listingTitle.customerPosterFields.length) errors.push('客户朋友圈至少启用一个字段')
+  if (!publicConfig.listingTitle.customerPosterFields.every(field => publicConfig.listingTitle.customerAllowedFields.includes(field))) errors.push('客户朋友圈标签必须先在“客户可选标签”中开启')
   if (publicConfig.propertyDetail.modules.some(item => !item.title.trim())) errors.push('房源详情模块标题不能为空')
   if (!publicConfig.propertyDetail.facilities.length) errors.push('至少保留一个设施类型')
   if (publicConfig.propertyDetail.facilities.some(item => !item.label.trim() || !item.group.trim())) errors.push('设施名称和分类不能为空')
@@ -516,6 +523,21 @@ function toggleCustomerShareField(key: string, enabled: boolean) {
     }
   }
 }
+function toggleCustomerPosterField(key: string, enabled: boolean) {
+  basicTagPreviewTab.value = 'poster'
+  if (key === 'community') return
+  const fields = publicConfig.listingTitle.customerPosterFields
+  if (enabled && !fields.includes(key)) fields.push(key)
+  if (!enabled) {
+    publicConfig.listingTitle.customerPosterFields = fields.filter(item => item !== key)
+    const belongsToRemovedTag = (field: string) => shareFieldListingMap[field] === key
+    publicConfig.shareCard.posterFields = publicConfig.shareCard.posterFields.filter(field => !belongsToRemovedTag(field))
+    for (const fallback of ['rentMonthly', 'depositPayment', 'community', 'availableDate']) {
+      if (publicConfig.shareCard.posterFields.length >= 3) break
+      if (!publicConfig.shareCard.posterFields.includes(fallback)) publicConfig.shareCard.posterFields.push(fallback)
+    }
+  }
+}
 function toggleCustomerAllowedListingField(key: string, enabled: boolean) {
   if (key === 'community') return
   if (key === 'unit' && enabled && !window.confirm('开启“门牌标签”后，客户视角可将精确门牌号作为展示标签，可能暴露住址信息。确认开启吗？')) return
@@ -528,6 +550,7 @@ function toggleCustomerAllowedListingField(key: string, enabled: boolean) {
     publicConfig.listingTitle.enabledFields = publicConfig.listingTitle.enabledFields.filter(item => item !== key)
     publicConfig.listingTitle.customerDetailFields = publicConfig.listingTitle.customerDetailFields.filter(item => item !== key)
     publicConfig.listingTitle.customerShareFields = publicConfig.listingTitle.customerShareFields.filter(item => item !== key)
+    publicConfig.listingTitle.customerPosterFields = publicConfig.listingTitle.customerPosterFields.filter(item => item !== key)
   }
 }
 function toggleAdminDoorplate(enabled: boolean) {
@@ -990,8 +1013,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <div class="share-field-options"><button v-for="field in listingTitleFieldOptions.filter(item => item.key !== 'community' && publicConfig.listingTitle.customerAllowedFields.includes(item.key))" :key="`basic-customer-list-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.enabledFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.enabledFields.includes(field.key)" @click="toggleListingTitleField(field.key, !publicConfig.listingTitle.enabledFields.includes(field.key))"><i>{{ publicConfig.listingTitle.enabledFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
               <header class="detail-subheading"><strong>房源详情</strong><span>控制客户在房源详情页标题下方看到的标签。</span></header>
               <div class="share-field-options"><button v-for="field in listingTitleFieldOptions.filter(item => item.key !== 'community' && publicConfig.listingTitle.customerAllowedFields.includes(item.key))" :key="`basic-customer-detail-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.customerDetailFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.customerDetailFields.includes(field.key)" @click="toggleCustomerDetailField(field.key, !publicConfig.listingTitle.customerDetailFields.includes(field.key))"><i>{{ publicConfig.listingTitle.customerDetailFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
-              <header class="detail-subheading"><strong>转发分享与朋友圈</strong><span>控制微信好友分享卡与朋友圈海报使用的标签；标题、海报字段仍可在“房源详情 → 分享卡 / 海报”单独排版。</span></header>
+              <header class="detail-subheading"><strong>微信好友分享卡</strong><span>控制微信好友转发时，小程序分享卡可使用的标签；标题字段仍可在“房源详情 → 分享卡”单独排版。</span></header>
               <div class="share-field-options"><button v-for="field in listingTitleFieldOptions.filter(item => item.key !== 'community' && publicConfig.listingTitle.customerAllowedFields.includes(item.key))" :key="`basic-customer-share-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.customerShareFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.customerShareFields.includes(field.key)" @click="toggleCustomerShareField(field.key, !publicConfig.listingTitle.customerShareFields.includes(field.key))"><i>{{ publicConfig.listingTitle.customerShareFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
+              <header class="detail-subheading"><strong>朋友圈海报</strong><span>控制朋友圈海报可使用的标签；海报字段仍可在“房源详情 → 海报”单独排版。</span></header>
+              <div class="share-field-options"><button v-for="field in listingTitleFieldOptions.filter(item => item.key !== 'community' && publicConfig.listingTitle.customerAllowedFields.includes(item.key))" :key="`basic-customer-poster-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.customerPosterFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.customerPosterFields.includes(field.key)" @click="toggleCustomerPosterField(field.key, !publicConfig.listingTitle.customerPosterFields.includes(field.key))"><i>{{ publicConfig.listingTitle.customerPosterFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
             </div>
             <div class="share-field-editor listing-title-editor">
               <header><strong>管理员视角的唯一差异</strong><span>管理员与客户复用公开标签；只可额外显示精确门牌，列表和详情同步生效。</span></header>
@@ -1038,8 +1063,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="basic-tag-preview-tabs" role="tablist" aria-label="标签效果预览"><button :class="{ active: basicTagPreviewTab === 'list' }" @click="basicTagPreviewTab = 'list'">列表</button><button :class="{ active: basicTagPreviewTab === 'detail' }" @click="basicTagPreviewTab = 'detail'">详情</button><button :class="{ active: basicTagPreviewTab === 'share' }" @click="basicTagPreviewTab = 'share'">分享卡</button><button :class="{ active: basicTagPreviewTab === 'poster' }" @click="basicTagPreviewTab = 'poster'">朋友圈</button></div>
                   <template v-if="previewPrimaryProperty && basicTagPreviewTab === 'list'"><div class="basic-preview-caption">客户视角 · 首页推荐 / 房源列表</div><article class="preview-property-card basic-preview-property"><div :style="previewCoverStyle(previewPrimaryProperty)"><em>可租</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewPropertyTags(previewPrimaryProperty).length" class="preview-tag-row secondary"><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></small><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article></template>
                   <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'detail'"><div class="basic-preview-caption">客户视角 · 房源详情</div><article class="basic-detail-preview"><div class="basic-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><section><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><div class="basic-detail-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div></section></article></template>
-                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'share'"><div class="basic-preview-caption">微信好友 · 小程序分享卡</div><article class="basic-share-preview"><span>⌁ {{ publicConfig.heroTitle || '小皮租房' }}</span><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><div :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><i v-for="tag in previewShareTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></article></template>
-                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'poster'"><div class="basic-preview-caption">朋友圈 · 房源海报</div><article class="basic-poster-preview"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><span><i v-for="tag in previewShareTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></span><em>{{ publicConfig.heroTitle || '小皮租房' }} · 小程序</em></article></template>
+                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'share'"><div class="basic-preview-caption">微信好友 · 小程序分享卡</div><article class="basic-share-preview"><header><i>皮</i><span>{{ publicConfig.heroTitle || '小皮租房' }}</span></header><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><div class="basic-share-card"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><section><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><strong>{{ previewPrimaryProperty.community }}</strong><span><i v-for="tag in previewShareTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></span></section></div><footer>⌁ 小程序</footer></article></template>
+                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'poster'"><div class="basic-preview-caption">朋友圈 · 房源海报</div><article class="basic-poster-preview"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><span><i v-for="tag in previewPosterTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></span><em>{{ publicConfig.heroTitle || '小皮租房' }} · 扫码查看房源</em></article></template>
                   <div v-else class="preview-empty">暂无可预览房源</div>
                 </template>
                 <template v-else>
