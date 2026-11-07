@@ -692,9 +692,9 @@ const phoneCustomerService = () =>
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view v-if="adminDoorplate" class="admin-detail-doorplate">门牌定位 · {{ adminDoorplate }}</view
       ><view v-if="detailTags.length" class="detail-tag-stack" :class="`detail-tags-${detailTagLayout}`"><view v-if="detailTagGroups.top.length" class="tags detail-tags"><text v-for="tag in detailTagGroups.top" :key="`top-${tag}`">{{ tag }}</text></view><view v-if="detailTagGroups.bottom.length" class="tags detail-tags"><text v-for="tag in detailTagGroups.bottom" :key="`bottom-${tag}`">{{ tag }}</text></view></view
-      ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
-        ><view><small>户型</small><strong>{{ listingLayout(item) || "待补充" }}</strong></view
-        ><view><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
+      ><view class="key-facts"><view v-if="!customerDetailTagFields.includes('area')"><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
+        ><view v-if="!customerDetailTagFields.includes('layout')"><small>户型</small><strong>{{ listingLayout(item) || "待补充" }}</strong></view
+        ><view v-if="!customerDetailTagFields.includes('floor')"><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
         ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ></view
       ></view
