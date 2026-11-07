@@ -18,6 +18,7 @@ import { usePagePresentation } from "../../utils/presentation";
 import { listingLayout, listingTagValue, uniqueListingTags } from "../../utils/listing-title";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
+  brandName = ref("小皮租房"),
   loading = ref(true),
   loadFailed = ref(false),
   favorite = ref(false);
@@ -78,6 +79,7 @@ const load = async (id = "") => {
     videoDimensions.value = {};
     mapExpanded.value = false;
     contactPhone.value = config?.contactPhone || "";
+    brandName.value = config?.heroTitle || brandName.value;
     relatedRadiusKm.value = Number(config?.relatedPropertyRadiusKm) || 3;
     detailConfig.value = {
       modules: config?.propertyDetail?.modules?.length ? config.propertyDetail.modules : detailConfig.value.modules,
@@ -217,7 +219,7 @@ const isPublicShareField = (key: string) => !shareFieldTagMap[key] || customerSh
 const shareFieldValue = (property: Property, key: string) => shareFieldMeta[key]?.value(property) || "";
 const shareTitle = computed(() => {
   const current = item.value;
-  if (!current) return "小皮租房房源";
+  if (!current) return `${brandName.value}房源`;
   const values = shareCardConfig.value.titleFields.filter(isPublicShareField).map((key) => shareFieldValue(current, key)).filter(Boolean);
   return [shareCardConfig.value.titlePrefix, ...values].filter(Boolean).join(" · ") || current.community || "精选房源";
 });
@@ -623,7 +625,7 @@ const phoneCustomerService = () =>
         ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ></view
       ></view
-    ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
+    ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>{{ brandName }}服务</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
     ><view v-if="detailModuleEnabled('overview') && (item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租')" class="card detail-info"
       ><view class="detail-section-heading compact"><view><view class="title small">租住信息</view><small>费用、入住与通勤条件</small></view></view
       ><view class="detail-info-grid"
@@ -688,7 +690,7 @@ const phoneCustomerService = () =>
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
-      ><view class="service-persona"><view class="service-persona-avatar">皮</view><view><strong>小皮客服</strong><small>房源咨询</small></view></view
+      ><view class="service-persona"><view class="service-persona-avatar">皮</view><view><strong>{{ brandName }}客服</strong><small>房源咨询</small></view></view
       ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享</text></button
       ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view

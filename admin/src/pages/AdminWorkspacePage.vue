@@ -946,8 +946,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
           <section v-if="basicConfigTab === 'brand'" class="surface form-section basic-config-panel">
             <div class="section-heading"><span>01</span><div><h2>品牌与联系</h2><p>全局品牌名和联系方式，不属于某一个页面。</p></div></div>
-            <el-form label-position="top" class="basic-config-form"><div class="form-row two-columns"><el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item><el-form-item label="联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /></el-form-item></div></el-form>
-            <div class="basic-config-note"><b>角色展示规则</b><span>普通用户与管理员共用同一套房源标签、列表和详情；管理员仅可额外显示精确门牌（如“5栋3单元101室”）。该开关在“基础配置 → 房源标签规则”中管理。</span></div>
+            <el-form label-position="top" class="basic-config-form"><div class="form-row two-columns"><el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /><div class="form-tip">统一用于小程序顶部导航、微信登录、房源详情服务入口与分享落款。</div></el-form-item><el-form-item label="服务联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /><div class="form-tip">统一用于房源详情“打电话”和找房需求页的电话入口；不影响在线客服。</div></el-form-item></div></el-form>
+            <div class="basic-config-note"><b>字段边界</b><span>品牌名称是对外品牌文本；在线客服人员由微信小程序客服配置管理，不在此设置。普通用户与管理员的房源标签规则在“房源标签规则”中单独管理。</span></div>
           </section>
           <section v-else-if="basicConfigTab === 'coverage'" class="surface form-section basic-config-panel">
             <div class="section-heading"><span>02</span><div><h2>地区与关联范围</h2><p>用于频道归属、房源附近推荐和默认筛选；页面文案与背景仍在“页面配置”里管理。</p></div></div>
@@ -995,8 +995,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
               <div class="basic-preview-content">
                 <template v-if="basicConfigTab === 'brand'">
-                  <div class="basic-preview-brand"><i>皮</i><strong>{{ publicConfig.heroTitle || '小皮租房' }}</strong><span>真实房源，放心查看</span></div>
-                  <div class="basic-preview-service"><b>小皮租房服务</b><span>{{ publicConfig.contactPhone || '联系电话待配置' }}</span><em>在线咨询 ›</em></div>
+                  <div class="basic-preview-usage"><span>① 顶部导航 · 品牌名称</span><div class="basic-preview-nav">{{ publicConfig.heroTitle || '小皮租房' }}</div></div>
+                  <div class="basic-preview-usage"><span>② 微信登录 · 品牌名称</span><div class="basic-preview-login"><i>皮</i><b>{{ publicConfig.heroTitle || '小皮租房' }}</b><small>登录后开始找房</small></div></div>
+                  <div class="basic-preview-usage"><span>③ 房源详情 · 品牌名称</span><div class="basic-preview-service"><i>皮</i><div><b>{{ publicConfig.heroTitle || '小皮租房' }}服务</b><small>咨询费用、入住时间和看房安排</small></div><em>在线咨询 ›</em></div></div>
+                  <div class="basic-preview-usage"><span>④ 房源详情 / 找房需求 · 服务联系电话</span><div class="basic-preview-phone"><div><b>{{ publicConfig.heroTitle || '小皮租房' }}客服</b><small>{{ publicConfig.contactPhone || '联系电话待配置' }}</small></div><button>打电话</button></div></div>
+                  <div class="basic-preview-usage"><span>⑤ 分享卡与海报落款 · 品牌名称</span><div class="basic-preview-share-footer">⌁ {{ publicConfig.heroTitle || '小皮租房' }} · 小程序</div></div>
                 </template>
                 <template v-else-if="basicConfigTab === 'coverage'">
                   <div class="basic-preview-caption">首页地区入口</div>

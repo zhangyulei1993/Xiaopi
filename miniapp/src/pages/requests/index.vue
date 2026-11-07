@@ -11,6 +11,7 @@ const propertyID = ref(""),
   propertyTitle = ref(""),
   areaMode = ref(false),
   contactPhone = ref(""),
+  brandName = ref("小皮租房"),
   pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
 const areaTemplateID = ref("");
@@ -36,6 +37,7 @@ onLoad(async (query) => {
   const config = await getPublicConfig().catch(() => null);
 	areaTemplateID.value = (await getSubscriptionTemplates().catch(() => null))?.areaListing || "";
   contactPhone.value = config?.contactPhone || "";
+  brandName.value = config?.heroTitle || brandName.value;
   pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.requests || {}) };
 	if (getSession()?.role === "user") {
 		const profile = await getWechatUserProfile().catch(() => null);
@@ -87,7 +89,7 @@ const submit = async () => {
 	if (!form.phone) { appointmentCreated.value = true; return; }
     uni.showModal({
       title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交",
-      content: areaMode.value ? "管理员会补充该片区房源；微信新房通知需完成订阅授权。" : "小皮会根据你的条件匹配房源并联系你。",
+      content: areaMode.value ? "管理员会补充该片区房源；微信新房通知需完成订阅授权。" : `${brandName.value}会根据你的条件匹配房源并联系你。`,
       showCancel: false,
       success: () => uni.navigateBack(),
     });
@@ -100,7 +102,7 @@ const submit = async () => {
     submitting.value = false;
   }
 };
-const finishAppointment = () => uni.showModal({ title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交", content: areaMode.value ? "该片区有新房源时会提醒你。" : "小皮会联系你确认需求。", showCancel: false, success: () => uni.navigateBack() });
+const finishAppointment = () => uni.showModal({ title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交", content: areaMode.value ? "该片区有新房源时会提醒你。" : `${brandName.value}会联系你确认需求。`, showCancel: false, success: () => uni.navigateBack() });
 const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) => {
 	const code = event.detail.code;
 	if (!code || bindingPhone.value) return;
@@ -126,7 +128,7 @@ const call = () => callPhone(contactPhone.value);
       }}</view
       ><small>{{
         propertyID
-          ? "留下手机号和时间，小皮会回拨确认"
+          ? `留下手机号和时间，${brandName}会回拨确认`
           : areaMode ? "该片区发布新房源后通知你"
           : pagePresentation.subtitle
       }}</small></view
