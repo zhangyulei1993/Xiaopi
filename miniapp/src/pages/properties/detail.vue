@@ -454,8 +454,9 @@ const environmentHighlights = computed(() => {
   const current = item.value;
   if (!current) return [];
   return [
+    current.orientation && { label: "朝向", value: current.orientation },
     current.utilitiesText && { label: "水电", value: current.utilitiesText },
-    { label: "楼内", value: current.elevator || "步梯" },
+    { label: "电梯", value: current.elevator || "步梯" },
     Number(current.metroMinutes) > 0 && { label: "通勤", value: `步行至地铁 ${current.metroMinutes} 分钟` },
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 });
@@ -695,19 +696,16 @@ const phoneCustomerService = () =>
       ><view class="key-facts"><view v-if="!customerDetailTagFields.includes('area')"><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
         ><view v-if="!customerDetailTagFields.includes('layout')"><small>户型</small><strong>{{ listingLayout(item) || "待补充" }}</strong></view
         ><view v-if="!customerDetailTagFields.includes('floor')"><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
-        ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ></view
       ></view
     ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>{{ brandName }}</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
-    ><view v-if="detailModuleEnabled('overview') && (item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租')" class="card detail-info"
+    ><view v-if="detailModuleEnabled('overview') && (item.depositPayment || item.availableDate || item.rulesText || item.verificationDate || item.listingSource === '转租')" class="card detail-info"
       ><view class="detail-section-heading compact"><view><view class="title small">租住信息</view><small>费用、入住与通勤条件</small></view></view
       ><view class="detail-info-grid"
         ><view v-if="item.depositPayment"><small>押付方式</small><strong>{{ item.depositPayment }}</strong></view
         ><view v-if="item.listingSource === '转租'"><small>剩余租期</small><strong>{{ item.remainingLeaseMonths || 0 }} 个月</strong></view
         ><view v-if="item.listingSource === '转租'"><small>承接押金</small><strong>{{ item.transferDeposit ? `¥${item.transferDeposit}` : '无需承接' }}</strong></view
-        ><view v-if="item.utilitiesText"><small>水电杂费</small><strong>{{ item.utilitiesText }}</strong></view
         ><view v-if="item.availableDate"><small>可入住</small><strong>{{ item.availableDate }}</strong></view
-        ><view v-if="item.metroMinutes"><small>步行至地铁</small><strong>{{ item.metroMinutes }} 分钟</strong></view
         ><view v-if="item.rulesText" class="wide"><small>入住规则</small><strong>{{ item.rulesText }}</strong></view
         ><view v-if="item.verificationDate" class="wide"><small>最近核验</small><strong>{{ item.verificationDate }}</strong></view></view
       ></view
