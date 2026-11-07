@@ -144,14 +144,14 @@ const previewListingTags = computed(() => previewListFields.value
   .filter(key => key !== 'community')
   .map(key => previewTagExamples[key])
   .filter(Boolean))
-const previewProperties = computed(() => {
-  const source = configAudience.value === 'customer'
+const previewPropertyOptions = computed(() => {
+  return configAudience.value === 'customer'
     ? properties.value.filter((item) => item.status === 'available')
     : properties.value
-  return source.slice(0, 2)
 })
+const previewProperties = computed(() => previewPropertyOptions.value.slice(0, 2))
 const previewSelectedPropertyID = ref('')
-const previewPrimaryProperty = computed(() => previewProperties.value.find((item) => item.id === previewSelectedPropertyID.value) || previewProperties.value[0])
+const previewPrimaryProperty = computed(() => previewPropertyOptions.value.find((item) => item.id === previewSelectedPropertyID.value) || previewPropertyOptions.value[0])
 function openPreviewProperty(item?: Property) {
   if (!item) return
   previewSelectedPropertyID.value = item.id
@@ -237,7 +237,26 @@ function detailModule(key: string) {
 }
 function detailModuleEnabled(key: string) { return detailModule(key).enabled }
 function detailModuleTitle(key: string, fallback: string) { return detailModule(key).title || fallback }
-const previewConfiguredFacilities = computed(() => publicConfig.propertyDetail.facilities.filter(facility => facility.enabled))
+const previewDetailAmenities = computed(() => {
+  const match = String(previewPrimaryProperty.value?.description || '').match(/配套设施[ \t]*[：:][ \t]*([^\n]*)/)
+  const source = match?.[1]?.split(/[、,，]/).map(item => item.trim()).filter(Boolean) || []
+  return source.map(label => publicConfig.propertyDetail.facilities.find(facility => facility.enabled && facility.label === label)).filter((facility): facility is { key: string; label: string; group: string; enabled: boolean } => Boolean(facility))
+})
+const previewDetailFacilityGroups = computed(() => {
+  const groups = new Map<string, typeof previewDetailAmenities.value>()
+  previewDetailAmenities.value.forEach((facility) => groups.set(facility.group, [...(groups.get(facility.group) || []), facility]))
+  return Array.from(groups, ([title, items]) => ({ title, items }))
+})
+const previewEnvironmentHighlights = computed(() => {
+  const item = previewPrimaryProperty.value
+  if (!item) return []
+  return [
+    item.utilitiesText && { label: '水电杂费', value: item.utilitiesText },
+    { label: '楼内配置', value: item.elevator || '步梯' },
+    Number(item.metroMinutes) > 0 && { label: '步行至地铁', value: `${item.metroMinutes} 分钟` },
+  ].filter((item): item is { label: string; value: string } => Boolean(item))
+})
+const previewNearbyProperties = computed(() => previewPropertyOptions.value.filter(item => item.id !== previewPrimaryProperty.value?.id).slice(0, publicConfig.propertyDetail.nearby.limit))
 function previewCoverStyle(item?: Property) {
   const cover = item?.media?.find((media) => media.type === 'image')?.url
   return cover ? { backgroundImage: `url(${cover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}
@@ -996,6 +1015,9 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <button type="button" :class="{ active: detailConfigTab === 'share' }" role="tab" :aria-selected="detailConfigTab === 'share'" @click="selectDetailConfigTab('share')">微信分享卡</button>
                   <button type="button" :class="{ active: detailConfigTab === 'poster' }" role="tab" :aria-selected="detailConfigTab === 'poster'" @click="selectDetailConfigTab('poster')">朋友圈海报</button>
                 </div>
+                <el-select v-model="previewSelectedPropertyID" class="detail-preview-property" placeholder="选择真实房源">
+                  <el-option v-for="property in previewPropertyOptions" :key="property.id" :label="`${property.community || property.title} · ¥${property.rentMonthly || 0}/月`" :value="property.id" />
+                </el-select>
                 <small>切换后仅编辑当前效果，右侧小程序画布会同步预览。</small>
               </section>
               <section v-if="configPage === 'propertyDetail' && (configAudience === 'operator' || detailConfigTab === 'detail')" class="surface form-section config-section share-card-config">
@@ -1090,6 +1112,29 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <header><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
                   <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[item.status] || item.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(item) }}</b><span>{{ previewListingAddress(item) }}</span><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article><div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div></template>
                   <template v-else-if="configPage === 'propertyDetail'"><div class="preview-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"><span>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</span></div><div v-if="detailModuleEnabled('overview')" class="preview-detail-main"><b>¥ {{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small></b><i class="preview-module-title">{{ detailModuleTitle('overview', '房屋概况') }}</i><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><em v-if="previewPrimaryProperty?.listingSource === '转租'" class="preview-transfer-tag">转租 · 剩余 {{ previewPrimaryProperty.remainingLeaseMonths || 0 }} 个月</em><span>{{ previewPrimaryProperty?.location || '发布房源后将同步展示' }}</span><div v-if="previewDetailTags(previewPrimaryProperty).length" class="preview-detail-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div><div class="preview-detail-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div></div><div v-if="detailModuleEnabled('location')" class="preview-detail-section"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small></div><div v-if="detailModuleEnabled('facilities')" class="preview-detail-section"><b>{{ detailModuleTitle('facilities', '房屋设施与环境') }}</b><small>设施库预览 · 与录入页同步</small><div v-if="previewConfiguredFacilities.length" class="preview-amenities"><i v-for="facility in previewConfiguredFacilities" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b>{{ facility.label }}</i></div><span v-else>暂未启用可展示设施</span><div class="preview-environment"><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电</small>{{ previewPrimaryProperty.utilitiesText }}</i><i><small>楼内</small>{{ previewPrimaryProperty?.elevator || '步梯' }}</i><i v-if="previewPrimaryProperty?.metroMinutes"><small>通勤</small>地铁 {{ previewPrimaryProperty.metroMinutes }} 分钟</i></div></div><div v-if="detailModuleEnabled('description')" class="preview-detail-section preview-description"><b>{{ detailModuleTitle('description', '房源描述') }}</b><span>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</span></div><div v-if="detailModuleEnabled('nearby')" class="preview-detail-section preview-description"><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内 · 展示 {{ publicConfig.propertyDetail.nearby.limit }} 套</small></div></template>
+                  <template v-if="configPage === 'propertyDetail'">
+                    <div class="detail-canvas" :class="{ operator: configAudience === 'operator' }">
+                      <div class="detail-canvas-head"><span>‹</span><strong>房源详情</strong><i>•••</i></div>
+                      <div class="detail-canvas-scroll">
+                        <div class="detail-canvas-cover" :style="previewCoverStyle(previewPrimaryProperty)"><small>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</small></div>
+                        <section v-if="detailModuleEnabled('overview')" class="detail-canvas-card overview-card">
+                          <div class="detail-canvas-price">¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small><i v-if="configAudience === 'customer'">♡</i></div>
+                          <strong class="detail-canvas-title">{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong>
+                          <em v-if="previewPrimaryProperty?.listingSource === '转租'">转租 · 剩余 {{ previewPrimaryProperty?.remainingLeaseMonths || 0 }} 个月</em>
+                          <span class="detail-canvas-address">{{ previewPrimaryProperty?.location || '位置待补充' }}</span>
+                          <div v-if="previewDetailTags(previewPrimaryProperty).length" class="detail-canvas-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div>
+                          <div class="detail-canvas-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div>
+                        </section>
+                        <section v-if="detailModuleEnabled('overview') && (previewPrimaryProperty?.depositPayment || previewPrimaryProperty?.utilitiesText || previewPrimaryProperty?.availableDate)" class="detail-canvas-card detail-canvas-info"><b>入住与房屋信息</b><div><i v-if="previewPrimaryProperty?.depositPayment"><small>押付方式</small>{{ previewPrimaryProperty.depositPayment }}</i><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电杂费</small>{{ previewPrimaryProperty.utilitiesText }}</i><i v-if="previewPrimaryProperty?.availableDate"><small>可入住</small>{{ previewPrimaryProperty.availableDate }}</i></div></section>
+                        <section v-if="detailModuleEnabled('location')" class="detail-canvas-card detail-canvas-location"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small><div><span><strong>查看地图位置</strong><small>已保存房源定位</small></span><i>›</i></div></section>
+                        <section v-if="detailModuleEnabled('facilities')" class="detail-canvas-card detail-canvas-facilities"><header><span><b>{{ detailModuleTitle('facilities', '房屋设施与环境') }}</b><small>家具家电、楼内条件与入住信息</small></span><i>{{ previewDetailAmenities.length + previewEnvironmentHighlights.length }} 项</i></header><template v-if="previewDetailFacilityGroups.length"><div v-for="group in previewDetailFacilityGroups" :key="group.title" class="detail-canvas-facility-group"><small>{{ group.title }}</small><div><i v-for="facility in group.items" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b>{{ facility.label }}</i></div></div></template><p v-else>家具家电信息待补充，可联系小皮确认</p><div v-if="previewEnvironmentHighlights.length" class="detail-canvas-environment"><i v-for="environment in previewEnvironmentHighlights" :key="environment.label"><small>{{ environment.label }}</small>{{ environment.value }}</i></div></section>
+                        <section v-if="detailModuleEnabled('description')" class="detail-canvas-card detail-canvas-description"><b>{{ detailModuleTitle('description', '房源描述') }}</b><p>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</p></section>
+                        <section v-if="detailModuleEnabled('nearby')" class="detail-canvas-card detail-canvas-nearby"><header><span><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内</small></span><i>{{ previewNearbyProperties.length ? `${previewNearbyProperties.length} 套` : '继续找房' }}</i></header><article v-for="property in previewNearbyProperties" :key="property.id"><div :style="previewCoverStyle(property)"></div><span><b>{{ property.title || property.community }}</b><small>{{ property.layout || property.community }}</small><strong>¥{{ property.rentMonthly }}<i>/月</i></strong></span></article><p v-if="!previewNearbyProperties.length">附近暂时没有其他可租房源</p></section>
+                      </div>
+                      <div v-if="configAudience === 'customer'" class="detail-canvas-actions"><button>分享</button><button>在线咨询</button><button>打电话</button></div>
+                      <div v-else class="detail-canvas-actions operator-actions"><button>分享房源</button><button>编辑房源</button></div>
+                    </div>
+                  </template>
                   <template v-else-if="configPage === 'requests' || configPage === 'publish'"><div class="preview-form-card"><label>意向地区</label><span>选择地区与商圈　›</span><label>预算范围</label><span>¥1500 – ¥2500</span><label>入住需求</label><span>填写补充说明</span><button>提交{{ configPage === 'requests' ? '找房需求' : '房源线索' }}</button></div></template>
                   <template v-else-if="configPage === 'me'"><div class="preview-profile" @click="selectConfigPage('authLogin')"><i>{{ previewIdentity.mark }}</i><div><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div></div><div class="preview-tool-grid"><article @click="selectConfigPage('properties')">全部房源<small>继续看房</small></article><article @click="selectConfigPage('footprints')">浏览足迹<small>最近查看</small></article><article @click="selectConfigPage('requests')">找房需求<small>查看进度</small></article><article @click="selectConfigPage('publish')">推荐房源<small>提交房源线索</small></article></div></template>
                   <template v-else-if="configPage === 'footprints'"><article v-for="name in ['拿铁公寓', '凤凰花园三期', '中建大公馆']" :key="name" class="preview-footprint"><div></div><section><b>{{ name }}</b><span>今天浏览 · ¥2300/月</span></section></article></template>
@@ -1097,7 +1142,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <template v-else-if="configPage === 'adminPropertyEdit'"><div class="preview-steps"><i class="active">位置门牌</i><i>户型出租</i><i>环境配套</i><i>租金入住</i></div><div class="preview-edit-card"><b>发布前 · 标签展示规则</b><span>客户与管理员的标签均由后台统一配置；录入房源时无需选择。</span><div class="preview-checks"><i v-for="key in publicConfig.listingTitle.enabledFields" :key="key">✓ {{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</i></div><strong>拿铁公寓 · 精装朝南</strong></div><button class="preview-primary-button">保存并查看</button></template>
                   <template v-else-if="configPage === 'authLogin'"><div class="preview-login-mark">皮</div><div class="preview-login-card"><b>登录后开始找房</b><span>同步关注、足迹和找房需求</span><button>微信一键登录</button><small>稍后完善头像与昵称</small></div></template>
                 </div>
-                <div class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
+                <div v-if="configPage !== 'propertyDetail'" class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button></div>
               </div>
               <div v-if="configPage === 'propertyDetail' && previewOverlay !== 'page'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><template v-if="previewOverlay === 'share'"><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><div class="share-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}/月</b><p>{{ previewPrimaryProperty?.community || '房源小区' }} · {{ previewShareTags(previewPrimaryProperty).join(' · ') || '真实好房' }}</p><small>{{ publicConfig.heroTitle || '小皮租房' }}</small></template><template v-else><span>朋友圈海报预览</span><div class="poster-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<span>/月</span></b><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><p>{{ previewShareTags(previewPrimaryProperty).join(' · ') || '真实好房 · 拎包入住' }}</p><i>{{ publicConfig.heroTitle || '小皮租房' }} · 扫码查看房源</i></template></div></div>
             </aside>
