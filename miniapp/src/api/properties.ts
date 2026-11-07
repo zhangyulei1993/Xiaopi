@@ -174,6 +174,8 @@ export interface PublicConfig {
     customerShareFields?: string[];
     customerPosterFields?: string[];
     adminEnabledFields?: string[];
+    listTagLayout?: "grouped" | "wrap";
+    detailTagLayout?: "grouped" | "wrap";
   };
   propertyDetail?: {
     modules?: { key: string; title: string; enabled: boolean }[];

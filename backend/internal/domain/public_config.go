@@ -60,6 +60,10 @@ type ListingTitleConfig struct {
 	// AdminEnabledFields is the optional doorplate supplement for operator
 	// cards and details. All other labels are shared with the customer view.
 	AdminEnabledFields []string `json:"adminEnabledFields"`
+	// ListTagLayout and DetailTagLayout control presentation only. They never
+	// alter which fields are public, so a layout change cannot expose data.
+	ListTagLayout   string `json:"listTagLayout"`
+	DetailTagLayout string `json:"detailTagLayout"`
 }
 
 // PropertyDetailConfig controls the content blocks of a property detail page.
@@ -148,6 +152,8 @@ func DefaultPublicConfig() PublicConfig {
 			CustomerShareFields:   []string{"community", "layout", "rentType", "fee"},
 			CustomerPosterFields:  []string{"community", "layout", "rentType", "fee"},
 			AdminEnabledFields:    []string{"unit"},
+			ListTagLayout:         "grouped",
+			DetailTagLayout:       "wrap",
 		},
 		PropertyDetail: PropertyDetailConfig{
 			Modules: []PropertyDetailModule{
@@ -239,6 +245,12 @@ func (config *PublicConfig) Normalize() {
 	}
 	if config.ListingTitle.CustomerAllowedFields == nil {
 		config.ListingTitle.CustomerAllowedFields = append([]string(nil), DefaultPublicConfig().ListingTitle.CustomerAllowedFields...)
+	}
+	if config.ListingTitle.ListTagLayout == "" {
+		config.ListingTitle.ListTagLayout = DefaultPublicConfig().ListingTitle.ListTagLayout
+	}
+	if config.ListingTitle.DetailTagLayout == "" {
+		config.ListingTitle.DetailTagLayout = DefaultPublicConfig().ListingTitle.DetailTagLayout
 	}
 	// Historical configurations held a full administrator tag set. The public
 	// set is now shared globally, so preserve only the optional doorplate bit.
@@ -434,6 +446,12 @@ func (config PublicConfig) Validate() error {
 		if field != "unit" {
 			return errors.New("管理员附加标签只支持门牌")
 		}
+	}
+	if config.ListingTitle.ListTagLayout != "grouped" && config.ListingTitle.ListTagLayout != "wrap" {
+		return errors.New("列表标签布局不支持")
+	}
+	if config.ListingTitle.DetailTagLayout != "wrap" && config.ListingTitle.DetailTagLayout != "grouped" {
+		return errors.New("详情标签布局不支持")
 	}
 	validDetailModules := map[string]struct{}{"overview": {}, "location": {}, "facilities": {}, "description": {}, "nearby": {}}
 	if len(config.PropertyDetail.Modules) != len(validDetailModules) {

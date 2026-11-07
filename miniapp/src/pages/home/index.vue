@@ -11,7 +11,7 @@ import editIcon from "../../static/icons/edit.svg";
 // first render on mobile networks. This 1440px JPEG is visually equivalent.
 import heroFallback from "../../static/home-lifestyle-hero.jpg";
 import { getSession } from "../../auth/session";
-import { listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
+import { listingDoorplate, listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", heroSubtitle: "在武汉，住得更省心", heroDescription: "真实房源 · 可靠服务", notice: "", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 3 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 3 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 3 }] };
 const priceRanges = [
@@ -87,19 +87,15 @@ const coverUrl = (item?: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const fields = [
-    ...(isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? ["unit"] : []),
-    ...(config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit"),
-  ];
+  const fields = (config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit");
   return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
 const secondaryLabels = (item: Property) => {
-  const fields = [
-    ...(isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? ["unit"] : []),
-    ...(config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit"),
-  ];
-  return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
+  const fields = (config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit");
+  return uniqueListingTags(["layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
+const allLabels = (item: Property) => uniqueListingTags([...primaryLabels(item), ...secondaryLabels(item)]);
+const adminDoorplate = (item: Property) => isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? listingDoorplate(item) : "";
 const listingTitle = (item: Property) => {
   return publicListingTitle(item, config.value.listingTitle?.enabledFields);
 };
@@ -159,7 +155,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? "推荐房源" : `${activeKind}房源` }}</strong><b @click="browseFiltered">查看房源</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view class="tag-stack"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" :class="{ 'admin-listing': isAdmin }" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view v-if="adminDoorplate(item)" class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -229,4 +225,5 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing-price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.listing-price .price-unit{font-size:19rpx}
 .listing:active{opacity:.9;transform:scale(.995)}
 .tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.listing-info .tag-stack .tags{height:29rpx;margin:0}.listing-info .tag-stack .tags text{padding:4rpx 8rpx;font-size:19rpx;line-height:1.1}.listing-info .fee-tags text{background:#f8eadf;color:#b7644b}
+.admin-listing{height:auto;min-height:250rpx}.admin-listing .listing-image,.admin-listing .listing-info{height:auto;min-height:226rpx}.tag-layout-wrap .all-tags{height:auto!important;max-height:58rpx;flex-wrap:wrap;gap:5rpx 7rpx;overflow:hidden}.tag-layout-wrap .all-tags text{padding:4rpx 8rpx;font-size:19rpx}.tag-layout-wrap .all-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}
 </style>

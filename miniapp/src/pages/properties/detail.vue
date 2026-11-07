@@ -46,6 +46,7 @@ const customerDetailTagFields = ref<string[]>(["community", "layout", "rentType"
 const operatorDoorplateEnabled = ref(false);
 const customerShareTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
 const customerPosterTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
+const detailTagLayout = ref<"grouped" | "wrap">("wrap");
 const shareCardConfig = ref({
   titlePrefix: "",
   titleFields: ["community", "layout"],
@@ -102,6 +103,7 @@ const load = async (id = "") => {
       ? config!.listingTitle!.customerPosterFields!
       : customerShareTagFields.value;
     operatorDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
+    detailTagLayout.value = config?.listingTitle?.detailTagLayout === "grouped" ? "grouped" : "wrap";
     shareCardConfig.value = {
       titlePrefix: String(config?.shareCard?.titlePrefix || ""),
       titleFields: config?.shareCard?.titleFields?.length ? config.shareCard.titleFields : ["community", "layout"],
@@ -681,7 +683,7 @@ const phoneCustomerService = () =>
       ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
       ><view v-if="adminDoorplate" class="admin-detail-doorplate">门牌定位 · {{ adminDoorplate }}</view
-      ><view v-if="detailTags.length" class="tags detail-tags"><text v-for="tag in detailTags" :key="tag">{{ tag }}</text></view
+      ><view v-if="detailTags.length" class="tags detail-tags" :class="`detail-tags-${detailTagLayout}`"><text v-for="tag in detailTags" :key="tag">{{ tag }}</text></view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
         ><view><small>户型</small><strong>{{ listingLayout(item) || "待补充" }}</strong></view
         ><view><small>楼层</small><strong>{{ item.floorInfo || "待补充" }}</strong></view
@@ -1087,4 +1089,5 @@ const phoneCustomerService = () =>
 .facility-group-label{margin:0 0 16rpx;color:#667362;font-size:21rpx;font-weight:700;letter-spacing:.5rpx}.facility-group-label.environment-label{margin-top:24rpx}.amenity-grid{padding-bottom:2rpx}.environment-list{margin-top:0}.nearby-card{padding:26rpx!important}.nearby-heading{margin-bottom:18rpx}.nearby-item{display:grid;grid-template-columns:170rpx minmax(0,1fr);gap:18rpx;min-height:0;padding:18rpx 0;border-top:1rpx solid #eeece7}.nearby-cover{display:grid;width:170rpx;height:126rpx;overflow:hidden;place-items:center;border-radius:15rpx;background:#e9ede3;color:#687563;font-size:23rpx;font-weight:700}.nearby-cover image{display:block;width:100%;height:100%}.nearby-content{display:flex;min-width:0;flex-direction:column}.nearby-content>strong{display:-webkit-box;overflow:hidden;color:#29382d;font-size:25rpx;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.nearby-content>small{overflow:hidden;margin-top:7rpx;color:#7e887d;font-size:20rpx;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.nearby-footer{display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto}.nearby-footer>text{color:#879084;font-size:19rpx}.nearby-price{text-align:left}.nearby-price strong{color:#d76440;font-size:28rpx;line-height:1}.nearby-price strong small{display:inline;margin:0 0 0 2rpx;color:#9b8d83;font-size:17rpx;font-weight:500}.nearby-more{border-radius:12rpx;background:#f2f4ed;line-height:58rpx}
 /* Operator-only doorplate is metadata, not part of the public tag stream. */
 .detail-tags{display:flex;flex-wrap:wrap;gap:10rpx;margin-top:14rpx}.detail-tags text{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-detail-doorplate{display:block;box-sizing:border-box;width:max-content;max-width:100%;overflow:hidden;margin-top:13rpx;padding:7rpx 11rpx;border:1rpx solid #d8e2d2;border-radius:9rpx;background:#f3f7ee;color:#40543f;font-size:21rpx;font-weight:700;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
+.detail-tags-grouped{padding:10rpx;border-radius:12rpx;background:#f3f5ee;gap:8rpx}.detail-tags-grouped text{background:#fff!important;border:1rpx solid #dce4d5}
 </style>

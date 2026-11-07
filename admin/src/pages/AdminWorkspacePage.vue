@@ -33,6 +33,7 @@ const savedConfigJSON = ref('')
 const configLastSavedAt = ref('')
 const configPage = ref('home')
 const previewOverlay = ref<'page' | 'share' | 'poster'>('page')
+const tagMagnifierOpen = ref(false)
 type ConfigAudience = 'customer' | 'operator'
 type DetailConfigTab = 'detail' | 'share' | 'poster'
 type DetailSectionTab = 'overview' | 'location' | 'facilities' | 'description' | 'nearby'
@@ -78,6 +79,7 @@ const selectConfigPage = (key: string) => {
   detailConfigTab.value = 'detail'
   detailSectionTab.value = 'overview'
   previewOverlay.value = 'page'
+  tagMagnifierOpen.value = false
 }
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
@@ -119,7 +121,7 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], customerPosterFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'] })
+const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], customerPosterFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'], listTagLayout: 'grouped' as const, detailTagLayout: 'wrap' as const })
 const defaultPropertyDetail = () => ({
   modules: [
     { key: 'overview', title: '房屋概况', enabled: true }, { key: 'location', title: '位置与周边', enabled: true },
@@ -167,9 +169,13 @@ const listingTitleFieldOptions = [
 ]
 const previewTagExamples: Record<string, string> = { unit: '5栋3单元101室', floor: '18楼', layout: '两室一厅', rentType: '整租', listingSource: '直租', fee: '无中介费', area: '68㎡' }
 const previewListFields = computed(() => [
-  ...(configAudience.value === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit') ? ['unit'] : []),
   ...publicConfig.listingTitle.enabledFields.filter(key => key !== 'community' && key !== 'unit'),
 ])
+const previewOperatorDoorplate = computed(() => {
+  if (configAudience.value !== 'operator' || !publicConfig.listingTitle.adminEnabledFields.includes('unit')) return ''
+  const item = previewPrimaryProperty.value
+  return [item?.buildingNo, item?.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item?.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('')
+})
 const previewListingTags = computed(() => previewListFields.value
   .filter(key => key !== 'community')
   .map(key => previewTagExamples[key])
@@ -219,10 +225,7 @@ function previewPropertyTags(item?: Property, configuredFields?: string[]) {
     .filter((value) => known.has(value) ? false : (known.add(value), true))
 }
 function previewDetailTags(item?: Property) {
-  const fields = [
-    ...(configAudience.value === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit') ? ['unit'] : []),
-    ...publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community' && key !== 'unit'),
-  ]
+  const fields = publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community' && key !== 'unit')
   return previewPropertyTags(item, fields)
 }
 function previewShareTags(item?: Property) {
@@ -261,7 +264,7 @@ function previewTagGroups(item?: Property) {
     return raw && value.includes(raw) ? raw : ''
   }
   const values = (keys: string[]) => keys.filter(key => enabled.includes(key)).map(labelFor).filter(Boolean)
-  return { primary: values(['rentType', 'listingSource']), secondary: values(['unit', 'layout', 'floor', 'area', 'fee']), all }
+  return { primary: values(['rentType', 'listingSource']), secondary: values(['layout', 'floor', 'area', 'fee']), all }
 }
 function previewDescription(item?: Property) {
   return String(item?.description || '').replace(/配套设施[ \t]*[：:][ \t]*[^\n]*\n?/, '').trim()
@@ -1161,6 +1164,17 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground(configPage, $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations[configPage].backgroundImage" @click="publicConfig.pagePresentations[configPage].backgroundImage = ''">移除背景图</button></div>
                 </el-form>
               </section>
+              <section v-if="configPage === 'properties'" class="surface form-section config-section tag-layout-config">
+                <div class="section-heading config-section-heading"><span>02</span><div><h2>列表标签排版</h2><p>首页推荐与“房源”页共用。这里只调整排列，不改变基础配置中的公开标签范围。</p></div></div>
+                <div class="layout-choice-row">
+                  <div><strong>标签布局</strong><small>分组两行优先突出租赁方式；紧凑换行适合标签较少的卡片。</small></div>
+                  <el-radio-group v-model="publicConfig.listingTitle.listTagLayout">
+                    <el-radio-button value="grouped">分组两行</el-radio-button>
+                    <el-radio-button value="wrap">紧凑换行</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <div class="basic-config-note"><b>右侧画布已同步</b><span>切换后可在画布内点击“放大标签”查看真实卡片的局部效果。</span></div>
+              </section>
               <section v-if="false" class="surface form-section config-section share-card-config">
                 <div class="section-heading config-section-heading"><span>02</span><div><h2>全局房源标签规则</h2><p>只需在这里配置一次；客户列表、客户详情、管理员房源与所有公开分享都会复用。</p></div></div>
                 <div class="share-field-editor listing-title-editor">
@@ -1204,6 +1218,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <header><strong>顶部概况</strong><span>控制面积、朝向、楼内配置等附加字段的录入与展示。小区、户型、租金仍是发布房源的基础信息，会始终保留。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('overview').title" maxlength="12" /></el-form-item></el-form>
                     <div class="module-toggle-row"><span>启用概况附加字段采集与展示</span><el-switch v-model="detailModule('overview').enabled" active-text="启用" inactive-text="停用" /></div>
+                    <div class="layout-choice-row detail-layout-choice"><div><strong>详情标签排版</strong><small>仅改变标题下标签的视觉排列；管理员门牌仍单独显示，不混入公开标签。</small></div><el-radio-group v-model="publicConfig.listingTitle.detailTagLayout"><el-radio-button value="wrap">自动折行</el-radio-button><el-radio-button value="grouped">分组底板</el-radio-button></el-radio-group></div>
                     <div class="basic-config-note"><b>详情标签已由基础配置统一控制</b><span>客户详情可展示字段：{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">调整标签</el-button></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">
@@ -1261,6 +1276,19 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </div>
 
             <aside v-if="tab === '小程序页面配置'" class="config-preview-column">
+              <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="tag-magnifier" :class="{ open: tagMagnifierOpen }">
+                <header><span>标签局部预览</span><button type="button" @click="tagMagnifierOpen = !tagMagnifierOpen">{{ tagMagnifierOpen ? '收起' : '放大标签' }}</button></header>
+                <article v-if="tagMagnifierOpen && previewPrimaryProperty">
+                  <b>{{ configPage === 'properties' ? '列表卡片标签' : '详情页标签' }}</b>
+                  <strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong>
+                  <small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit')">门牌定位 · {{ previewOperatorDoorplate || '待补充' }}</small>
+                  <div v-if="configPage === 'properties'" class="tag-magnifier-list" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`">
+                    <template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><span v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="`primary-${tag}`" class="primary">{{ tag }}</span><span v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="`secondary-${tag}`">{{ tag }}</span></template>
+                    <span v-else v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</span>
+                  </div>
+                  <div v-else class="tag-magnifier-detail" :class="`detail-tag-layout-${publicConfig.listingTitle.detailTagLayout}`"><span v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</span></div>
+                </article>
+              </section>
               <div v-if="configPage === 'home'" class="phone-preview">
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
@@ -1271,7 +1299,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="mini-section-title">精选频道</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
                   <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">查看房源</b></div>
-                  <article v-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div class="preview-card-cover" :style="previewCoverStyle(previewPrimaryProperty)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[previewPrimaryProperty.status] || previewPrimaryProperty.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewTagGroups(previewPrimaryProperty).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(previewPrimaryProperty).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="tag">{{ tag }}</i></small><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
+                  <article v-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div class="preview-card-cover" :style="previewCoverStyle(previewPrimaryProperty)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[previewPrimaryProperty.status] || previewPrimaryProperty.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌 · {{ previewOperatorDoorplate }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(previewPrimaryProperty).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(previewPrimaryProperty).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(previewPrimaryProperty).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
                   <div v-else class="preview-empty">暂无可展示房源</div>
                 </div>
                 <div class="mini-tabbar"><button class="active" @click="selectConfigPage('home')">⌂<small>首页</small></button><button @click="selectConfigPage('properties')">▤<small>房源</small></button><button @click="selectConfigPage('me')">○<small>我的</small></button></div>
@@ -1281,7 +1309,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="mini-navigation">{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</div>
                 <div class="page-mini-content" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.9),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}">
                   <header><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
-                  <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[item.status] || item.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(item) }}</b><span>{{ previewListingAddress(item) }}</span><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article><div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div></template>
+                  <template v-if="configPage === 'properties'"><div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div><article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[item.status] || item.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(item) }}</b><span>{{ previewListingAddress(item) }}</span><small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit')" class="preview-operator-doorplate">门牌 · {{ [item.buildingNo, item.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('') || '待补充' }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article><div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div></template>
                   <template v-else-if="configPage === 'propertyDetail'"><div class="preview-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"><span>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</span></div><div v-if="detailModuleEnabled('overview')" class="preview-detail-main"><b>¥ {{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small></b><i class="preview-module-title">{{ detailModuleTitle('overview', '房屋概况') }}</i><strong>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><em v-if="previewPrimaryProperty?.listingSource === '转租'" class="preview-transfer-tag">转租 · 剩余 {{ previewPrimaryProperty.remainingLeaseMonths || 0 }} 个月</em><span>{{ previewPrimaryProperty?.location || '发布房源后将同步展示' }}</span><div v-if="previewDetailTags(previewPrimaryProperty).length" class="preview-detail-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div><div class="preview-detail-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div></div><div v-if="detailModuleEnabled('location')" class="preview-detail-section"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small></div><div v-if="detailModuleEnabled('facilities')" class="preview-detail-section"><b>{{ detailModuleTitle('facilities', '房屋设施与环境') }}</b><small>设施库预览 · 与录入页同步</small><div v-if="previewConfiguredFacilities.length" class="preview-amenities"><i v-for="facility in previewConfiguredFacilities" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b>{{ facility.label }}</i></div><span v-else>暂未启用可展示设施</span><div class="preview-environment"><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电</small>{{ previewPrimaryProperty.utilitiesText }}</i><i><small>楼内</small>{{ previewPrimaryProperty?.elevator || '步梯' }}</i><i v-if="previewPrimaryProperty?.metroMinutes"><small>通勤</small>地铁 {{ previewPrimaryProperty.metroMinutes }} 分钟</i></div></div><div v-if="detailModuleEnabled('description')" class="preview-detail-section preview-description"><b>{{ detailModuleTitle('description', '房源描述') }}</b><span>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</span></div><div v-if="detailModuleEnabled('nearby')" class="preview-detail-section preview-description"><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内 · 展示 {{ publicConfig.propertyDetail.nearby.limit }} 套</small></div></template>
                   <template v-if="configPage === 'propertyDetail'">
                     <div class="detail-canvas" :class="{ operator: configAudience === 'operator' }">
@@ -1293,7 +1321,8 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                           <strong class="detail-canvas-title">{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong>
                           <em v-if="previewPrimaryProperty?.listingSource === '转租'">转租 · 剩余 {{ previewPrimaryProperty?.remainingLeaseMonths || 0 }} 个月</em>
                           <span class="detail-canvas-address">{{ previewPrimaryProperty?.location || '位置待补充' }}</span>
-                          <div v-if="previewDetailTags(previewPrimaryProperty).length" class="detail-canvas-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div>
+                          <small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌定位 · {{ previewOperatorDoorplate }}</small>
+                          <div v-if="previewDetailTags(previewPrimaryProperty).length" class="detail-canvas-tags" :class="`detail-tag-layout-${publicConfig.listingTitle.detailTagLayout}`"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div>
                           <div class="detail-canvas-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div>
                         </section>
                         <section v-if="detailModuleEnabled('overview') && (previewPrimaryProperty?.depositPayment || previewPrimaryProperty?.utilitiesText || previewPrimaryProperty?.availableDate)" class="detail-canvas-card detail-canvas-info"><b>入住与房屋信息</b><div><i v-if="previewPrimaryProperty?.depositPayment"><small>押付方式</small>{{ previewPrimaryProperty.depositPayment }}</i><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电杂费</small>{{ previewPrimaryProperty.utilitiesText }}</i><i v-if="previewPrimaryProperty?.availableDate"><small>可入住</small>{{ previewPrimaryProperty.availableDate }}</i></div></section>

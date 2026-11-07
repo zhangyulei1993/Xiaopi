@@ -40,6 +40,7 @@ const selectedPrice = ref(0),
   workingID = ref("");
 const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
 const adminDoorplateEnabled = ref(true);
+const listTagLayout = ref<"grouped" | "wrap">("grouped");
 const priceRanges = [
   { label: "不限价格", min: 0, max: 0 },
   { label: "≤1500", min: 0, max: 1500 },
@@ -166,6 +167,7 @@ const load = async () => {
       listingTitleFields.value = config!.listingTitle!.enabledFields!;
     }
     adminDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
+    listTagLayout.value = config?.listingTitle?.listTagLayout === "wrap" ? "wrap" : "grouped";
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
@@ -239,6 +241,7 @@ const secondaryLabels = (item: Property) => {
   const fields = listingTitleFields.value.filter((field) => field !== "community" && field !== "unit");
   return uniqueListingTags(["layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => compactCardTag(field, item)));
 };
+const cardTags = (item: Property) => uniqueListingTags([...primaryLabels(item), ...secondaryLabels(item)]);
 const adminDoorplate = (item: Property) =>
   isAdmin.value && adminDoorplateEnabled.value ? listingDoorplate(item) : "";
 const listingTitle = (item: Property) => {
@@ -391,7 +394,7 @@ const subscribeArea = () => {
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view v-if="adminDoorplate(item)" class="admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view
-          ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view
+          ><view class="service-tag-stack" :class="`tag-layout-${listTagLayout}`"><template v-if="listTagLayout === 'grouped'"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="service-tags all-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
             >¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view
           ></view
@@ -715,4 +718,5 @@ const subscribeArea = () => {
 .admin-property .admin-doorplate{margin-top:8rpx;padding:5rpx 9rpx;border:1rpx solid #d8e2d2;border-radius:8rpx;background:#f3f7ee;color:#40543f;font-size:19rpx;font-weight:700;line-height:1.2}
 .admin-property .service-tag-stack{gap:5rpx;margin-top:8rpx}
 .admin-property .service-tags{max-width:100%;overflow:hidden}
+.tag-layout-wrap .all-tags{display:flex;height:auto;max-height:58rpx;flex-wrap:wrap;gap:5rpx 7rpx;overflow:hidden}.tag-layout-wrap .all-tags text{padding:4rpx 8rpx;font-size:19rpx}.tag-layout-wrap .all-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}
 </style>
