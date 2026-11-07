@@ -484,6 +484,7 @@ const shareTitlePreview = computed(() => {
   return [publicConfig.shareCard.titlePrefix, ...publicConfig.shareCard.titleFields.filter(shareFieldEnabledForCustomer).map(key => examples[key])].filter(Boolean).join(' · ')
 })
 function toggleListingTitleField(key: string, enabled: boolean) {
+  basicTagPreviewTab.value = 'list'
   if (key === 'community') return
   if (!publicConfig.listingTitle.customerAllowedFields.includes(key)) return
   const fields = publicConfig.listingTitle.enabledFields
@@ -491,6 +492,7 @@ function toggleListingTitleField(key: string, enabled: boolean) {
   if (!enabled) publicConfig.listingTitle.enabledFields = fields.filter(item => item !== key)
 }
 function toggleCustomerDetailField(key: string, enabled: boolean) {
+  basicTagPreviewTab.value = 'detail'
   if (key === 'community') return
   if (!publicConfig.listingTitle.customerAllowedFields.includes(key)) return
   const fields = publicConfig.listingTitle.customerDetailFields
@@ -498,6 +500,7 @@ function toggleCustomerDetailField(key: string, enabled: boolean) {
   if (!enabled) publicConfig.listingTitle.customerDetailFields = fields.filter(item => item !== key)
 }
 function toggleCustomerShareField(key: string, enabled: boolean) {
+  basicTagPreviewTab.value = 'share'
   if (key === 'community') return
   const fields = publicConfig.listingTitle.customerShareFields
   if (enabled && !fields.includes(key)) fields.push(key)
