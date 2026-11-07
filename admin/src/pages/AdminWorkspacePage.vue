@@ -14,7 +14,7 @@ import { pathForTab, tabFromRoute } from '../router'
 import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from '../types/domain'
 import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from '../config/navigation'
 import { createAdminApi } from '../services/api'
-type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序配置' | '管理员列表' | '临时访问码'
+type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序基础配置' | '小程序页面配置' | '管理员列表' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
@@ -39,12 +39,29 @@ type DetailSectionTab = 'overview' | 'location' | 'facilities' | 'description' |
 const configAudience = ref<ConfigAudience>('customer')
 const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
+type BasicConfigTab = 'brand' | 'coverage' | 'facilities'
+const basicConfigTab = ref<BasicConfigTab>('brand')
+const editingFacilityKey = ref('')
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
 function selectDetailConfigTab(value: DetailConfigTab) {
   detailConfigTab.value = value
   previewOverlay.value = value === 'detail' ? 'page' : value
 }
-function selectDetailSectionTab(value: DetailSectionTab) { detailSectionTab.value = value }
+function selectDetailSectionTab(value: DetailSectionTab) {
+  detailSectionTab.value = value
+  detailConfigTab.value = 'detail'
+  previewOverlay.value = 'page'
+  window.requestAnimationFrame(() => document.querySelector(`[data-canvas-area="${value}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
+function selectBasicConfigTab(value: BasicConfigTab) { basicConfigTab.value = value }
+function toggleFacility(facility: { enabled: boolean }) { facility.enabled = !facility.enabled }
+function editFacility(facility: { key: string }) { editingFacilityKey.value = editingFacilityKey.value === facility.key ? '' : facility.key }
+function focusCanvasArea(area: DetailSectionTab) {
+  detailSectionTab.value = area
+  detailConfigTab.value = 'detail'
+  previewOverlay.value = 'page'
+  window.requestAnimationFrame(() => document.querySelector(`[data-canvas-area="${area}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+}
 const selectConfigPage = (key: string) => {
   const target = pagePresentationOptions.find(page => page.key === key)
   if (!target) return
@@ -907,11 +924,51 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
 
         <PropertiesPage v-else-if="tab === '房源列表'" :properties="properties" :filtered-properties="filteredProperties" :filter="propertyFilter" :statuses="propertyStatuses" :loading="loading" :normalized-status="normalizedPropertyStatus" :status-label="statusLabel" :cover="propertyCover" @refresh="load" @filter="propertyFilter = $event" @status="setPropertyStatus" />
 
-        <template v-else-if="tab === '小程序配置'">
+        <template v-else-if="tab === '小程序基础配置'">
+          <section class="page-header">
+            <div><span>内容与运营</span><h1>小程序基础配置</h1><p>配置所有页面共用的数据、可选项与角色展示边界。</p></div>
+          </section>
+          <section class="surface config-toolbar">
+            <div class="publish-state"><i :class="{ dirty: configDirty }" /><div><strong>{{ configDirty ? '存在未发布修改' : '线上配置已同步' }}</strong><span>基础配置会同步到录入页、详情页和页面画布。</span></div></div>
+            <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
+          </section>
+          <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
+          <section class="surface basic-config-tabs" aria-label="小程序基础配置分类">
+            <button type="button" :class="{ active: basicConfigTab === 'brand' }" @click="selectBasicConfigTab('brand')">品牌与联系</button>
+            <button type="button" :class="{ active: basicConfigTab === 'coverage' }" @click="selectBasicConfigTab('coverage')">地区与关联范围</button>
+            <button type="button" :class="{ active: basicConfigTab === 'facilities' }" @click="selectBasicConfigTab('facilities')">房屋设施库</button>
+          </section>
+          <section v-if="basicConfigTab === 'brand'" class="surface form-section basic-config-panel">
+            <div class="section-heading"><span>01</span><div><h2>品牌与联系</h2><p>全局品牌名和联系方式，不属于某一个页面。</p></div></div>
+            <el-form label-position="top" class="basic-config-form"><div class="form-row two-columns"><el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item><el-form-item label="联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /></el-form-item></div></el-form>
+            <div class="basic-config-note"><b>角色展示规则</b><span>普通用户与管理员共用同一套房源标签、列表和详情；管理员仅可额外显示精确门牌（如“5栋3单元101室”）。该开关在“页面配置 → 非客户视角 → 房源列表”中管理。</span></div>
+          </section>
+          <section v-else-if="basicConfigTab === 'coverage'" class="surface form-section basic-config-panel">
+            <div class="section-heading"><span>02</span><div><h2>地区与关联范围</h2><p>用于频道归属、房源附近推荐和默认筛选；页面文案与背景仍在“页面配置”里管理。</p></div></div>
+            <el-form label-position="top" class="basic-config-form"><el-form-item label="附近房源默认关联距离"><el-select v-model="publicConfig.relatedPropertyRadiusKm" style="width:100%"><el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" /></el-select><div class="form-tip">按地图坐标关联；详情页可在页面配置中单独调整展示范围。</div></el-form-item></el-form>
+            <div class="basic-config-note"><b>地区入口与精选频道</b><span>它们是首页与筛选页的共用数据。点击“页面配置 → 首页”可维护显示名称、地图位置、频道排序和页面样式。</span></div>
+          </section>
+          <section v-else class="surface form-section basic-config-panel facility-library-panel">
+            <div class="section-heading"><span>03</span><div><h2>房屋设施库</h2><p>点击整张卡片启用或停用。启用项会进入管理员录入页的设施勾选，并可在房源详情展示；停用不删除历史房源数据。</p></div></div>
+            <div class="facility-library-summary"><b>已启用 {{ publicConfig.propertyDetail.facilities.filter(item => item.enabled).length }} / {{ publicConfig.propertyDetail.facilities.length }} 项</b><span>设施名称与分类仅在点击“编辑”后修改，避免把选择操作误当成输入框。</span></div>
+            <div class="facility-config-list facility-library-list">
+              <article v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key" class="facility-choice" :class="{ checked: facility.enabled, editing: editingFacilityKey === facility.key }" @click="toggleFacility(facility)">
+                <button type="button" class="facility-check" :aria-pressed="facility.enabled" @click.stop="toggleFacility(facility)">{{ facility.enabled ? '✓' : '' }}</button>
+                <i class="facility-option-icon">{{ detailFacilityIcon(facility.key) }}</i>
+                <span><strong>{{ facility.label }}</strong><small>{{ facility.group }}</small></span>
+                <button type="button" class="facility-edit" @click.stop="editFacility(facility)">{{ editingFacilityKey === facility.key ? '收起' : '编辑' }}</button>
+                <div v-if="editingFacilityKey === facility.key" class="facility-edit-fields" @click.stop><el-input v-model.trim="facility.label" maxlength="12" aria-label="设施名称" placeholder="设施名称" /><el-input v-model.trim="facility.group" maxlength="12" aria-label="设施分类" placeholder="设施分类" /></div>
+              </article>
+            </div>
+            <div class="facility-add-row"><span>添加预置设施</span><el-select v-model="facilityToAdd" placeholder="从预置列表选择" :disabled="!availableFacilityCatalog.length || publicConfig.propertyDetail.facilities.length >= 24" @change="addDetailFacility"><el-option v-for="facility in availableFacilityCatalog" :key="facility.key" :label="`${facility.label} · ${facility.group}`" :value="facility.key" /></el-select></div>
+          </section>
+        </template>
+
+        <template v-else-if="tab === '小程序页面配置'">
           <div class="miniapp-config-shell">
           <div class="miniapp-config-main">
           <section class="page-header">
-            <div><span>内容与运营</span><h1>小程序配置中心</h1></div>
+            <div><span>内容与运营</span><h1>小程序页面配置</h1><p>按真实页面编辑文案、模块和展示方式；右侧画布会跟随定位。</p></div>
           </section>
           <section class="surface config-toolbar">
             <div class="publish-state">
@@ -933,21 +990,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <div v-loading="loading" class="config-workspace">
             <div class="config-editor">
               <section v-if="configPage === 'home'" class="surface form-section config-section">
-                <div class="section-heading"><span>01</span><div><h2>首页页面配置</h2></div></div>
+                <div class="section-heading"><span>01</span><div><h2>首页页面配置</h2><p>页面文案与背景只在这里编辑；品牌、地区和房源基础字段请前往“小程序基础配置”。</p></div></div>
                 <el-form label-position="top" class="basic-config-form">
-                  <div class="form-row two-columns">
-                    <el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /></el-form-item>
-                    <el-form-item label="联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /></el-form-item>
-                  </div>
                   <el-form-item label="首页主标题" required><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></el-form-item>
                   <el-form-item label="搜索提示"><el-input v-model="publicConfig.pagePresentations.home.subtitle" maxlength="60" show-word-limit placeholder="例如：搜索小区、地铁或商圈" /></el-form-item>
                   <el-form-item label="首页背景图"><el-input v-model="publicConfig.pagePresentations.home.backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /><div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground('home', $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations.home.backgroundImage" @click="publicConfig.pagePresentations.home.backgroundImage = ''">移除背景图</button></div></el-form-item>
-                  <el-form-item label="附近房源关联距离">
-                    <el-select v-model="publicConfig.relatedPropertyRadiusKm" placeholder="选择距离" style="width: 100%">
-                      <el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" />
-                    </el-select>
-                    <div class="form-tip">按地图坐标自动关联。</div>
-                  </el-form-item>
                 </el-form>
               </section>
 
@@ -1050,11 +1097,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <div class="module-toggle-row"><span>启用周边补充字段与详情展示</span><el-switch v-model="detailModule('location').enabled" active-text="启用" inactive-text="停用" /></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'facilities'" class="share-field-editor listing-title-editor">
-                    <header><strong>设施与环境</strong><span>此处是管理员录入页与详情页共用的设施库：启用多少项，录入页就仅能勾选多少项。可修改名称与分类；取消启用不会删除历史房源数据。</span></header>
+                    <header><strong>设施与环境</strong><span>本页只控制该模块是否出现在录入页和详情页；设施的名称、分类、可勾选项统一由“小程序基础配置”维护。</span></header>
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('facilities').title" maxlength="12" /></el-form-item></el-form>
                     <div class="module-toggle-row"><span>启用设施勾选与详情展示</span><el-switch v-model="detailModule('facilities').enabled" active-text="启用" inactive-text="停用" /></div>
-                    <div class="facility-config-list"><label v-for="facility in publicConfig.propertyDetail.facilities" :key="facility.key" class="facility-choice facility-choice-editable" :class="{ checked: facility.enabled }"><el-checkbox v-model="facility.enabled" /><i class="facility-option-icon">{{ detailFacilityIcon(facility.key) }}</i><span><el-input v-model.trim="facility.label" maxlength="12" aria-label="设施名称" /><el-input v-model.trim="facility.group" maxlength="12" aria-label="设施分类" /></span></label></div>
-                    <div class="facility-add-row"><span>添加预置设施</span><el-select v-model="facilityToAdd" placeholder="从预置列表选择" :disabled="!availableFacilityCatalog.length || publicConfig.propertyDetail.facilities.length >= 24" @change="addDetailFacility"><el-option v-for="facility in availableFacilityCatalog" :key="facility.key" :label="`${facility.label} · ${facility.group}`" :value="facility.key" /></el-select></div>
+                    <div class="basic-config-note"><b>当前设施库：{{ publicConfig.propertyDetail.facilities.filter(item => item.enabled).length }} 项已启用</b><span>进入“小程序基础配置 → 房屋设施库”后，点击整张设施卡即可调整录入和详情可用项。</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'facilities'">配置设施库</el-button></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'description'" class="share-field-editor listing-title-editor">
                     <header><strong>房源描述</strong><span>关闭后，录入页不再显示房源说明和入住规则输入；已有历史内容会保留，但不会展示。</span></header>
@@ -1127,7 +1173,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                       <div class="detail-canvas-head"><span>‹</span><strong>房源详情</strong><i>•••</i></div>
                       <div class="detail-canvas-scroll">
                         <div class="detail-canvas-cover" :style="previewCoverStyle(previewPrimaryProperty)"><small>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</small></div>
-                        <section v-if="detailModuleEnabled('overview')" class="detail-canvas-card overview-card">
+                        <section v-if="detailModuleEnabled('overview')" data-canvas-area="overview" class="detail-canvas-card overview-card" @click="focusCanvasArea('overview')">
                           <div class="detail-canvas-price">¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small><i v-if="configAudience === 'customer'">♡</i></div>
                           <strong class="detail-canvas-title">{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong>
                           <em v-if="previewPrimaryProperty?.listingSource === '转租'">转租 · 剩余 {{ previewPrimaryProperty?.remainingLeaseMonths || 0 }} 个月</em>
@@ -1136,10 +1182,10 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                           <div class="detail-canvas-facts"><i><small>面积</small>{{ previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>户型</small>{{ previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i><small>朝向</small>{{ previewPrimaryProperty?.orientation || '待补充' }}</i></div>
                         </section>
                         <section v-if="detailModuleEnabled('overview') && (previewPrimaryProperty?.depositPayment || previewPrimaryProperty?.utilitiesText || previewPrimaryProperty?.availableDate)" class="detail-canvas-card detail-canvas-info"><b>入住与房屋信息</b><div><i v-if="previewPrimaryProperty?.depositPayment"><small>押付方式</small>{{ previewPrimaryProperty.depositPayment }}</i><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电杂费</small>{{ previewPrimaryProperty.utilitiesText }}</i><i v-if="previewPrimaryProperty?.availableDate"><small>可入住</small>{{ previewPrimaryProperty.availableDate }}</i></div></section>
-                        <section v-if="detailModuleEnabled('location')" class="detail-canvas-card detail-canvas-location"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small><div><span><strong>查看地图位置</strong><small>已保存房源定位</small></span><i>›</i></div></section>
-                        <section v-if="detailModuleEnabled('facilities')" class="detail-canvas-card detail-canvas-facilities"><header><span><b>{{ detailModuleTitle('facilities', '房屋设施与环境') }}</b><small>家具家电、楼内条件与入住信息</small></span><i>{{ previewDetailAmenities.length + previewEnvironmentHighlights.length }} 项</i></header><template v-if="previewDetailFacilityGroups.length"><div v-for="group in previewDetailFacilityGroups" :key="group.title" class="detail-canvas-facility-group"><small>{{ group.title }}</small><div><i v-for="facility in group.items" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b>{{ facility.label }}</i></div></div></template><p v-else>家具家电信息待补充，可联系小皮确认</p><div v-if="previewEnvironmentHighlights.length" class="detail-canvas-environment"><i v-for="environment in previewEnvironmentHighlights" :key="environment.label"><small>{{ environment.label }}</small>{{ environment.value }}</i></div></section>
-                        <section v-if="detailModuleEnabled('description')" class="detail-canvas-card detail-canvas-description"><b>{{ detailModuleTitle('description', '房源描述') }}</b><p>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</p></section>
-                        <section v-if="detailModuleEnabled('nearby')" class="detail-canvas-card detail-canvas-nearby"><header><span><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内</small></span><i>{{ previewNearbyProperties.length ? `${previewNearbyProperties.length} 套` : '继续找房' }}</i></header><article v-for="property in previewNearbyProperties" :key="property.id"><div :style="previewCoverStyle(property)"></div><span><b>{{ property.title || property.community }}</b><small>{{ property.layout || property.community }}</small><strong>¥{{ property.rentMonthly }}<i>/月</i></strong></span></article><p v-if="!previewNearbyProperties.length">附近暂时没有其他可租房源</p></section>
+                        <section v-if="detailModuleEnabled('location')" data-canvas-area="location" class="detail-canvas-card detail-canvas-location" @click="focusCanvasArea('location')"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small><div><span><strong>查看地图位置</strong><small>已保存房源定位</small></span><i>›</i></div></section>
+                        <section v-if="detailModuleEnabled('facilities')" data-canvas-area="facilities" class="detail-canvas-card detail-canvas-facilities" @click="focusCanvasArea('facilities')"><header><span><b>{{ detailModuleTitle('facilities', '房屋设施与环境') }}</b><small>家具家电、楼内条件与入住信息</small></span><i>{{ previewDetailAmenities.length + previewEnvironmentHighlights.length }} 项</i></header><template v-if="previewDetailFacilityGroups.length"><div v-for="group in previewDetailFacilityGroups" :key="group.title" class="detail-canvas-facility-group"><small>{{ group.title }}</small><div><i v-for="facility in group.items" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b>{{ facility.label }}</i></div></div></template><p v-else>家具家电信息待补充，可联系小皮确认</p><div v-if="previewEnvironmentHighlights.length" class="detail-canvas-environment"><i v-for="environment in previewEnvironmentHighlights" :key="environment.label"><small>{{ environment.label }}</small>{{ environment.value }}</i></div></section>
+                        <section v-if="detailModuleEnabled('description')" data-canvas-area="description" class="detail-canvas-card detail-canvas-description" @click="focusCanvasArea('description')"><b>{{ detailModuleTitle('description', '房源描述') }}</b><p>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</p></section>
+                        <section v-if="detailModuleEnabled('nearby')" data-canvas-area="nearby" class="detail-canvas-card detail-canvas-nearby" @click="focusCanvasArea('nearby')"><header><span><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内</small></span><i>{{ previewNearbyProperties.length ? `${previewNearbyProperties.length} 套` : '继续找房' }}</i></header><article v-for="property in previewNearbyProperties" :key="property.id"><div :style="previewCoverStyle(property)"></div><span><b>{{ property.title || property.community }}</b><small>{{ property.layout || property.community }}</small><strong>¥{{ property.rentMonthly }}<i>/月</i></strong></span></article><p v-if="!previewNearbyProperties.length">附近暂时没有其他可租房源</p></section>
                       </div>
                       <div v-if="configAudience === 'customer'" class="detail-canvas-actions"><button>分享</button><button>在线咨询</button><button>打电话</button></div>
                       <div v-else class="detail-canvas-actions operator-actions"><button>分享房源</button><button>编辑房源</button></div>

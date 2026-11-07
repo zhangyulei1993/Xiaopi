@@ -18,7 +18,10 @@ const groups = [
   },
   {
     label: '内容与运营',
-    items: [{ key: '小程序配置', label: '小程序配置', icon: Location }],
+    items: [
+      { key: '小程序基础配置', label: '小程序基础配置', icon: Collection },
+      { key: '小程序页面配置', label: '小程序页面配置', icon: Location },
+    ],
   },
   {
     label: '平台设置',

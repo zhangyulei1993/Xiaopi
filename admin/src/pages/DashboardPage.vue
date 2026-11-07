@@ -14,6 +14,6 @@ const emit = defineEmits<{ navigate: [tab: string] }>()
     <button class="surface stat-card" @click="emit('navigate', '房源列表')"><el-icon><House /></el-icon><span>房源总数</span><strong>{{ propertyCount }}</strong></button>
     <button class="surface stat-card" @click="emit('navigate', '线索管理')"><el-icon><Collection /></el-icon><span>客户线索</span><strong>{{ leadCount }}</strong></button>
     <button class="surface stat-card" @click="emit('navigate', '微信用户')"><el-icon><User /></el-icon><span>微信用户</span><strong>{{ userCount }}</strong></button>
-    <button class="surface stat-card" @click="emit('navigate', '小程序配置')"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ locationCount }}</strong></button>
+    <button class="surface stat-card" @click="emit('navigate', '小程序基础配置')"><el-icon><Location /></el-icon><span>首页地区</span><strong>{{ locationCount }}</strong></button>
   </div>
 </template>
