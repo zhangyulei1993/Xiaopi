@@ -14,7 +14,7 @@ import { getSession } from "../../auth/session";
 import searchIcon from "../../static/icons/search.svg";
 import filterIcon from "../../static/icons/filter.svg";
 import heartIcon from "../../static/icons/heart.svg";
-import { listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
+import { listingDoorplate, listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
 
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
@@ -225,19 +225,22 @@ const coverUrl = (item: Property) => {
   return cover ? resolveAssetUrl(cover) : "";
 };
 const primaryLabels = (item: Property) => {
-  const fields = [
-    ...(isAdmin.value && adminDoorplateEnabled.value ? ["unit"] : []),
-    ...listingTitleFields.value.filter((field) => field !== "community" && field !== "unit"),
-  ];
+  const fields = listingTitleFields.value.filter((field) => field !== "community" && field !== "unit");
   return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
 };
-const secondaryLabels = (item: Property) => {
-  const fields = [
-    ...(isAdmin.value && adminDoorplateEnabled.value ? ["unit"] : []),
-    ...listingTitleFields.value.filter((field) => field !== "community" && field !== "unit"),
-  ];
-  return uniqueListingTags(["unit", "layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
+const compactCardTag = (field: string, item: Property) => {
+  const value = listingTagValue(item, field);
+  // A list card needs recognisable information, not the whole record. The
+  // detailed layout remains intact on the detail page.
+  if (field === "layout") return value.match(/\d+室(?:\d+厅)?/)?.[0] || value;
+  return value;
 };
+const secondaryLabels = (item: Property) => {
+  const fields = listingTitleFields.value.filter((field) => field !== "community" && field !== "unit");
+  return uniqueListingTags(["layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => compactCardTag(field, item)));
+};
+const adminDoorplate = (item: Property) =>
+  isAdmin.value && adminDoorplateEnabled.value ? listingDoorplate(item) : "";
 const listingTitle = (item: Property) => {
   return publicListingTitle(item, listingTitleFields.value);
 };
@@ -387,6 +390,7 @@ const subscribeArea = () => {
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
           ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
+          ><view v-if="adminDoorplate(item)" class="admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view
           ><view class="service-tag-stack"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
             >¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view
@@ -705,4 +709,10 @@ const subscribeArea = () => {
 .property>.property-copy>.price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.property>.property-copy>.price .price-unit{font-size:19rpx}
 .admin-property{height:auto;min-height:0;padding:14rpx;border-radius:22rpx}.admin-property .property-main{height:208rpx;min-height:208rpx}.admin-property .property-copy{height:208rpx}.admin-card-actions{margin-top:14rpx;padding-top:14rpx}.admin-inline-actions{gap:9rpx}.admin-inline-actions button{min-width:98rpx;min-height:54rpx;border-radius:10rpx;font-size:21rpx;line-height:52rpx}
 .service-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.service-tag-stack .service-tags{height:29rpx;margin:0}.service-tag-stack .service-tags text{padding:4rpx 8rpx;font-size:19rpx;line-height:1.1}.service-tag-stack .fee-tags text{background:#f8eadf;color:#b7644b}
+/* Admin cards carry a doorplate, but it is metadata rather than another tag. */
+.admin-property .property-main{height:auto;min-height:244rpx;align-items:flex-start}
+.admin-property .property-copy{height:auto;min-height:244rpx}
+.admin-property .admin-doorplate{margin-top:8rpx;padding:5rpx 9rpx;border:1rpx solid #d8e2d2;border-radius:8rpx;background:#f3f7ee;color:#40543f;font-size:19rpx;font-weight:700;line-height:1.2}
+.admin-property .service-tag-stack{gap:5rpx;margin-top:8rpx}
+.admin-property .service-tags{max-width:100%;overflow:hidden}
 </style>

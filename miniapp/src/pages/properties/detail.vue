@@ -15,7 +15,7 @@ import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
-import { listingLayout, listingTagValue, uniqueListingTags } from "../../utils/listing-title";
+import { listingDoorplate, listingLayout, listingTagValue, uniqueListingTags } from "../../utils/listing-title";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   brandName = ref("小皮租房"),
@@ -137,12 +137,12 @@ const isAdmin = computed(() => hasRole("admin"));
 const detailTags = computed(() => {
   const current = item.value;
   if (!current) return [];
-  const fields = [
-    ...(isAdmin.value && operatorDoorplateEnabled.value ? ["unit"] : []),
-    ...customerDetailTagFields.value.filter((field) => field !== "community" && field !== "unit"),
-  ];
+  const fields = customerDetailTagFields.value.filter((field) => field !== "community" && field !== "unit");
   return uniqueListingTags(fields.map((field) => listingTagValue(current, field)));
 });
+const adminDoorplate = computed(() =>
+  isAdmin.value && operatorDoorplateEnabled.value && item.value ? listingDoorplate(item.value) : "",
+);
 const detailModule = (key: string) => detailConfig.value.modules.find((module) => module.key === key);
 const detailModuleEnabled = (key: string) => detailModule(key)?.enabled !== false;
 const detailModuleTitle = (key: string, fallback: string) => detailModule(key)?.title || fallback;
@@ -680,6 +680,7 @@ const phoneCustomerService = () =>
       ><view class="title">{{ item.title || item.community }}</view
       ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
+      ><view v-if="adminDoorplate" class="admin-detail-doorplate">门牌定位 · {{ adminDoorplate }}</view
       ><view v-if="detailTags.length" class="tags detail-tags"><text v-for="tag in detailTags" :key="tag">{{ tag }}</text></view
       ><view class="key-facts"><view><small>面积</small><strong>{{ item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
         ><view><small>户型</small><strong>{{ listingLayout(item) || "待补充" }}</strong></view
@@ -748,12 +749,12 @@ const phoneCustomerService = () =>
       ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>附近暂时没有其他可租房源</strong><text>可以继续查看其他地区的新房源</text><button @click="openAllProperties">查看全部房源</button></view
       ><view v-else class="nearby-more" @click="openAllProperties">查看更多房源 <text>›</text></view></view
     ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
-      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status === 'offline' }"><button v-if="item.status !== 'offline'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button v-if="item.status !== 'offline'" class="admin-timeline-primary" @click="shareToTimeline">朋友圈</button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
+      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status === 'offline' }"><button v-if="item.status !== 'offline'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button v-if="item.status !== 'offline'" class="admin-timeline-primary" @click="shareToTimeline">朋友圈海报</button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
       ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="service-persona"><view class="service-persona-avatar">皮</view><view><strong>{{ brandName }}客服</strong></view></view
-      ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button class="user-timeline" @click="shareToTimeline"><text>朋友圈</text></button
+      ><button class="user-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button class="user-timeline" @click="shareToTimeline"><text>海报</text></button
       ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
     ></view
@@ -1084,4 +1085,6 @@ const phoneCustomerService = () =>
 .detail-page{padding:24rpx 24rpx 250rpx;background:#f6f4ee}.detail-page-head{margin:4rpx 6rpx 22rpx}.detail-page-head view{font-size:38rpx;letter-spacing:-1rpx}.detail-page-head text{margin-top:7rpx;font-size:22rpx}.media-gallery{border-radius:22rpx;box-shadow:0 10rpx 28rpx rgba(52,62,48,.08)}.media-swiper{height:460rpx}.media-strip{margin:16rpx 2rpx 6rpx}.detail-page .card{margin-bottom:20rpx;padding:26rpx;border:1rpx solid #e9e6df;border-radius:22rpx;background:#fffdf9}.overview{margin-top:20rpx}.overview .price{font-size:48rpx;letter-spacing:-1rpx}.overview .price .price-unit{margin-left:2rpx;font-size:22rpx}.overview .title{margin-top:18rpx;font-size:37rpx;line-height:1.34;letter-spacing:-.8rpx}.overview .muted{margin-top:10rpx;color:#7a8378;font-size:23rpx;line-height:1.5}.key-facts{gap:10rpx;margin-top:22rpx}.key-facts>view,.detail-info-grid>view{padding:16rpx 15rpx;border-radius:13rpx;background:#f0eee8}.key-facts small,.detail-info-grid small{font-size:19rpx}.key-facts strong,.detail-info-grid strong{margin-top:6rpx;font-size:23rpx}.detail-page .title.small{margin:0;font-size:31rpx;letter-spacing:-.4rpx}.detail-info .title{margin-bottom:18rpx}.detail-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;margin-bottom:22rpx}.detail-section-heading small{display:block;margin-top:6rpx;color:#8a9287;font-size:20rpx;line-height:1.4}.detail-section-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}.amenity-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:20rpx 12rpx}.amenity-icon{width:64rpx;height:64rpx;border-radius:18rpx}.amenity-icon image{width:38rpx;height:38rpx}.amenity-name{font-size:21rpx}.environment-list{display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:22rpx}.environment-list>view{min-width:0;padding:15rpx 16rpx;border-radius:13rpx;background:#f0f2e9}.environment-list small,.environment-list strong{display:block}.environment-list small{color:#8a9287;font-size:18rpx}.environment-list strong{overflow:hidden;margin-top:5rpx;color:#40543f;font-size:22rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.location-heading strong{font-size:30rpx}.location-heading small{font-size:22rpx}.map-summary{padding-top:18rpx}.desc{margin-top:16rpx;font-size:25rpx;line-height:1.75}.service-card{padding:20rpx 22rpx!important}.nearby-item strong{font-size:25rpx}
 .detail-module-kicker{margin-top:18rpx;color:#80907a;font-size:20rpx;font-weight:700;letter-spacing:1rpx;line-height:1.2}.detail-section-heading.compact{margin-bottom:18rpx}.location-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}
 .facility-group-label{margin:0 0 16rpx;color:#667362;font-size:21rpx;font-weight:700;letter-spacing:.5rpx}.facility-group-label.environment-label{margin-top:24rpx}.amenity-grid{padding-bottom:2rpx}.environment-list{margin-top:0}.nearby-card{padding:26rpx!important}.nearby-heading{margin-bottom:18rpx}.nearby-item{display:grid;grid-template-columns:170rpx minmax(0,1fr);gap:18rpx;min-height:0;padding:18rpx 0;border-top:1rpx solid #eeece7}.nearby-cover{display:grid;width:170rpx;height:126rpx;overflow:hidden;place-items:center;border-radius:15rpx;background:#e9ede3;color:#687563;font-size:23rpx;font-weight:700}.nearby-cover image{display:block;width:100%;height:100%}.nearby-content{display:flex;min-width:0;flex-direction:column}.nearby-content>strong{display:-webkit-box;overflow:hidden;color:#29382d;font-size:25rpx;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.nearby-content>small{overflow:hidden;margin-top:7rpx;color:#7e887d;font-size:20rpx;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.nearby-footer{display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto}.nearby-footer>text{color:#879084;font-size:19rpx}.nearby-price{text-align:left}.nearby-price strong{color:#d76440;font-size:28rpx;line-height:1}.nearby-price strong small{display:inline;margin:0 0 0 2rpx;color:#9b8d83;font-size:17rpx;font-weight:500}.nearby-more{border-radius:12rpx;background:#f2f4ed;line-height:58rpx}
+/* Operator-only doorplate is metadata, not part of the public tag stream. */
+.detail-tags{display:flex;flex-wrap:wrap;gap:10rpx;margin-top:14rpx}.detail-tags text{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-detail-doorplate{display:block;box-sizing:border-box;width:max-content;max-width:100%;overflow:hidden;margin-top:13rpx;padding:7rpx 11rpx;border:1rpx solid #d8e2d2;border-radius:9rpx;background:#f3f7ee;color:#40543f;font-size:21rpx;font-weight:700;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
 </style>
