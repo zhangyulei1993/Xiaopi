@@ -625,7 +625,7 @@ const phoneCustomerService = () =>
         ><view><small>朝向</small><strong>{{ item.orientation || "待补充" }}</strong></view
         ></view
       ></view
-    ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>{{ brandName }}服务</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
+    ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>{{ brandName }}</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
     ><view v-if="detailModuleEnabled('overview') && (item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租')" class="card detail-info"
       ><view class="detail-section-heading compact"><view><view class="title small">租住信息</view><small>费用、入住与通勤条件</small></view></view
       ><view class="detail-info-grid"
