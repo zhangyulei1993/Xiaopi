@@ -176,6 +176,9 @@ export interface PublicConfig {
     adminEnabledFields?: string[];
     listTagLayout?: "grouped" | "wrap";
     detailTagLayout?: "grouped" | "wrap";
+    listTagOrder?: string[];
+    listTagTopFields?: string[];
+    detailTagOrder?: string[];
   };
   propertyDetail?: {
     modules?: { key: string; title: string; enabled: boolean }[];

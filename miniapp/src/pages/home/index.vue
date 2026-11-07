@@ -86,14 +86,9 @@ const coverUrl = (item?: Property) => {
   const cover = item?.media?.find((media) => media.type === "image")?.url;
   return cover ? resolveAssetUrl(cover) : "";
 };
-const primaryLabels = (item: Property) => {
-  const fields = (config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit");
-  return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
-};
-const secondaryLabels = (item: Property) => {
-  const fields = (config.value.listingTitle?.enabledFields || []).filter((field) => field !== "community" && field !== "unit");
-  return uniqueListingTags(["layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
-};
+const orderedFields = () => [...(config.value.listingTitle?.listTagOrder || []), ...(config.value.listingTitle?.enabledFields || [])].filter((field, index, all) => field !== "community" && field !== "unit" && (config.value.listingTitle?.enabledFields || []).includes(field) && all.indexOf(field) === index);
+const primaryLabels = (item: Property) => uniqueListingTags(orderedFields().filter(field => (config.value.listingTitle?.listTagTopFields || []).includes(field)).map((field) => listingTagValue(item, field)));
+const secondaryLabels = (item: Property) => uniqueListingTags(orderedFields().filter(field => !(config.value.listingTitle?.listTagTopFields || []).includes(field)).map((field) => listingTagValue(item, field)));
 const allLabels = (item: Property) => uniqueListingTags([...primaryLabels(item), ...secondaryLabels(item)]);
 const adminDoorplate = (item: Property) => isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? listingDoorplate(item) : "";
 const listingTitle = (item: Property) => {

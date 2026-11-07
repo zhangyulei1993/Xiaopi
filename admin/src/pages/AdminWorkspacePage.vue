@@ -121,7 +121,7 @@ const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
-const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], customerPosterFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'], listTagLayout: 'grouped' as const, detailTagLayout: 'wrap' as const })
+const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], customerPosterFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'], listTagLayout: 'grouped' as const, detailTagLayout: 'wrap' as const, listTagOrder: ['rentType', 'listingSource', 'layout', 'fee', 'floor', 'area'], listTagTopFields: ['rentType', 'listingSource'], detailTagOrder: ['layout', 'rentType', 'listingSource', 'fee', 'floor', 'area'] })
 const defaultPropertyDetail = () => ({
   modules: [
     { key: 'overview', title: '房屋概况', enabled: true }, { key: 'location', title: '位置与周边', enabled: true },
@@ -167,6 +167,36 @@ const listingTitleFieldOptions = [
   { key: 'community', label: '小区' }, { key: 'unit', label: '门牌标签' }, { key: 'floor', label: '楼层' },
   { key: 'layout', label: '户型' }, { key: 'rentType', label: '整租 / 合租' }, { key: 'listingSource', label: '直租 / 转租' }, { key: 'fee', label: '有无中介费' }, { key: 'area', label: '面积' },
 ]
+const draggingTag = ref('')
+function arrangedFields(source: string[], visible: string[]) {
+  const known = new Set<string>()
+  return [...source, ...visible].filter(key => key !== 'community' && key !== 'unit' && visible.includes(key)).filter(key => known.has(key) ? false : (known.add(key), true))
+}
+const listOrderedTagFields = computed(() => arrangedFields(publicConfig.listingTitle.listTagOrder, publicConfig.listingTitle.enabledFields))
+const listTopTagFields = computed(() => listOrderedTagFields.value.filter(key => publicConfig.listingTitle.listTagTopFields.includes(key)))
+const listBottomTagFields = computed(() => listOrderedTagFields.value.filter(key => !publicConfig.listingTitle.listTagTopFields.includes(key)))
+const detailOrderedTagFields = computed(() => arrangedFields(publicConfig.listingTitle.detailTagOrder, publicConfig.listingTitle.customerDetailFields))
+function moveTagToListRow(row: 'top' | 'bottom', targetKey?: string) {
+  const key = draggingTag.value
+  if (!key || !publicConfig.listingTitle.enabledFields.includes(key)) return
+  const order = publicConfig.listingTitle.listTagOrder.filter(item => item !== key)
+  const targetIndex = targetKey ? order.indexOf(targetKey) : order.length
+  order.splice(targetIndex < 0 ? order.length : targetIndex, 0, key)
+  publicConfig.listingTitle.listTagOrder = order
+  publicConfig.listingTitle.listTagTopFields = row === 'top'
+    ? [...new Set([...publicConfig.listingTitle.listTagTopFields, key])]
+    : publicConfig.listingTitle.listTagTopFields.filter(item => item !== key)
+  draggingTag.value = ''
+}
+function moveDetailTag(targetKey?: string) {
+  const key = draggingTag.value
+  if (!key || !publicConfig.listingTitle.customerDetailFields.includes(key)) return
+  const order = publicConfig.listingTitle.detailTagOrder.filter(item => item !== key)
+  const targetIndex = targetKey ? order.indexOf(targetKey) : order.length
+  order.splice(targetIndex < 0 ? order.length : targetIndex, 0, key)
+  publicConfig.listingTitle.detailTagOrder = order
+  draggingTag.value = ''
+}
 const previewTagExamples: Record<string, string> = { unit: '5栋3单元101室', floor: '18楼', layout: '两室一厅', rentType: '整租', listingSource: '直租', fee: '无中介费', area: '68㎡' }
 const previewListFields = computed(() => [
   ...publicConfig.listingTitle.enabledFields.filter(key => key !== 'community' && key !== 'unit'),
@@ -264,7 +294,10 @@ function previewTagGroups(item?: Property) {
     return raw && value.includes(raw) ? raw : ''
   }
   const values = (keys: string[]) => keys.filter(key => enabled.includes(key)).map(labelFor).filter(Boolean)
-  return { primary: values(['rentType', 'listingSource']), secondary: values(['layout', 'floor', 'area', 'fee']), all }
+  const ordered = arrangedFields(publicConfig.listingTitle.listTagOrder, enabled)
+  const primary = values(ordered.filter(key => publicConfig.listingTitle.listTagTopFields.includes(key)))
+  const secondary = values(ordered.filter(key => !publicConfig.listingTitle.listTagTopFields.includes(key)))
+  return { primary, secondary, all: [...primary, ...secondary] }
 }
 function previewDescription(item?: Property) {
   return String(item?.description || '').replace(/配套设施[ \t]*[：:][ \t]*[^\n]*\n?/, '').trim()
@@ -1173,6 +1206,25 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <el-radio-button value="wrap">紧凑换行</el-radio-button>
                   </el-radio-group>
                 </div>
+                <div class="tag-arranger">
+                  <header><strong>拖动编排标签</strong><span>拖到上/下行调整上下位置；在同一行拖到标签前调整左右顺序。</span></header>
+                  <div class="tag-arranger-lanes">
+                    <section class="tag-arranger-lane" @dragover.prevent @drop.prevent="moveTagToListRow('top')">
+                      <div class="tag-arranger-lane-title"><b>第一行</b><small>主标签行</small></div>
+                      <div class="tag-arranger-items">
+                        <button v-for="key in listTopTagFields" :key="`top-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" :title="`拖到“${listingTitleFieldOptions.find(field => field.key === key)?.label}”前`" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveTagToListRow('top', key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button>
+                        <span v-if="!listTopTagFields.length" class="tag-drop-empty">拖到这里</span>
+                      </div>
+                    </section>
+                    <section class="tag-arranger-lane" @dragover.prevent @drop.prevent="moveTagToListRow('bottom')">
+                      <div class="tag-arranger-lane-title"><b>第二行</b><small>补充标签行</small></div>
+                      <div class="tag-arranger-items">
+                        <button v-for="key in listBottomTagFields" :key="`bottom-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" :title="`拖到“${listingTitleFieldOptions.find(field => field.key === key)?.label}”前`" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveTagToListRow('bottom', key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button>
+                        <span v-if="!listBottomTagFields.length" class="tag-drop-empty">拖到这里</span>
+                      </div>
+                    </section>
+                  </div>
+                </div>
                 <div class="basic-config-note"><b>右侧画布已同步</b><span>切换后可在画布内点击“放大标签”查看真实卡片的局部效果。</span></div>
               </section>
               <section v-if="false" class="surface form-section config-section share-card-config">
@@ -1219,6 +1271,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                     <el-form label-position="top" class="basic-config-form detail-module-form"><el-form-item label="模块标题"><el-input v-model="detailModule('overview').title" maxlength="12" /></el-form-item></el-form>
                     <div class="module-toggle-row"><span>启用概况附加字段采集与展示</span><el-switch v-model="detailModule('overview').enabled" active-text="启用" inactive-text="停用" /></div>
                     <div class="layout-choice-row detail-layout-choice"><div><strong>详情标签排版</strong><small>仅改变标题下标签的视觉排列；管理员门牌仍单独显示，不混入公开标签。</small></div><el-radio-group v-model="publicConfig.listingTitle.detailTagLayout"><el-radio-button value="wrap">自动折行</el-radio-button><el-radio-button value="grouped">分组底板</el-radio-button></el-radio-group></div>
+                    <div class="tag-arranger detail-tag-arranger"><header><strong>拖动详情标签顺序</strong><span>拖到某个标签前即可调整左右顺序；空间不足时会按此顺序自动换行。</span></header><div class="tag-arranger-items" @dragover.prevent @drop.prevent="moveDetailTag()"><button v-for="key in detailOrderedTagFields" :key="`detail-${key}`" type="button" draggable="true" class="tag-drag-item" :class="{ dragging: draggingTag === key }" @dragstart="draggingTag = key" @dragend="draggingTag = ''" @dragover.prevent @drop.prevent.stop="moveDetailTag(key)"><i>⋮⋮</i>{{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</button><span v-if="!detailOrderedTagFields.length" class="tag-drop-empty">基础配置中未开启可展示标签</span></div></div>
                     <div class="basic-config-note"><b>详情标签已由基础配置统一控制</b><span>客户详情可展示字段：{{ publicConfig.listingTitle.customerDetailFields.filter(key => key !== 'community').map(key => listingTitleFieldOptions.find(field => field.key === key)?.label).filter(Boolean).join('、') || '仅显示小区主标题' }}</span><el-button plain @click="selectTab('小程序基础配置'); basicConfigTab = 'tags'">调整标签</el-button></div>
                   </div>
                   <div v-else-if="detailSectionTab === 'location'" class="share-field-editor listing-title-editor">

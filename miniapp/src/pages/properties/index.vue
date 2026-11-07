@@ -41,6 +41,8 @@ const selectedPrice = ref(0),
 const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
 const adminDoorplateEnabled = ref(true);
 const listTagLayout = ref<"grouped" | "wrap">("grouped");
+const listTagOrder = ref<string[]>(["rentType", "listingSource", "layout", "fee", "floor", "area"]);
+const listTagTopFields = ref<string[]>(["rentType", "listingSource"]);
 const priceRanges = [
   { label: "不限价格", min: 0, max: 0 },
   { label: "≤1500", min: 0, max: 1500 },
@@ -168,6 +170,8 @@ const load = async () => {
     }
     adminDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     listTagLayout.value = config?.listingTitle?.listTagLayout === "wrap" ? "wrap" : "grouped";
+    if (Array.isArray(config?.listingTitle?.listTagOrder)) listTagOrder.value = config!.listingTitle!.listTagOrder!;
+    if (Array.isArray(config?.listingTitle?.listTagTopFields)) listTagTopFields.value = config!.listingTitle!.listTagTopFields!;
     pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.properties || {}) };
     if (getSession()?.role === "user")
       favoriteIDs.value = await listFavorites().catch(() => []);
@@ -226,10 +230,8 @@ const coverUrl = (item: Property) => {
   const cover = item.media?.find((media) => media.type === "image")?.url;
   return cover ? resolveAssetUrl(cover) : "";
 };
-const primaryLabels = (item: Property) => {
-  const fields = listingTitleFields.value.filter((field) => field !== "community" && field !== "unit");
-  return uniqueListingTags(["rentType", "listingSource"].filter((field) => fields.includes(field)).map((field) => listingTagValue(item, field)));
-};
+const orderedFields = () => [...listTagOrder.value, ...listingTitleFields.value].filter((field, index, all) => field !== "community" && field !== "unit" && listingTitleFields.value.includes(field) && all.indexOf(field) === index);
+const primaryLabels = (item: Property) => uniqueListingTags(orderedFields().filter(field => listTagTopFields.value.includes(field)).map((field) => compactCardTag(field, item)));
 const compactCardTag = (field: string, item: Property) => {
   const value = listingTagValue(item, field);
   // A list card needs recognisable information, not the whole record. The
@@ -238,8 +240,7 @@ const compactCardTag = (field: string, item: Property) => {
   return value;
 };
 const secondaryLabels = (item: Property) => {
-  const fields = listingTitleFields.value.filter((field) => field !== "community" && field !== "unit");
-  return uniqueListingTags(["layout", "floor", "area", "fee"].filter((field) => fields.includes(field)).map((field) => compactCardTag(field, item)));
+  return uniqueListingTags(orderedFields().filter(field => !listTagTopFields.value.includes(field)).map((field) => compactCardTag(field, item)));
 };
 const cardTags = (item: Property) => uniqueListingTags([...primaryLabels(item), ...secondaryLabels(item)]);
 const adminDoorplate = (item: Property) =>

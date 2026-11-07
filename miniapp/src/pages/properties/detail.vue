@@ -47,6 +47,7 @@ const operatorDoorplateEnabled = ref(false);
 const customerShareTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
 const customerPosterTagFields = ref<string[]>(["community", "layout", "rentType", "fee"]);
 const detailTagLayout = ref<"grouped" | "wrap">("wrap");
+const detailTagOrder = ref<string[]>(["layout", "rentType", "listingSource", "fee", "floor", "area"]);
 const shareCardConfig = ref({
   titlePrefix: "",
   titleFields: ["community", "layout"],
@@ -104,6 +105,7 @@ const load = async (id = "") => {
       : customerShareTagFields.value;
     operatorDoorplateEnabled.value = Boolean(config?.listingTitle?.adminEnabledFields?.includes("unit"));
     detailTagLayout.value = config?.listingTitle?.detailTagLayout === "grouped" ? "grouped" : "wrap";
+    if (Array.isArray(config?.listingTitle?.detailTagOrder)) detailTagOrder.value = config!.listingTitle!.detailTagOrder!;
     shareCardConfig.value = {
       titlePrefix: String(config?.shareCard?.titlePrefix || ""),
       titleFields: config?.shareCard?.titleFields?.length ? config.shareCard.titleFields : ["community", "layout"],
@@ -139,7 +141,7 @@ const isAdmin = computed(() => hasRole("admin"));
 const detailTags = computed(() => {
   const current = item.value;
   if (!current) return [];
-  const fields = customerDetailTagFields.value.filter((field) => field !== "community" && field !== "unit");
+  const fields = [...detailTagOrder.value, ...customerDetailTagFields.value].filter((field, index, all) => field !== "community" && field !== "unit" && customerDetailTagFields.value.includes(field) && all.indexOf(field) === index);
   return uniqueListingTags(fields.map((field) => listingTagValue(current, field)));
 });
 const adminDoorplate = computed(() =>

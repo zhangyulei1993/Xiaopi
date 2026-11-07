@@ -64,6 +64,11 @@ type ListingTitleConfig struct {
 	// alter which fields are public, so a layout change cannot expose data.
 	ListTagLayout   string `json:"listTagLayout"`
 	DetailTagLayout string `json:"detailTagLayout"`
+	// Tag ordering is presentation-only. ListTagTopFields is the first row in
+	// grouped cards; the remaining ordered labels flow into the second row.
+	ListTagOrder     []string `json:"listTagOrder"`
+	ListTagTopFields []string `json:"listTagTopFields"`
+	DetailTagOrder   []string `json:"detailTagOrder"`
 }
 
 // PropertyDetailConfig controls the content blocks of a property detail page.
@@ -154,6 +159,9 @@ func DefaultPublicConfig() PublicConfig {
 			AdminEnabledFields:    []string{"unit"},
 			ListTagLayout:         "grouped",
 			DetailTagLayout:       "wrap",
+			ListTagOrder:          []string{"rentType", "listingSource", "layout", "fee", "floor", "area"},
+			ListTagTopFields:      []string{"rentType", "listingSource"},
+			DetailTagOrder:        []string{"layout", "rentType", "listingSource", "fee", "floor", "area"},
 		},
 		PropertyDetail: PropertyDetailConfig{
 			Modules: []PropertyDetailModule{
@@ -251,6 +259,15 @@ func (config *PublicConfig) Normalize() {
 	}
 	if config.ListingTitle.DetailTagLayout == "" {
 		config.ListingTitle.DetailTagLayout = DefaultPublicConfig().ListingTitle.DetailTagLayout
+	}
+	if config.ListingTitle.ListTagOrder == nil {
+		config.ListingTitle.ListTagOrder = append([]string(nil), DefaultPublicConfig().ListingTitle.ListTagOrder...)
+	}
+	if config.ListingTitle.ListTagTopFields == nil {
+		config.ListingTitle.ListTagTopFields = append([]string(nil), DefaultPublicConfig().ListingTitle.ListTagTopFields...)
+	}
+	if config.ListingTitle.DetailTagOrder == nil {
+		config.ListingTitle.DetailTagOrder = append([]string(nil), DefaultPublicConfig().ListingTitle.DetailTagOrder...)
 	}
 	// Historical configurations held a full administrator tag set. The public
 	// set is now shared globally, so preserve only the optional doorplate bit.
@@ -366,6 +383,25 @@ func validateListingTitleFields(fields []string) error {
 	return nil
 }
 
+// validateOptionalListingTitleFields is used by presentation-only controls.
+// A row may intentionally be empty while an operator is arranging labels.
+func validateOptionalListingTitleFields(fields []string) error {
+	if len(fields) > len(listingTitleFieldLabels) {
+		return fmt.Errorf("列表标签数量不能超过 %d 个", len(listingTitleFieldLabels))
+	}
+	seen := map[string]struct{}{}
+	for _, field := range fields {
+		if _, exists := listingTitleFieldLabels[field]; !exists {
+			return errors.New("列表标签包含不支持的字段")
+		}
+		if _, exists := seen[field]; exists {
+			return errors.New("列表标签不能重复")
+		}
+		seen[field] = struct{}{}
+	}
+	return nil
+}
+
 func (config PublicConfig) Validate() error {
 	if config.HeroTitle == "" {
 		return errors.New("品牌名称不能为空")
@@ -452,6 +488,15 @@ func (config PublicConfig) Validate() error {
 	}
 	if config.ListingTitle.DetailTagLayout != "wrap" && config.ListingTitle.DetailTagLayout != "grouped" {
 		return errors.New("详情标签布局不支持")
+	}
+	if err := validateOptionalListingTitleFields(config.ListingTitle.ListTagOrder); err != nil {
+		return errors.New("列表标签排序不支持")
+	}
+	if err := validateOptionalListingTitleFields(config.ListingTitle.ListTagTopFields); err != nil {
+		return errors.New("列表第一行标签不支持")
+	}
+	if err := validateOptionalListingTitleFields(config.ListingTitle.DetailTagOrder); err != nil {
+		return errors.New("详情标签排序不支持")
 	}
 	validDetailModules := map[string]struct{}{"overview": {}, "location": {}, "facilities": {}, "description": {}, "nearby": {}}
 	if len(config.PropertyDetail.Modules) != len(validDetailModules) {
