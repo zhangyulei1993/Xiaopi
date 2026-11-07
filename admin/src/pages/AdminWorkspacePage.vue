@@ -40,7 +40,9 @@ const configAudience = ref<ConfigAudience>('customer')
 const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
 type BasicConfigTab = 'brand' | 'coverage' | 'tags' | 'facilities'
+type BasicTagPreviewTab = 'list' | 'detail' | 'share' | 'poster'
 const basicConfigTab = ref<BasicConfigTab>('brand')
+const basicTagPreviewTab = ref<BasicTagPreviewTab>('list')
 const basicPhonePreviewOpen = ref(false)
 const editingFacilityKey = ref('')
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
@@ -57,6 +59,7 @@ function selectDetailSectionTab(value: DetailSectionTab) {
 function selectBasicConfigTab(value: BasicConfigTab) {
   basicConfigTab.value = value
   basicPhonePreviewOpen.value = false
+  if (value === 'tags') basicTagPreviewTab.value = 'list'
   if (value === 'coverage') configPage.value = 'home'
 }
 function toggleFacility(facility: { enabled: boolean }) { facility.enabled = !facility.enabled }
@@ -1029,11 +1032,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="basic-preview-radius">附近房源默认关联 <b>{{ publicConfig.relatedPropertyRadiusKm || 3 }} 公里</b></div>
                 </template>
                 <template v-else-if="basicConfigTab === 'tags'">
-                  <div class="basic-preview-caption">客户视角 · 房源卡片</div>
-                  <article v-if="previewPrimaryProperty" class="preview-property-card basic-preview-property"><div :style="previewCoverStyle(previewPrimaryProperty)"><em>可租</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewPropertyTags(previewPrimaryProperty).length" class="preview-tag-row secondary"><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></small><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
+                  <div class="basic-tag-preview-tabs" role="tablist" aria-label="标签效果预览"><button :class="{ active: basicTagPreviewTab === 'list' }" @click="basicTagPreviewTab = 'list'">列表</button><button :class="{ active: basicTagPreviewTab === 'detail' }" @click="basicTagPreviewTab = 'detail'">详情</button><button :class="{ active: basicTagPreviewTab === 'share' }" @click="basicTagPreviewTab = 'share'">分享卡</button><button :class="{ active: basicTagPreviewTab === 'poster' }" @click="basicTagPreviewTab = 'poster'">朋友圈</button></div>
+                  <template v-if="previewPrimaryProperty && basicTagPreviewTab === 'list'"><div class="basic-preview-caption">客户视角 · 首页推荐 / 房源列表</div><article class="preview-property-card basic-preview-property"><div :style="previewCoverStyle(previewPrimaryProperty)"><em>可租</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewPropertyTags(previewPrimaryProperty).length" class="preview-tag-row secondary"><i v-for="tag in previewPropertyTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></small><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article></template>
+                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'detail'"><div class="basic-preview-caption">客户视角 · 房源详情</div><article class="basic-detail-preview"><div class="basic-detail-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><section><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><div class="basic-detail-tags"><i v-for="tag in previewDetailTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></div></section></article></template>
+                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'share'"><div class="basic-preview-caption">微信好友 · 小程序分享卡</div><article class="basic-share-preview"><span>⌁ {{ publicConfig.heroTitle || '小皮租房' }}</span><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><div :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><i v-for="tag in previewShareTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></article></template>
+                  <template v-else-if="previewPrimaryProperty && basicTagPreviewTab === 'poster'"><div class="basic-preview-caption">朋友圈 · 房源海报</div><article class="basic-poster-preview"><div :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥ {{ previewPrimaryProperty.rentMonthly }}<small>/月</small></b><strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong><span><i v-for="tag in previewShareTags(previewPrimaryProperty)" :key="tag">{{ tag }}</i></span><em>{{ publicConfig.heroTitle || '小皮租房' }} · 小程序</em></article></template>
                   <div v-else class="preview-empty">暂无可预览房源</div>
-                  <div class="basic-preview-caption">管理员额外信息</div>
-                  <div class="basic-preview-operator"><b>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '5栋3单元101室' : '未额外展示门牌' }}</b><span>{{ publicConfig.listingTitle.adminEnabledFields.includes('unit') ? '管理员列表与详情可见' : '与客户标签一致' }}</span></div>
                 </template>
                 <template v-else>
                   <div class="basic-preview-caption">房源详情 · 设施与环境</div>
