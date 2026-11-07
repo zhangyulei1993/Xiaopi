@@ -612,7 +612,7 @@ const phoneCustomerService = () =>
           >{{ favorite ? "♥" : "♡"
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
         ></view
-      ><view class="title small detail-overview-heading">{{ detailModuleTitle('overview', '房屋概况') }}</view
+      ><view class="detail-module-kicker">{{ detailModuleTitle('overview', '房屋概况') }}</view
       ><view class="title">{{ item.title || item.community }}</view
       ><view v-if="item.listingSource === '转租'" class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view
       ><view class="muted">{{ item.location || "位置待补充" }}</view
@@ -625,7 +625,7 @@ const phoneCustomerService = () =>
       ></view
     ><button v-if="!isAdmin" class="card service-card" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><view class="service-avatar">皮</view><view class="service-copy"><strong>小皮租房服务</strong><text>咨询费用、入住时间和看房安排</text></view><view class="service-status">在线咨询 <text>›</text></view></button
     ><view v-if="detailModuleEnabled('overview') && (item.depositPayment || item.utilitiesText || item.floorInfo || item.orientation || item.elevator || item.metroMinutes || item.rulesText || item.verificationDate || item.listingSource === '转租')" class="card detail-info"
-      ><view class="title small">入住与房屋信息</view
+      ><view class="detail-section-heading compact"><view><view class="title small">租住信息</view><small>费用、入住与通勤条件</small></view></view
       ><view class="detail-info-grid"
         ><view v-if="item.depositPayment"><small>押付方式</small><strong>{{ item.depositPayment }}</strong></view
         ><view v-if="item.listingSource === '转租'"><small>剩余租期</small><strong>{{ item.remainingLeaseMonths || 0 }} 个月</strong></view
@@ -639,7 +639,7 @@ const phoneCustomerService = () =>
     ><view v-if="detailModuleEnabled('location') && hasLocation" class="card location-card"
       ><view class="location-heading"
         ><view
-          ><strong>{{ detailModuleTitle('location', '位置与周边') }}</strong><small>{{ item.location }}</small></view></view
+          ><strong>{{ detailModuleTitle('location', '位置与周边') }}</strong><small>{{ item.location }}</small></view><text>已定位</text></view
       ><view class="map-summary" @click="mapExpanded = !mapExpanded"
         ><view><strong>{{ mapExpanded ? "收起地图" : "查看地图位置" }}</strong><small>已保存房源定位</small></view
         ><text>{{ mapExpanded ? "⌃" : "›" }}</text></view
@@ -667,7 +667,7 @@ const phoneCustomerService = () =>
       ><view v-if="environmentHighlights.length" class="environment-list"><view v-for="feature in environmentHighlights" :key="`${feature.label}-${feature.value}`"><small>{{ feature.label }}</small><strong>{{ feature.value }}</strong></view></view
       ></view
     ><view v-if="detailModuleEnabled('description')" class="card"
-      ><view class="title small">{{ detailModuleTitle('description', '房源描述') }}</view
+      ><view class="detail-section-heading compact"><view><view class="title small">{{ detailModuleTitle('description', '房源描述') }}</view><small>房东补充说明</small></view></view
       ><view class="desc">{{ propertyDescription || "暂无描述" }}</view></view
     ><view v-if="detailModuleEnabled('nearby')" class="card nearby-card"
       ><view class="nearby-heading"
@@ -1016,5 +1016,6 @@ const phoneCustomerService = () =>
 .state{color:#7e887d}.detail-cover,.media-image,.media-video{background:#e4e7de}.location-heading strong,.nearby-item strong{color:#29382d}.location-heading small,.nearby-heading small,.nearby-item small{color:#7e887d}.nearby-heading>text,.nearby-price strong{color:#d76440}.navigate-button{background:#edf1e8;color:#536a45}.tags{gap:10rpx}.tags text{padding:8rpx 13rpx;background:#edf0dc;color:#536a45;font-size:21rpx}.row{color:#7e887d}.row text:last-child{color:#29382d}.amenity-icon{border-color:#dfe7d8;background:#edf1e8;box-shadow:none}.amenity-name{color:#40543f}.desc{color:#64705f}.heart{color:#657162}.heart.active{color:#d76440}
 /* Delivery-level detail hierarchy. */
 .detail-page{padding:24rpx 24rpx 250rpx;background:#f6f4ee}.detail-page-head{margin:4rpx 6rpx 22rpx}.detail-page-head view{font-size:38rpx;letter-spacing:-1rpx}.detail-page-head text{margin-top:7rpx;font-size:22rpx}.media-gallery{border-radius:22rpx;box-shadow:0 10rpx 28rpx rgba(52,62,48,.08)}.media-swiper{height:460rpx}.media-strip{margin:16rpx 2rpx 6rpx}.detail-page .card{margin-bottom:20rpx;padding:26rpx;border:1rpx solid #e9e6df;border-radius:22rpx;background:#fffdf9}.overview{margin-top:20rpx}.overview .price{font-size:48rpx;letter-spacing:-1rpx}.overview .price .price-unit{margin-left:2rpx;font-size:22rpx}.overview .title{margin-top:18rpx;font-size:37rpx;line-height:1.34;letter-spacing:-.8rpx}.overview .muted{margin-top:10rpx;color:#7a8378;font-size:23rpx;line-height:1.5}.key-facts{gap:10rpx;margin-top:22rpx}.key-facts>view,.detail-info-grid>view{padding:16rpx 15rpx;border-radius:13rpx;background:#f0eee8}.key-facts small,.detail-info-grid small{font-size:19rpx}.key-facts strong,.detail-info-grid strong{margin-top:6rpx;font-size:23rpx}.detail-page .title.small{margin:0;font-size:31rpx;letter-spacing:-.4rpx}.detail-info .title{margin-bottom:18rpx}.detail-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;margin-bottom:22rpx}.detail-section-heading small{display:block;margin-top:6rpx;color:#8a9287;font-size:20rpx;line-height:1.4}.detail-section-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}.amenity-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:20rpx 12rpx}.amenity-icon{width:64rpx;height:64rpx;border-radius:18rpx}.amenity-icon image{width:38rpx;height:38rpx}.amenity-name{font-size:21rpx}.environment-list{display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:22rpx}.environment-list>view{min-width:0;padding:15rpx 16rpx;border-radius:13rpx;background:#f0f2e9}.environment-list small,.environment-list strong{display:block}.environment-list small{color:#8a9287;font-size:18rpx}.environment-list strong{overflow:hidden;margin-top:5rpx;color:#40543f;font-size:22rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.location-heading strong{font-size:30rpx}.location-heading small{font-size:22rpx}.map-summary{padding-top:18rpx}.desc{margin-top:16rpx;font-size:25rpx;line-height:1.75}.service-card{padding:20rpx 22rpx!important}.nearby-item strong{font-size:25rpx}
+.detail-module-kicker{margin-top:18rpx;color:#80907a;font-size:20rpx;font-weight:700;letter-spacing:1rpx;line-height:1.2}.detail-section-heading.compact{margin-bottom:18rpx}.location-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}
 .facility-group-label{margin:0 0 16rpx;color:#667362;font-size:21rpx;font-weight:700;letter-spacing:.5rpx}.facility-group-label.environment-label{margin-top:24rpx}.amenity-grid{padding-bottom:2rpx}.environment-list{margin-top:0}.nearby-card{padding:26rpx!important}.nearby-heading{margin-bottom:18rpx}.nearby-item{display:grid;grid-template-columns:170rpx minmax(0,1fr);gap:18rpx;min-height:0;padding:18rpx 0;border-top:1rpx solid #eeece7}.nearby-cover{display:grid;width:170rpx;height:126rpx;overflow:hidden;place-items:center;border-radius:15rpx;background:#e9ede3;color:#687563;font-size:23rpx;font-weight:700}.nearby-cover image{display:block;width:100%;height:100%}.nearby-content{display:flex;min-width:0;flex-direction:column}.nearby-content>strong{display:-webkit-box;overflow:hidden;color:#29382d;font-size:25rpx;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.nearby-content>small{overflow:hidden;margin-top:7rpx;color:#7e887d;font-size:20rpx;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.nearby-footer{display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto}.nearby-footer>text{color:#879084;font-size:19rpx}.nearby-price{text-align:left}.nearby-price strong{color:#d76440;font-size:28rpx;line-height:1}.nearby-price strong small{display:inline;margin:0 0 0 2rpx;color:#9b8d83;font-size:17rpx;font-weight:500}.nearby-more{border-radius:12rpx;background:#f2f4ed;line-height:58rpx}
 </style>
