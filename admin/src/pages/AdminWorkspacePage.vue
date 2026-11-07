@@ -53,7 +53,10 @@ function selectDetailSectionTab(value: DetailSectionTab) {
   previewOverlay.value = 'page'
   window.requestAnimationFrame(() => document.querySelector(`[data-canvas-area="${value}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
 }
-function selectBasicConfigTab(value: BasicConfigTab) { basicConfigTab.value = value }
+function selectBasicConfigTab(value: BasicConfigTab) {
+  basicConfigTab.value = value
+  if (value === 'coverage') configPage.value = 'home'
+}
 function toggleFacility(facility: { enabled: boolean }) { facility.enabled = !facility.enabled }
 function editFacility(facility: { key: string }) { editingFacilityKey.value = editingFacilityKey.value === facility.key ? '' : facility.key }
 function focusCanvasArea(area: DetailSectionTab) {
@@ -933,7 +936,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
           </section>
           <section v-if="tab === '小程序基础配置'" class="surface basic-config-tabs" aria-label="小程序基础配置分类">
-            <button type="button" @click="basicConfigTab = 'brand'">品牌与联系</button><button type="button" class="active">地区与关联范围</button><button type="button" @click="basicConfigTab = 'tags'">房源标签规则</button><button type="button" @click="basicConfigTab = 'facilities'">房屋设施库</button>
+            <button type="button" @click="selectBasicConfigTab('brand')">品牌与联系</button><button type="button" class="active">地区与关联范围</button><button type="button" @click="selectBasicConfigTab('tags')">房源标签规则</button><button type="button" @click="selectBasicConfigTab('facilities')">房屋设施库</button>
           </section>
           <el-alert v-if="configMessage" class="config-alert" :title="configMessage" :type="configFailed ? 'error' : 'success'" show-icon :closable="false" />
           <section class="surface basic-config-tabs" aria-label="小程序基础配置分类">
