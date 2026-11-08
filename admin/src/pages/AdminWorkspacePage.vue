@@ -110,6 +110,29 @@ function switchConfigAudience(value: ConfigAudience) {
   detailSectionTab.value = 'overview'
   previewOverlay.value = 'page'
 }
+function focusConfigField(field: string, basicTab?: BasicConfigTab) {
+  if (basicTab) {
+    selectTab('小程序基础配置')
+    selectBasicConfigTab(basicTab)
+  }
+  window.setTimeout(() => {
+    const target = document.querySelector(`[data-config-field="${field}"]`) as HTMLElement | null
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target?.querySelector('input, textarea, button')?.focus()
+  }, 80)
+}
+function previewStatusLabel(status: string) {
+  if (configAudience.value === 'customer') return publicConfig.statusLabels.available || '可租'
+  const labels: Record<string, string> = {
+    draft: publicConfig.statusLabels.draft,
+    pending_review: publicConfig.statusLabels.pendingReview,
+    published: publicConfig.statusLabels.published,
+    available: publicConfig.statusLabels.available,
+    rented: publicConfig.statusLabels.rented,
+    offline: publicConfig.statusLabels.offline,
+  }
+  return labels[status] || status
+}
 const assigningAdmin = ref(false)
 const adminPhone = ref('')
 const adminCandidate = ref<WechatUser | null>(null)
@@ -1286,9 +1309,9 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <section v-if="configPage === 'home' && tab === '小程序页面配置'" class="surface form-section config-section">
                 <div class="section-heading"><span>01</span><div><h2>首页页面配置</h2><p>页面文案与背景只在这里编辑；品牌、地区和房源基础字段请前往“小程序基础配置”。</p></div></div>
                 <el-form label-position="top" class="basic-config-form">
-                  <el-form-item label="首页主标题" required><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></el-form-item>
-                  <el-form-item label="搜索提示"><el-input v-model="publicConfig.pagePresentations.home.subtitle" maxlength="60" show-word-limit placeholder="例如：搜索小区、地铁或商圈" /></el-form-item>
-                  <el-form-item label="首页分区文案"><div class="form-row two-columns"><el-input v-model="publicConfig.pagePresentations.home.channelTitle" placeholder="精选频道" /><el-input v-model="publicConfig.pagePresentations.home.allChannelsText" placeholder="全部频道" /><el-input v-model="publicConfig.pagePresentations.home.recommendationTitle" placeholder="推荐房源" /><el-input v-model="publicConfig.pagePresentations.home.viewAllText" placeholder="查看房源" /></div><div class="form-tip">这些是标题文本级配置，只影响显示，不改变地区、频道或房源数据。</div></el-form-item>
+                  <el-form-item label="首页主标题" required><div data-config-field="home-title"><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></div></el-form-item>
+                  <el-form-item label="搜索提示"><div data-config-field="home-search"><el-input v-model="publicConfig.pagePresentations.home.subtitle" maxlength="60" show-word-limit placeholder="例如：搜索小区、地铁或商圈" /></div></el-form-item>
+                  <el-form-item label="首页分区文案"><div data-config-field="home-sections" class="form-row two-columns"><el-input v-model="publicConfig.pagePresentations.home.channelTitle" placeholder="精选频道" /><el-input v-model="publicConfig.pagePresentations.home.allChannelsText" placeholder="全部频道" /><el-input v-model="publicConfig.pagePresentations.home.recommendationTitle" placeholder="推荐房源" /><el-input v-model="publicConfig.pagePresentations.home.viewAllText" placeholder="查看房源" /></div><div class="form-tip">这些是标题文本级配置，只影响显示，不改变地区、频道或房源数据。</div></el-form-item>
                   <el-form-item label="首页背景图"><el-input v-model="publicConfig.pagePresentations.home.backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /><div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground('home', $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations.home.backgroundImage" @click="publicConfig.pagePresentations.home.backgroundImage = ''">移除背景图</button></div></el-form-item>
                 </el-form>
               </section>
@@ -1434,6 +1457,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </div>
 
             <aside v-if="tab === '小程序页面配置'" class="config-preview-column">
+              <section class="canvas-control-deck" aria-label="小程序画布控制">
+                <div class="canvas-control-heading"><span>实时画布</span><small>点击带虚线的文字可直达编辑</small></div>
+                <div class="canvas-audience-toggle" role="tablist" aria-label="预览视角"><button type="button" :class="{ active: configAudience === 'customer' }" @click="switchConfigAudience('customer')">客户视角</button><button type="button" :class="{ active: configAudience === 'operator' }" @click="switchConfigAudience('operator')">管理员视角</button></div>
+                <div class="canvas-page-rail" aria-label="预览页面"><button v-for="item in pagePresentationOptions.filter(page => page.audience === 'both' || page.audience === configAudience)" :key="`canvas-page-${item.key}`" type="button" :class="{ active: configPage === item.key }" @click="selectConfigPage(item.key)">{{ item.label }}</button></div>
+                <p v-if="configAudience === 'customer'">仅预览可租房源和客户可见信息。</p><p v-else>显示运营专属状态、门牌和管理入口。</p>
+              </section>
               <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="tag-magnifier" :class="{ open: tagMagnifierOpen }">
                 <header><span>标签局部预览</span><button type="button" @click="tagMagnifierOpen = !tagMagnifierOpen">{{ tagMagnifierOpen ? '收起' : '放大标签' }}</button></header>
                 <article v-if="tagMagnifierOpen && previewPrimaryProperty">
@@ -1451,12 +1480,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content">
-                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong>{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
+                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong class="canvas-editable-copy" title="点击编辑首页主标题" @click="focusConfigField('home-title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search canvas-editable-copy" title="点击编辑搜索提示" @click="focusConfigField('home-search')">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
                   <div class="mini-locations"><span class="active">附近</span><span v-for="(item, index) in publicConfig.locations.slice(0, 3)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
                   <div class="mini-budget"><b>租金预算</b><span>¥1,500 以下</span><span>¥1,500–2,500</span></div>
-                  <div class="mini-section-title">精选频道</div>
+                  <div class="mini-section-title canvas-editable-copy" title="点击编辑首页分区文案" @click="focusConfigField('home-sections')">{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
-                  <div class="mini-recommend"><strong>推荐</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">查看房源</b></div>
+                  <div class="mini-recommend"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="focusConfigField('home-sections')">{{ publicConfig.pagePresentations.home.recommendationTitle || '推荐房源' }}</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">{{ publicConfig.pagePresentations.home.viewAllText || '查看房源' }}</b></div>
                   <article v-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div class="preview-card-cover" :style="previewCoverStyle(previewPrimaryProperty)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[previewPrimaryProperty.status] || previewPrimaryProperty.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌 · {{ previewOperatorDoorplate }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(previewPrimaryProperty).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(previewPrimaryProperty).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(previewPrimaryProperty).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
                   <div v-else class="preview-empty">暂无可展示房源</div>
                 </div>
