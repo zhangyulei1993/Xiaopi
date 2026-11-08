@@ -105,9 +105,6 @@ type PropertyDetailConfig struct {
 
 type PublicConfig struct {
 	HeroTitle               string                      `json:"heroTitle"`
-	HeroSubtitle            string                      `json:"heroSubtitle"`
-	HeroDescription         string                      `json:"heroDescription"`
-	Notice                  string                      `json:"notice"`
 	ContactPhone            string                      `json:"contactPhone"`
 	RelatedPropertyRadiusKm float64                     `json:"relatedPropertyRadiusKm"`
 	Locations               []MiniappLocation           `json:"locations"`
@@ -121,9 +118,6 @@ type PublicConfig struct {
 func DefaultPublicConfig() PublicConfig {
 	return PublicConfig{
 		HeroTitle:               "小皮租房",
-		HeroSubtitle:            "在武汉，住得更省心",
-		HeroDescription:         "真实房源 · 可靠服务",
-		Notice:                  "签约前请核对合同条款与费用明细，保障自身权益。",
 		RelatedPropertyRadiusKm: 3,
 		Locations: []MiniappLocation{
 			{Label: "光谷", Keyword: "光谷"},
@@ -196,9 +190,6 @@ func DefaultPublicConfig() PublicConfig {
 
 func (config *PublicConfig) Normalize() {
 	config.HeroTitle = strings.TrimSpace(config.HeroTitle)
-	config.HeroSubtitle = strings.TrimSpace(config.HeroSubtitle)
-	config.HeroDescription = strings.TrimSpace(config.HeroDescription)
-	config.Notice = strings.TrimSpace(config.Notice)
 	config.ContactPhone = strings.TrimSpace(config.ContactPhone)
 	if config.RelatedPropertyRadiusKm <= 0 {
 		config.RelatedPropertyRadiusKm = 3
@@ -323,25 +314,25 @@ func (config *PublicConfig) Normalize() {
 		}
 		configuredFacilities[facility.Key] = facility
 	}
-	normalizedFacilities := make([]PropertyDetailFacility, 0, len(defaults.Facilities)+len(configuredFacilities))
-	for _, facility := range defaults.Facilities {
-		if saved, exists := configuredFacilities[facility.Key]; exists {
-			facility.Enabled = saved.Enabled
-			// The default catalogue provides a stable key and sensible fallback,
-			// but operations owns the label and category shown to publishers.
-			// Preserve those edits instead of silently reverting them on save.
-			if saved.Label != "" {
-				facility.Label = saved.Label
-			}
-			if saved.Group != "" {
-				facility.Group = saved.Group
-			}
-		}
-		normalizedFacilities = append(normalizedFacilities, facility)
-		delete(configuredFacilities, facility.Key)
+	// A submitted catalogue is authoritative: an operator may remove a default
+	// facility and re-add it later from the preset list. Only old empty configs
+	// receive the complete default catalogue for backward compatibility.
+	if len(config.PropertyDetail.Facilities) == 0 {
+		config.PropertyDetail.Facilities = append([]PropertyDetailFacility(nil), defaults.Facilities...)
+		return
 	}
-	for _, facility := range configuredFacilities {
-		normalizedFacilities = append(normalizedFacilities, facility)
+	normalizedFacilities := make([]PropertyDetailFacility, 0, len(config.PropertyDetail.Facilities))
+	seenFacilities := make(map[string]struct{}, len(config.PropertyDetail.Facilities))
+	for _, saved := range config.PropertyDetail.Facilities {
+		cleaned, exists := configuredFacilities[saved.Key]
+		if !exists {
+			continue
+		}
+		if _, exists := seenFacilities[saved.Key]; exists {
+			continue
+		}
+		seenFacilities[saved.Key] = struct{}{}
+		normalizedFacilities = append(normalizedFacilities, cleaned)
 	}
 	config.PropertyDetail.Facilities = normalizedFacilities
 }
@@ -415,21 +406,6 @@ func (config PublicConfig) Validate() error {
 	}
 	if utf8.RuneCountInString(config.HeroTitle) > 20 {
 		return errors.New("品牌名称不能超过 20 个字符")
-	}
-	if config.HeroSubtitle == "" {
-		return errors.New("首页主标题不能为空")
-	}
-	if utf8.RuneCountInString(config.HeroSubtitle) > 30 {
-		return errors.New("首页主标题不能超过 30 个字符")
-	}
-	if config.HeroDescription == "" {
-		return errors.New("首页副标题不能为空")
-	}
-	if utf8.RuneCountInString(config.HeroDescription) > 40 {
-		return errors.New("首页副标题不能超过 40 个字符")
-	}
-	if utf8.RuneCountInString(config.Notice) > 120 {
-		return errors.New("首页公告不能超过 120 个字符")
 	}
 	if config.ContactPhone != "" && !publicConfigPhonePattern.MatchString(config.ContactPhone) {
 		return errors.New("联系电话格式不正确")

@@ -71,3 +71,28 @@ func TestPublicConfigNormalizeLegacyShareCard(t *testing.T) {
 		t.Fatalf("normalized share config should be valid: %v", err)
 	}
 }
+
+func TestPublicConfigNormalizeKeepsEditedFacilityCatalogue(t *testing.T) {
+	config := DefaultPublicConfig()
+	// Operations may remove a preset facility. A non-empty submitted catalogue
+	// is authoritative and must not be silently repopulated with defaults.
+	config.PropertyDetail.Facilities = []PropertyDetailFacility{
+		{Key: "refrigerator", Label: "冰箱", Group: "家具家电", Enabled: true},
+		{Key: "desk", Label: "书桌", Group: "家具家电", Enabled: false},
+	}
+
+	config.Normalize()
+
+	if len(config.PropertyDetail.Facilities) != 2 {
+		t.Fatalf("expected edited catalogue to keep 2 facilities, got %+v", config.PropertyDetail.Facilities)
+	}
+	if config.PropertyDetail.Facilities[0].Key != "refrigerator" || config.PropertyDetail.Facilities[1].Key != "desk" {
+		t.Fatalf("expected facility order and keys to be preserved, got %+v", config.PropertyDetail.Facilities)
+	}
+	if config.PropertyDetail.Facilities[1].Enabled {
+		t.Fatalf("expected explicit facility enabled state to be preserved")
+	}
+	if err := config.Validate(); err != nil {
+		t.Fatalf("edited facility catalogue should remain valid: %v", err)
+	}
+}

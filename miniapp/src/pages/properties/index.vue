@@ -318,8 +318,8 @@ const subscribeArea = () => {
 <template>
   <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.92), rgba(247,246,241,.96)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : {}"
     ><view class="location"
-      >{{ isAdmin ? "房源管理" : (pagePresentation.title || "找一处合适的家") }} <text>{{ filteredProperties.length }} 套{{ isAdmin ? "房源" : "可租" }}</text></view
-    ><view v-if="isAdmin || pagePresentation.subtitle" class="page-subtitle">{{ isAdmin ? "编辑、发布与上下架均在此处理" : pagePresentation.subtitle }}</view
+      >{{ pagePresentation.title || (isAdmin ? "房源管理" : "找一处合适的家") }} <text>{{ filteredProperties.length }} 套{{ isAdmin ? "房源" : "可租" }}</text></view
+    ><view v-if="pagePresentation.subtitle" class="page-subtitle">{{ pagePresentation.subtitle }}</view
     ><view class="search card"
       ><image :src="searchIcon" mode="aspectFit" />
       <input

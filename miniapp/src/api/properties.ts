@@ -142,9 +142,6 @@ export interface WechatLoginResult {
 
 export interface PublicConfig {
   heroTitle: string;
-  heroSubtitle: string;
-  heroDescription: string;
-  notice: string;
   contactPhone: string;
   relatedPropertyRadiusKm?: number;
   locations: { label: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }[];
