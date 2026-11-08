@@ -40,6 +40,7 @@ const selectedPrice = ref(0),
   workingID = ref("");
 const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
 const adminDoorplateEnabled = ref(true);
+const configuredStatusLabels = ref<Record<string, string>>({});
 const listTagLayout = ref<"grouped" | "wrap">("grouped");
 const listTagOrder = ref<string[]>(["rentType", "listingSource", "layout", "fee", "floor", "area"]);
 const listTagTopFields = ref<string[]>(["rentType", "listingSource"]);
@@ -63,7 +64,7 @@ const adminStatusOptions = [
   { value: "rented", label: "已租" },
   { value: "offline", label: "已下架" },
 ];
-const statusLabel = (status: string) => ({ draft: "草稿", pending_review: "待审核", published: "已发布", available: "可租", rented: "已租", offline: "已下架" }[status] || status);
+const statusLabel = (status: string) => configuredStatusLabels.value[status] || ({ draft: "草稿", pending_review: "待审核", published: "已发布", available: "可租", rented: "已租", offline: "已下架" }[status] || status);
 const adminStatusMatched = (status: string) =>
   selectedStatus.value === "all"
     ? true
@@ -164,6 +165,7 @@ const load = async () => {
     properties.value = items;
     configuredLocations.value = config?.locations || [];
     configuredChannels.value = config?.featuredChannels || [];
+    configuredStatusLabels.value = { ...(config?.statusLabels || {}), pending_review: config?.statusLabels?.pendingReview || "待审核" };
     // [] is an explicit configuration: do not restore hidden public labels.
     if (Array.isArray(config?.listingTitle?.enabledFields)) {
       listingTitleFields.value = config!.listingTitle!.enabledFields!;
