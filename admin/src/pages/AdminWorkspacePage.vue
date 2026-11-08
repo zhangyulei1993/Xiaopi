@@ -117,6 +117,7 @@ function focusConfigField(field: string, basicTab?: BasicConfigTab) {
   }
   window.setTimeout(() => {
     const target = document.querySelector(`[data-config-field="${field}"]`) as HTMLElement | null
+      || document.querySelector('.basic-config-panel, .config-section') as HTMLElement | null
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     target?.querySelector('input, textarea, button')?.focus()
   }, 80)
@@ -1233,11 +1234,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
               <div class="basic-preview-content">
                 <template v-if="basicConfigTab === 'brand'">
-                  <div class="basic-preview-usage"><span>① 顶部导航 · 品牌名称</span><div class="basic-preview-nav">{{ publicConfig.heroTitle || '小皮租房' }}</div></div>
-                  <div class="basic-preview-usage"><span>② 微信登录 · 品牌名称</span><div class="basic-preview-login"><i>皮</i><b>{{ publicConfig.heroTitle || '小皮租房' }}</b><small>登录后开始找房</small></div></div>
+                  <div class="basic-preview-usage"><span>① 顶部导航 · 品牌名称</span><div class="basic-preview-nav canvas-editable-copy" title="点击编辑品牌名称" @click="focusConfigField('brand-name')">{{ publicConfig.heroTitle || '小皮租房' }}</div></div>
+                  <div class="basic-preview-usage"><span>② 微信登录 · 品牌名称</span><div class="basic-preview-login canvas-editable-copy" title="点击编辑品牌名称" @click="focusConfigField('brand-name')"><i>皮</i><b>{{ publicConfig.heroTitle || '小皮租房' }}</b><small>登录后开始找房</small></div></div>
                   <div class="basic-preview-usage"><span>③ 房源详情 · 品牌名称</span><div class="basic-preview-service"><i>皮</i><div><b>{{ publicConfig.heroTitle || '小皮租房' }}</b><small>咨询费用、入住时间和看房安排</small></div><em>在线咨询 ›</em></div></div>
                   <div class="basic-preview-usage"><span>④ 房源详情 / 找房需求 · 服务联系电话</span><div class="basic-preview-phone"><div><b>{{ publicConfig.heroTitle || '小皮租房' }}客服</b><small>点击后调用系统拨号</small></div><button @click="basicPhonePreviewOpen = !basicPhonePreviewOpen">打电话</button><div v-if="basicPhonePreviewOpen" class="basic-phone-popover"><small>拨打服务电话</small><strong>{{ publicConfig.contactPhone || '联系电话待配置' }}</strong><span>真实小程序会交由系统拨号确认</span></div></div></div>
-                  <div class="basic-preview-usage"><span>⑤ 分享卡与海报落款 · 品牌名称</span><div class="basic-preview-share-footer">⌁ {{ publicConfig.heroTitle || '小皮租房' }} · 小程序</div></div>
+                  <div class="basic-preview-usage"><span>⑤ 分享卡与海报落款 · 品牌名称</span><div class="basic-preview-share-footer canvas-editable-copy" title="点击编辑品牌名称" @click="focusConfigField('brand-name')">⌁ {{ publicConfig.heroTitle || '小皮租房' }} · 小程序</div></div>
+                  <div class="basic-preview-usage"><span>⑥ 房源状态标签 · 客户与管理员</span><div class="basic-status-preview"><button type="button" class="canvas-editable-copy" title="点击编辑状态标签" @click="focusConfigField('status-labels', 'brand')"><small>客户视角</small><b>{{ publicConfig.statusLabels.available || '可租' }}</b><em>仅展示可租房源</em></button><button type="button" class="canvas-editable-copy" title="点击编辑状态标签" @click="focusConfigField('status-labels', 'brand')"><small>管理员视角</small><span><i>{{ publicConfig.statusLabels.draft || '草稿' }}</i><i>{{ publicConfig.statusLabels.rented || '已租' }}</i><i>{{ publicConfig.statusLabels.offline || '已下架' }}</i></span></button></div></div>
                 </template>
                 <template v-else-if="basicConfigTab === 'coverage'">
                   <div class="basic-preview-caption">首页地区入口</div>
