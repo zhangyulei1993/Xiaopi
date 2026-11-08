@@ -666,20 +666,29 @@ function toggleAdminDoorplate(enabled: boolean) {
 }
 
 function addLocation() {
-  if (publicConfig.locations.length >= 20) return
-  const channel = publicConfig.featuredChannels[publicConfig.locations.length]
-  publicConfig.locations.push({ label: channel?.title || '', keyword: channel?.keyword || '' })
+  if (publicConfig.locations.length >= 12 || publicConfig.featuredChannels.length >= 12) return
+  publicConfig.locations.push({ label: '', keyword: '' })
+  publicConfig.featuredChannels.push({ icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
+  activeChannelIndex.value = publicConfig.featuredChannels.length - 1
 }
 
 function removeLocation(index: number) {
   publicConfig.locations.splice(index, 1)
+  if (publicConfig.featuredChannels[index]) publicConfig.featuredChannels.splice(index, 1)
+  activeChannelIndex.value = Math.max(0, Math.min(activeChannelIndex.value, publicConfig.featuredChannels.length - 1))
 }
 
 function addChannel() {
-  if (publicConfig.featuredChannels.length >= 12) return
-  const location = publicConfig.locations[publicConfig.featuredChannels.length]
-  publicConfig.featuredChannels.push({ icon: 'commute', title: location?.label || '', subtitle: '', keyword: location?.keyword || '', latitude: 0, longitude: 0, radiusKm: 3 })
+  if (publicConfig.locations.length >= 12 || publicConfig.featuredChannels.length >= 12) return
+  publicConfig.locations.push({ label: '', keyword: '' })
+  publicConfig.featuredChannels.push({ icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
   activeChannelIndex.value = publicConfig.featuredChannels.length - 1
+}
+
+function moveCoverageItem(index: number, offset: -1 | 1) {
+  moveItem(publicConfig.locations, index, offset)
+  moveItem(publicConfig.featuredChannels, index, offset)
+  activeChannelIndex.value = Math.max(0, Math.min(activeChannelIndex.value, publicConfig.featuredChannels.length - 1))
 }
 
 function syncChannelFromLocation(index: number) {
@@ -840,6 +849,7 @@ function preloadChannelMaps() {
 
 function removeChannel(index: number) {
   publicConfig.featuredChannels.splice(index, 1)
+  if (publicConfig.locations[index]) publicConfig.locations.splice(index, 1)
   activeChannelIndex.value = Math.max(0, Math.min(activeChannelIndex.value, publicConfig.featuredChannels.length - 1))
 }
 
@@ -1124,18 +1134,18 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <el-form label-position="top" class="basic-config-form"><el-form-item label="附近房源默认关联距离"><el-select v-model="publicConfig.relatedPropertyRadiusKm" style="width:100%"><el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" /></el-select><div class="form-tip">按地图坐标关联；详情页可在页面配置中单独调整展示范围。</div></el-form-item></el-form>
             <div class="basic-config-note"><b>地区入口与精选频道</b><span>它们是首页、房源筛选与附近推荐共用的数据。频道名称、地图位置和关联半径在此维护；首页卡片样式、文案和排序在“页面配置 → 首页”维护。</span></div>
             <div class="basic-coverage-editor">
-              <div class="section-heading config-section-heading"><span>03</span><div><h2>地区入口数据</h2><p>首页和房源筛选共用的地区名称与检索关键词。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 20" @click="addLocation">新增地区</el-button></div>
+              <div class="section-heading config-section-heading"><span>03</span><div><h2>地区入口数据</h2><p>与下方精选频道共用名称、关键词和排序；新增、删除、上移、下移会同步处理。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 12" @click="addLocation">新增地区</el-button></div>
               <div v-if="publicConfig.locations.length" class="structured-list">
-                <article v-for="(item, index) in publicConfig.locations" :key="`basic-location-${index}`" class="config-list-item"><div class="item-index">{{ String(index + 1).padStart(2, '0') }}</div><div class="item-fields location-fields"><label><span>显示名称</span><el-input v-model="item.label" maxlength="12" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label><label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveItem(publicConfig.locations, index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.locations.length - 1" aria-label="下移" @click="moveItem(publicConfig.locations, index, 1)" /><el-popconfirm title="确认删除这个地区入口？" @confirm="removeLocation(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></article>
+                <article v-for="(item, index) in publicConfig.locations" :key="`basic-location-${index}`" class="config-list-item"><div class="item-index">{{ String(index + 1).padStart(2, '0') }}</div><div class="item-fields location-fields"><label><span>显示名称</span><el-input v-model="item.label" maxlength="12" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label><label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveCoverageItem(index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.locations.length - 1" aria-label="下移" @click="moveCoverageItem(index, 1)" /><el-popconfirm title="确认删除这个地区入口和对应频道？" @confirm="removeLocation(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></article>
               </div>
               <div v-else class="config-empty"><strong>还没有地理位置</strong><span>至少添加一个地区，用户才能从首页快速筛选房源。</span><el-button type="primary" plain :icon="Plus" @click="addLocation">添加第一个地区</el-button></div>
             </div>
             <div class="basic-coverage-editor">
-              <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道数据</h2><p>在这里搜索地点、在地图上选点，并设置频道覆盖半径。首页只负责频道卡片的文案、样式和排序。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
+              <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道数据</h2><p>与上方地区入口共用名称、关键词和排序；地图中心、半径、卡片样式和副标题在此继续独立维护。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
               <div v-if="publicConfig.featuredChannels.length" class="channel-editor-tabs"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`basic-channel-tab-${index}`" type="button" :class="{ active: activeChannelIndex === index, configured: item.latitude && item.longitude }" @click="activeChannelIndex = index"><span>{{ index + 1 }}</span><strong>{{ item.title || `频道 ${index + 1}` }}</strong><small>{{ channelSetupStatus(item) }}</small></button></div>
               <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                 <article v-for="(item, index) in publicConfig.featuredChannels" v-show="activeChannelIndex === index" :key="`basic-channel-${index}`" class="channel-editor-card active">
-                  <header><div class="channel-order"><span>频道数据</span><div><strong>频道 {{ index + 1 }}</strong><small>按“基础信息 → 地点 → 范围”完成配置</small></div></div><div class="item-actions"><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
+                  <header><div class="channel-order"><span>频道数据</span><div><strong>频道 {{ index + 1 }}</strong><small>按“基础信息 → 地点 → 范围”完成配置</small></div></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="频道上移" @click="moveCoverageItem(index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="频道下移" @click="moveCoverageItem(index, 1)" /><el-popconfirm title="确认删除这个精选频道和对应地区？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
                   <div class="channel-flow"><span class="active">1 基础信息</span><i>→</i><span :class="{ active: item.latitude && item.longitude }">2 地点定位</span><i>→</i><span :class="{ active: item.latitude && item.longitude && item.radiusKm > 0 }">3 关联范围</span></div>
                   <div class="channel-fields"><label><span>频道名称</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="syncLocationFromChannel(index); invalidateChannelLocation(item, index)" /></label><label><span>搜索关键词（未选地点时使用）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" @input="syncLocationFromChannel(index); invalidateChannelLocation(item, index)" /></label></div>
                 </article>
