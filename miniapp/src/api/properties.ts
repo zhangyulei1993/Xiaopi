@@ -144,8 +144,9 @@ export interface PublicConfig {
   heroTitle: string;
   contactPhone: string;
   relatedPropertyRadiusKm?: number;
-  locations: { label: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }[];
+  locations: { id?: string; label: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }[];
   featuredChannels: {
+    id?: string;
     icon: string;
     title: string;
     subtitle: string;
@@ -154,6 +155,7 @@ export interface PublicConfig {
     longitude?: number;
     radiusKm?: number;
   }[];
+  statusLabels?: { draft?: string; pendingReview?: string; published?: string; available?: string; rented?: string; offline?: string };
   pagePresentations?: Record<string, {
     title?: string;
     subtitle?: string;

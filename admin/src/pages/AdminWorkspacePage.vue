@@ -416,7 +416,9 @@ const shareFieldOptions = [
 ]
 const shareFieldListingMap: Record<string, string> = { layout: 'layout', roomNo: 'unit', listingSource: 'listingSource', rentType: 'rentType', areaSqm: 'area' }
 const shareFieldEnabledForCustomer = (key: string) => !shareFieldListingMap[key] || publicConfig.listingTitle.customerShareFields.includes(shareFieldListingMap[key])
-const publicConfig = reactive<PublicConfig>({ heroTitle: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations(), shareCard: defaultShareCard(), listingTitle: defaultListingTitle(), propertyDetail: defaultPropertyDetail() })
+const publicConfig = reactive<PublicConfig>({ heroTitle: '', contactPhone: '', relatedPropertyRadiusKm: 3, locations: [], featuredChannels: [], pagePresentations: defaultPagePresentations(), shareCard: defaultShareCard(), listingTitle: defaultListingTitle(), propertyDetail: defaultPropertyDetail(), statusLabels: { draft: '草稿', pendingReview: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' } })
+
+const createConfigId = (prefix: string) => `${prefix}_${globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`}`
 
 const api = createAdminApi({ baseUrl: apiBase, onUnauthorized: () => { loggedIn.value = false; password.value = '' } })
 
@@ -424,11 +426,13 @@ const cloneConfig = (value: PublicConfig): PublicConfig => JSON.parse(JSON.strin
 const applyConfig = (value: PublicConfig, markSaved = false) => {
   const next = cloneConfig(value)
   next.relatedPropertyRadiusKm = next.relatedPropertyRadiusKm || 3
-  next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ ...item, latitude: item.latitude || 0, longitude: item.longitude || 0, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
+  next.locations = (next.locations || []).map(item => ({ ...item, id: item.id || createConfigId('loc') }))
+  next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ ...item, id: item.id || createConfigId('channel'), latitude: item.latitude || 0, longitude: item.longitude || 0, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
   next.pagePresentations = { ...defaultPagePresentations(), ...(next.pagePresentations || {}) }
   next.shareCard = { ...defaultShareCard(), ...(next.shareCard || {}) }
   next.listingTitle = { ...defaultListingTitle(), ...(next.listingTitle || {}) }
   next.propertyDetail = { ...defaultPropertyDetail(), ...(next.propertyDetail || {}) }
+  next.statusLabels = { draft: '草稿', pendingReview: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架', ...(next.statusLabels || {}) }
   next.propertyDetail.modules = next.propertyDetail.modules?.length ? next.propertyDetail.modules : defaultPropertyDetail().modules
   next.propertyDetail.facilities = normalizeDetailFacilities(next.propertyDetail.facilities?.length ? next.propertyDetail.facilities : defaultPropertyDetail().facilities)
   next.propertyDetail.nearby = { ...defaultPropertyDetail().nearby, ...(next.propertyDetail.nearby || {}) }
@@ -668,8 +672,8 @@ function toggleAdminDoorplate(enabled: boolean) {
 
 function addLocation() {
   if (publicConfig.locations.length >= 12 || publicConfig.featuredChannels.length >= 12) return
-  publicConfig.locations.push({ label: '', keyword: '' })
-  publicConfig.featuredChannels.push({ icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
+  publicConfig.locations.push({ id: createConfigId('loc'), label: '', keyword: '' })
+  publicConfig.featuredChannels.push({ id: createConfigId('channel'), icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
   activeChannelIndex.value = publicConfig.featuredChannels.length - 1
 }
 
@@ -681,8 +685,8 @@ function removeLocation(index: number) {
 
 function addChannel() {
   if (publicConfig.locations.length >= 12 || publicConfig.featuredChannels.length >= 12) return
-  publicConfig.locations.push({ label: '', keyword: '' })
-  publicConfig.featuredChannels.push({ icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
+  publicConfig.locations.push({ id: createConfigId('loc'), label: '', keyword: '' })
+  publicConfig.featuredChannels.push({ id: createConfigId('channel'), icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
   activeChannelIndex.value = publicConfig.featuredChannels.length - 1
 }
 
@@ -1128,6 +1132,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           <section v-if="basicConfigTab === 'brand'" class="surface form-section basic-config-panel">
             <div class="section-heading"><span>01</span><div><h2>品牌与联系</h2><p>全局品牌名和联系方式，不属于某一个页面。</p></div></div>
             <el-form label-position="top" class="basic-config-form"><div class="form-row two-columns"><el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /><div class="form-tip">统一用于小程序顶部导航、微信登录、房源详情服务入口与分享落款。</div></el-form-item><el-form-item label="服务联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /><div class="form-tip">统一用于房源详情“打电话”和找房需求页的电话入口；不影响在线客服。</div></el-form-item></div></el-form>
+            <el-form label-position="top" class="basic-config-form"><div class="form-section-title">房源状态显示标签</div><div class="form-row three-columns"><el-form-item label="草稿"><el-input v-model="publicConfig.statusLabels.draft" /></el-form-item><el-form-item label="待审核"><el-input v-model="publicConfig.statusLabels.pendingReview" /></el-form-item><el-form-item label="已发布"><el-input v-model="publicConfig.statusLabels.published" /></el-form-item><el-form-item label="可租"><el-input v-model="publicConfig.statusLabels.available" /></el-form-item><el-form-item label="已租"><el-input v-model="publicConfig.statusLabels.rented" /></el-form-item><el-form-item label="已下架"><el-input v-model="publicConfig.statusLabels.offline" /></el-form-item></div><div class="form-tip">这是数据标签级配置，只改显示名称；不会改变房源状态流转。直租/转租与整租/合租仍是两套独立业务字段。</div></el-form>
             <div class="basic-config-note"><b>字段边界</b><span>品牌名称是对外品牌文本；在线客服人员由微信小程序客服配置管理，不在此设置。普通用户与管理员的房源标签规则在“房源标签规则”中单独管理。</span></div>
           </section>
           <section v-else-if="basicConfigTab === 'coverage'" class="surface form-section basic-config-panel">
@@ -1283,6 +1288,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <el-form label-position="top" class="basic-config-form">
                   <el-form-item label="首页主标题" required><el-input v-model="publicConfig.pagePresentations.home.title" maxlength="30" show-word-limit placeholder="例如：今天想住哪里？" /></el-form-item>
                   <el-form-item label="搜索提示"><el-input v-model="publicConfig.pagePresentations.home.subtitle" maxlength="60" show-word-limit placeholder="例如：搜索小区、地铁或商圈" /></el-form-item>
+                  <el-form-item label="首页分区文案"><div class="form-row two-columns"><el-input v-model="publicConfig.pagePresentations.home.channelTitle" placeholder="精选频道" /><el-input v-model="publicConfig.pagePresentations.home.allChannelsText" placeholder="全部频道" /><el-input v-model="publicConfig.pagePresentations.home.recommendationTitle" placeholder="推荐房源" /><el-input v-model="publicConfig.pagePresentations.home.viewAllText" placeholder="查看房源" /></div><div class="form-tip">这些是标题文本级配置，只影响显示，不改变地区、频道或房源数据。</div></el-form-item>
                   <el-form-item label="首页背景图"><el-input v-model="publicConfig.pagePresentations.home.backgroundImage" placeholder="上传后自动填入，也可填写图片地址" /><div class="presentation-actions"><label class="upload-control"><input type="file" accept="image/jpeg,image/png,image/webp" @change="uploadPresentationBackground('home', $event)" />上传背景图</label><button v-if="publicConfig.pagePresentations.home.backgroundImage" @click="publicConfig.pagePresentations.home.backgroundImage = ''">移除背景图</button></div></el-form-item>
                 </el-form>
               </section>

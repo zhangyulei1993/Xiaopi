@@ -11,11 +11,13 @@ import (
 var publicConfigPhonePattern = regexp.MustCompile(`^\+?\d{6,20}$`)
 
 type MiniappLocation struct {
+	ID      string `json:"id,omitempty"`
 	Label   string `json:"label"`
 	Keyword string `json:"keyword"`
 }
 
 type FeaturedChannel struct {
+	ID        string `json:"id,omitempty"`
 	Icon      string  `json:"icon"`
 	Title     string  `json:"title"`
 	Subtitle  string  `json:"subtitle"`
@@ -31,6 +33,21 @@ type PagePresentation struct {
 	Title           string `json:"title"`
 	Subtitle        string `json:"subtitle"`
 	BackgroundImage string `json:"backgroundImage"`
+	ChannelTitle string `json:"channelTitle,omitempty"`
+	AllChannelsText string `json:"allChannelsText,omitempty"`
+	RecommendationTitle string `json:"recommendationTitle,omitempty"`
+	ViewAllText string `json:"viewAllText,omitempty"`
+	EmptyText string `json:"emptyText,omitempty"`
+	NearbyLabel string `json:"nearbyLabel,omitempty"`
+}
+
+type PropertyStatusLabels struct {
+	Draft string `json:"draft"`
+	PendingReview string `json:"pendingReview"`
+	Published string `json:"published"`
+	Available string `json:"available"`
+	Rented string `json:"rented"`
+	Offline string `json:"offline"`
 }
 
 type ShareCardConfig struct {
@@ -113,6 +130,7 @@ type PublicConfig struct {
 	ShareCard               ShareCardConfig             `json:"shareCard"`
 	ListingTitle            ListingTitleConfig          `json:"listingTitle"`
 	PropertyDetail          PropertyDetailConfig        `json:"propertyDetail"`
+	StatusLabels            PropertyStatusLabels        `json:"statusLabels"`
 }
 
 func DefaultPublicConfig() PublicConfig {
@@ -130,7 +148,7 @@ func DefaultPublicConfig() PublicConfig {
 			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 3},
 		},
 		PagePresentations: map[string]PagePresentation{
-			"home":              {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈"},
+			"home":              {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈", ChannelTitle: "精选频道", AllChannelsText: "全部频道", RecommendationTitle: "推荐房源", ViewAllText: "查看全部", EmptyText: "暂时没有匹配的房源", NearbyLabel: "附近"},
 			"properties":        {Title: "找一处合适的家", Subtitle: "按地区和预算筛选"},
 			"propertyDetail":    {Title: "房源详情", Subtitle: "真实房源，放心查看"},
 			"requests":          {Title: "小皮帮你找房", Subtitle: "告诉我们你的找房需求"},
@@ -185,6 +203,7 @@ func DefaultPublicConfig() PublicConfig {
 				{Key: "bed", Label: "床", Group: "家具家电", Enabled: true},
 			},
 		},
+		StatusLabels: PropertyStatusLabels{Draft: "草稿", PendingReview: "待审核", Published: "已发布", Available: "可租", Rented: "已租", Offline: "已下架"},
 	}
 }
 
@@ -219,8 +238,21 @@ func (config *PublicConfig) Normalize() {
 		presentation.Title = strings.TrimSpace(presentation.Title)
 		presentation.Subtitle = strings.TrimSpace(presentation.Subtitle)
 		presentation.BackgroundImage = strings.TrimSpace(presentation.BackgroundImage)
+		presentation.ChannelTitle = strings.TrimSpace(presentation.ChannelTitle)
+		presentation.AllChannelsText = strings.TrimSpace(presentation.AllChannelsText)
+		presentation.RecommendationTitle = strings.TrimSpace(presentation.RecommendationTitle)
+		presentation.ViewAllText = strings.TrimSpace(presentation.ViewAllText)
+		presentation.EmptyText = strings.TrimSpace(presentation.EmptyText)
+		presentation.NearbyLabel = strings.TrimSpace(presentation.NearbyLabel)
 		config.PagePresentations[key] = presentation
 	}
+	statusDefaults := DefaultPublicConfig().StatusLabels
+	if config.StatusLabels.Draft == "" { config.StatusLabels.Draft = statusDefaults.Draft }
+	if config.StatusLabels.PendingReview == "" { config.StatusLabels.PendingReview = statusDefaults.PendingReview }
+	if config.StatusLabels.Published == "" { config.StatusLabels.Published = statusDefaults.Published }
+	if config.StatusLabels.Available == "" { config.StatusLabels.Available = statusDefaults.Available }
+	if config.StatusLabels.Rented == "" { config.StatusLabels.Rented = statusDefaults.Rented }
+	if config.StatusLabels.Offline == "" { config.StatusLabels.Offline = statusDefaults.Offline }
 	config.ShareCard.TitlePrefix = strings.TrimSpace(config.ShareCard.TitlePrefix)
 	if len(config.ShareCard.TitleFields) == 0 {
 		config.ShareCard.TitleFields = append([]string(nil), DefaultPublicConfig().ShareCard.TitleFields...)
