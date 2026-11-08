@@ -1181,12 +1181,17 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                   <div class="basic-preview-caption">精选频道</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`basic-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article></div>
                   <div class="basic-preview-caption basic-preview-map-caption">频道地图 · {{ activeChannel?.title || '未选择频道' }}</div>
-                  <div v-if="activeChannel && channelMapPreview[activeChannelIndex]" class="basic-preview-map">
+                  <div v-if="activeChannel && channelMapPreview[activeChannelIndex]" class="basic-preview-map" title="点击地图设置频道中心" @click="selectChannelMapPoint(activeChannel, activeChannelIndex, $event)">
                     <img :src="channelMapPreview[activeChannelIndex]" alt="当前频道地图范围预览" />
                     <div v-if="activeChannel.latitude && activeChannel.longitude" class="basic-preview-map-ring" :style="selectedRadiusStyle(activeChannel)"></div>
                     <div v-if="activeChannel.latitude && activeChannel.longitude" class="basic-preview-map-pin">●</div>
                   </div>
                   <div v-else class="basic-preview-map-empty">先在左侧搜索地点或选取地图中心，右侧会同步显示频道范围。</div>
+                  <div v-if="channelLocationResults[activeChannelIndex]?.length" class="basic-preview-search-results">
+                    <button v-for="(location, locationIndex) in channelLocationResults[activeChannelIndex].slice(0, 5)" :key="`canvas-location-${location.id}`" type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, location)">
+                      <b>{{ String.fromCharCode(65 + locationIndex) }}</b><span><strong>{{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em>
+                    </button>
+                  </div>
                   <div v-if="activeChannel" class="basic-preview-map-meta"><strong>{{ channelSelectedLocation[activeChannelIndex]?.title || (activeChannel.latitude ? '地图选点' : '尚未选点') }}</strong><span>{{ activeChannel.latitude ? `${activeChannel.latitude.toFixed(6)}, ${activeChannel.longitude.toFixed(6)} · 半径 ${activeChannel.radiusKm} 公里` : '频道地图中心待配置' }}</span></div>
                   <div class="basic-preview-radius">附近房源默认关联 <b>{{ publicConfig.relatedPropertyRadiusKm || 3 }} 公里</b></div>
                 </template>

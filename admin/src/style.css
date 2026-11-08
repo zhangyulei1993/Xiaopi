@@ -356,3 +356,14 @@ button, input, textarea { font: inherit; }
 .basic-preview-map-empty { margin-top: 7px; padding: 18px 12px; border: 1px dashed #cbd9c8; border-radius: 10px; background: #f4f8f1; color: #7c8b7a; font-size: 9px; line-height: 1.5; }
 .basic-preview-map-meta { display: grid; gap: 2px; margin-top: 6px; color: #526652; font-size: 9px; line-height: 1.35; }
 .basic-preview-map-meta span { color: #849181; font-size: 8px; }
+.channel-map-workbench .channel-map-picker,
+.channel-map-workbench .channel-location-results { display: none; }
+.basic-preview-search-results { display: grid; gap: 4px; margin-top: 7px; }
+.basic-preview-search-results button { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 5px; width: 100%; padding: 5px 6px; border: 1px solid #e3ebe0; border-radius: 7px; background: #fff; color: #526652; text-align: left; cursor: pointer; }
+.basic-preview-search-results button:hover { border-color: #829b78; background: #f3f8f0; }
+.basic-preview-search-results button > b { display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; background: #d76440; color: #fff; font-size: 8px; }
+.basic-preview-search-results span { min-width: 0; }
+.basic-preview-search-results strong, .basic-preview-search-results small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.basic-preview-search-results strong { font-size: 8px; }
+.basic-preview-search-results small { margin-top: 1px; color: #879486; font-size: 7px; }
+.basic-preview-search-results em { color: #879486; font-size: 7px; font-style: normal; white-space: nowrap; }
