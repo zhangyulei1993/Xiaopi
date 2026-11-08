@@ -140,6 +140,7 @@ const channelMapRequest = ref<Record<number, number>>({})
 const channelMapActiveMarker = ref<Record<number, string>>({})
 const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>({})
 const activeChannelIndex = ref(0)
+const coverageDataTab = ref<'locations' | 'channels'>('locations')
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 function channelSetupStatus(item: ChannelConfig) {
   if (!item.title.trim()) return '待填写'
@@ -1131,17 +1132,18 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </section>
           <section v-else-if="basicConfigTab === 'coverage'" class="surface form-section basic-config-panel">
             <div class="section-heading"><span>02</span><div><h2>地区与关联范围</h2><p>用于频道归属、房源附近推荐和默认筛选；页面文案与背景仍在“页面配置”里管理。</p></div></div>
-            <el-form label-position="top" class="basic-config-form"><el-form-item label="附近房源默认关联距离"><el-select v-model="publicConfig.relatedPropertyRadiusKm" style="width:100%"><el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" /></el-select><div class="form-tip">按地图坐标关联；详情页可在页面配置中单独调整展示范围。</div></el-form-item></el-form>
+            <el-form label-position="top" class="basic-config-form"><el-form-item label="全局附近房源关联距离"><el-select v-model="publicConfig.relatedPropertyRadiusKm" style="width:100%"><el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" /></el-select><div class="form-tip">用于首页“附近”和详情页附近推荐；这是全局默认值，不改变某个精选频道的专属半径。</div></el-form-item></el-form>
             <div class="basic-config-note"><b>地区入口与精选频道</b><span>它们是首页、房源筛选与附近推荐共用的数据。频道名称、地图位置和关联半径在此维护；首页卡片样式、文案和排序在“页面配置 → 首页”维护。</span></div>
-            <div class="basic-coverage-editor">
+            <div class="coverage-data-tabs" role="tablist" aria-label="地区与频道数据切换"><button type="button" :class="{ active: coverageDataTab === 'locations' }" @click="coverageDataTab = 'locations'">地区入口数据 <small>{{ publicConfig.locations.length }} 项</small></button><button type="button" :class="{ active: coverageDataTab === 'channels' }" @click="coverageDataTab = 'channels'">精选频道数据 <small>{{ publicConfig.featuredChannels.length }} 项</small></button></div>
+            <div v-if="coverageDataTab === 'locations'" class="basic-coverage-editor">
               <div class="section-heading config-section-heading"><span>03</span><div><h2>地区入口数据</h2><p>与下方精选频道共用名称、关键词和排序；新增、删除、上移、下移会同步处理。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 12" @click="addLocation">新增地区</el-button></div>
               <div v-if="publicConfig.locations.length" class="structured-list">
                 <article v-for="(item, index) in publicConfig.locations" :key="`basic-location-${index}`" class="config-list-item"><div class="item-index">{{ String(index + 1).padStart(2, '0') }}</div><div class="item-fields location-fields"><label><span>显示名称</span><el-input v-model="item.label" maxlength="12" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label><label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveCoverageItem(index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.locations.length - 1" aria-label="下移" @click="moveCoverageItem(index, 1)" /><el-popconfirm title="确认删除这个地区入口和对应频道？" @confirm="removeLocation(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></article>
               </div>
               <div v-else class="config-empty"><strong>还没有地理位置</strong><span>至少添加一个地区，用户才能从首页快速筛选房源。</span><el-button type="primary" plain :icon="Plus" @click="addLocation">添加第一个地区</el-button></div>
             </div>
-            <div class="basic-coverage-editor">
-              <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道数据</h2><p>与上方地区入口共用名称、关键词和排序；地图中心、半径、卡片样式和副标题在此继续独立维护。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
+            <div v-else class="basic-coverage-editor">
+              <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道数据</h2><p>与地区入口共用名称、关键词和排序；这里维护当前频道的地图中心、专属半径、卡片样式和副标题。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
               <div v-if="publicConfig.featuredChannels.length" class="channel-editor-tabs"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`basic-channel-tab-${index}`" type="button" :class="{ active: activeChannelIndex === index, configured: item.latitude && item.longitude }" @click="activeChannelIndex = index"><span>{{ index + 1 }}</span><strong>{{ item.title || `频道 ${index + 1}` }}</strong><small>{{ channelSetupStatus(item) }}</small></button></div>
               <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                 <article v-for="(item, index) in publicConfig.featuredChannels" v-show="activeChannelIndex === index" :key="`basic-channel-${index}`" class="channel-editor-card active">

@@ -385,3 +385,8 @@ button, input, textarea { font: inherit; }
   .channel-flow span { flex: 0 0 auto; }
   .channel-editor-tabs button { min-width: 104px; }
 }
+.coverage-data-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 18px 0 14px; padding: 5px; border: 1px solid #dfe8dc; border-radius: 13px; background: #f4f8f2; }
+.coverage-data-tabs button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; border: 0; border-radius: 9px; background: transparent; color: #6d7c6c; font-size: 13px; font-weight: 750; cursor: pointer; }
+.coverage-data-tabs button small { color: #96a395; font-size: 10px; font-weight: 600; }
+.coverage-data-tabs button.active { background: #40543f; color: #fff; box-shadow: 0 4px 10px rgba(64,84,63,.14); }
+.coverage-data-tabs button.active small { color: #dce8d8; }
