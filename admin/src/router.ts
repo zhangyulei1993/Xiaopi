@@ -28,6 +28,6 @@ export function pathForTab(tab: string) {
 }
 
 export const router = createRouter({
-  history: createWebHashHistory('/admin/'),
+  history: createWebHashHistory('/'),
   routes: [{ path: '/:tab?', name: 'admin', component: { template: '<span />' } }],
 })

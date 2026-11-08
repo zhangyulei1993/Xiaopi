@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 15174",
-    "build": "VITE_BASE_PATH=/admin/ vite build"
+    "build": "VITE_BASE_PATH=/ vite build"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
