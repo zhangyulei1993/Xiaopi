@@ -1465,6 +1465,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="canvas-page-rail" aria-label="预览页面"><button v-for="item in pagePresentationOptions.filter(page => page.audience === 'both' || page.audience === configAudience)" :key="`canvas-page-${item.key}`" type="button" :class="{ active: configPage === item.key }" @click="selectConfigPage(item.key)">{{ item.label }}</button></div>
                 <p v-if="configAudience === 'customer'">仅预览可租房源和客户可见信息。</p><p v-else>显示运营专属状态、门牌和管理入口。</p>
               </section>
+              <section v-if="configPage === 'properties'" class="canvas-status-legend canvas-editable-copy" title="点击编辑状态标签" @click="focusConfigField('status-labels', 'brand')"><small>{{ configAudience === 'customer' ? '客户列表' : '管理员列表' }}</small><span v-if="configAudience === 'customer'"><i class="available">{{ previewStatusLabel('available') }}</i>客户只会看到可租房源</span><span v-else><i>{{ previewStatusLabel('draft') }}</i><i>{{ previewStatusLabel('available') }}</i><i>{{ previewStatusLabel('rented') }}</i><i>{{ previewStatusLabel('offline') }}</i></span></section>
               <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="tag-magnifier" :class="{ open: tagMagnifierOpen }">
                 <header><span>标签局部预览</span><button type="button" @click="tagMagnifierOpen = !tagMagnifierOpen">{{ tagMagnifierOpen ? '收起' : '放大标签' }}</button></header>
                 <article v-if="tagMagnifierOpen && previewPrimaryProperty">
