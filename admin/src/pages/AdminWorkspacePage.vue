@@ -48,6 +48,18 @@ const configAudience = ref<ConfigAudience>('customer')
 const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
 type BasicConfigTab = 'brand' | 'coverage' | 'tags' | 'facilities'
+type CanvasNode = { label: string; kind: '标题文本' | '数据标签' | '数据规则' | '页面结构'; audience: 'customer' | 'operator' | 'both'; impacts: string; editable: string; locked: string; tab: 'basic' | 'page'; field: string; basicTab?: BasicConfigTab; page?: string }
+const canvasNodes: Record<string, CanvasNode> = {
+  'home.title': { label: '首页主标题', kind: '标题文本', audience: 'customer', impacts: '首页首屏', editable: '标题文字', locked: '页面结构与找房逻辑', tab: 'page', page: 'home', field: 'home-title' },
+  'home.search': { label: '搜索提示', kind: '标题文本', audience: 'customer', impacts: '首页搜索入口', editable: '提示文字', locked: '搜索功能与筛选逻辑', tab: 'page', page: 'home', field: 'home-search' },
+  'home.sections': { label: '首页分区文案', kind: '标题文本', audience: 'customer', impacts: '频道与推荐房源区', editable: '分区标题和查看按钮', locked: '频道与房源数据', tab: 'page', page: 'home', field: 'home-sections' },
+  'brand': { label: '品牌名称', kind: '标题文本', audience: 'both', impacts: '导航、登录、详情服务与分享落款', editable: '对外品牌名称', locked: '客服权限与业务数据', tab: 'basic', basicTab: 'brand', field: 'brand-name' },
+  'status': { label: '房源状态标签', kind: '数据标签', audience: 'both', impacts: '管理员房源管理；客户仅显示可租', editable: '各状态显示名称', locked: '状态编码、流转和客户可见规则', tab: 'basic', basicTab: 'brand', field: 'status-labels' },
+  'coverage': { label: '地区与关联范围', kind: '数据规则', audience: 'both', impacts: '首页地区、频道筛选与附近推荐', editable: '地区名称、频道、地图中心和半径', locked: '自动生成的内部 ID', tab: 'basic', basicTab: 'coverage', field: 'coverage' },
+  'facilities': { label: '房屋设施库', kind: '数据标签', audience: 'both', impacts: '房源录入与详情设施展示', editable: '设施名称、分类与启用状态', locked: '已录入房源的历史数据', tab: 'basic', basicTab: 'facilities', field: 'facilities' },
+}
+const selectedCanvasNodeID = ref('home.title')
+const selectedCanvasNode = computed(() => canvasNodes[selectedCanvasNodeID.value])
 type BasicTagPreviewTab = 'list' | 'detail' | 'share' | 'poster'
 const basicConfigTab = ref<BasicConfigTab>('brand')
 const basicTagPreviewTab = ref<BasicTagPreviewTab>('list')
@@ -121,6 +133,21 @@ function focusConfigField(field: string, basicTab?: BasicConfigTab) {
     target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     target?.querySelector('input, textarea, button')?.focus()
   }, 80)
+}
+function openCanvasNode(id: string) {
+  const node = canvasNodes[id]
+  if (!node) return
+  selectedCanvasNodeID.value = id
+  if (node.tab === 'basic') {
+    selectTab('小程序基础配置')
+    selectBasicConfigTab(node.basicTab || 'brand')
+    focusConfigField(node.field)
+    return
+  }
+  selectTab('小程序页面配置')
+  if (node.audience !== 'both') configAudience.value = node.audience
+  selectConfigPage(node.page || 'home')
+  focusConfigField(node.field)
 }
 function previewStatusLabel(status: string) {
   if (configAudience.value === 'customer') return publicConfig.statusLabels.available || '可租'
@@ -1465,6 +1492,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="canvas-page-rail" aria-label="预览页面"><button v-for="item in pagePresentationOptions.filter(page => page.audience === 'both' || page.audience === configAudience)" :key="`canvas-page-${item.key}`" type="button" :class="{ active: configPage === item.key }" @click="selectConfigPage(item.key)">{{ item.label }}</button></div>
                 <p v-if="configAudience === 'customer'">仅预览可租房源和客户可见信息。</p><p v-else>显示运营专属状态、门牌和管理入口。</p>
               </section>
+              <section v-if="selectedCanvasNode" class="canvas-node-inspector" aria-live="polite"><header><span>{{ selectedCanvasNode.kind }}</span><strong>{{ selectedCanvasNode.label }}</strong><button type="button" @click="openCanvasNode(selectedCanvasNodeID)">编辑此处</button></header><p>{{ selectedCanvasNode.impacts }}</p><dl><div><dt>可改</dt><dd>{{ selectedCanvasNode.editable }}</dd></div><div><dt>不可改</dt><dd>{{ selectedCanvasNode.locked }}</dd></div></dl></section>
               <section v-if="configPage === 'properties'" class="canvas-status-legend canvas-editable-copy" title="点击编辑状态标签" @click="focusConfigField('status-labels', 'brand')"><small>{{ configAudience === 'customer' ? '客户列表' : '管理员列表' }}</small><span v-if="configAudience === 'customer'"><i class="available">{{ previewStatusLabel('available') }}</i>客户只会看到可租房源</span><span v-else><i>{{ previewStatusLabel('draft') }}</i><i>{{ previewStatusLabel('available') }}</i><i>{{ previewStatusLabel('rented') }}</i><i>{{ previewStatusLabel('offline') }}</i></span></section>
               <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="tag-magnifier" :class="{ open: tagMagnifierOpen }">
                 <header><span>标签局部预览</span><button type="button" @click="tagMagnifierOpen = !tagMagnifierOpen">{{ tagMagnifierOpen ? '收起' : '放大标签' }}</button></header>
@@ -1483,12 +1511,12 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content">
-                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong class="canvas-editable-copy" title="点击编辑首页主标题" @click="focusConfigField('home-title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search canvas-editable-copy" title="点击编辑搜索提示" @click="focusConfigField('home-search')">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
+                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong class="canvas-editable-copy" title="点击编辑首页主标题" @click="openCanvasNode('home.title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search canvas-editable-copy" title="点击编辑搜索提示" @click="openCanvasNode('home.search')">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
                   <div class="mini-locations"><span class="active">附近</span><span v-for="(item, index) in publicConfig.locations.slice(0, 3)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
                   <div class="mini-budget"><b>租金预算</b><span>¥1,500 以下</span><span>¥1,500–2,500</span></div>
-                  <div class="mini-section-title canvas-editable-copy" title="点击编辑首页分区文案" @click="focusConfigField('home-sections')">{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</div>
+                  <div class="mini-section-title canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')">{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</div>
                   <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
-                  <div class="mini-recommend"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="focusConfigField('home-sections')">{{ publicConfig.pagePresentations.home.recommendationTitle || '推荐房源' }}</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">{{ publicConfig.pagePresentations.home.viewAllText || '查看房源' }}</b></div>
+                  <div class="mini-recommend"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')">{{ publicConfig.pagePresentations.home.recommendationTitle || '推荐房源' }}</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">{{ publicConfig.pagePresentations.home.viewAllText || '查看房源' }}</b></div>
                   <article v-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div class="preview-card-cover" :style="previewCoverStyle(previewPrimaryProperty)"><em>{{ configAudience === 'operator' ? ({ draft: '草稿', pending_review: '待审核', published: '已发布', available: '可租', rented: '已租', offline: '已下架' }[previewPrimaryProperty.status] || previewPrimaryProperty.status) : '可租' }}</em></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><span>{{ previewListingAddress(previewPrimaryProperty) }}</span><small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌 · {{ previewOperatorDoorplate }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(previewPrimaryProperty).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(previewPrimaryProperty).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(previewPrimaryProperty).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
                   <div v-else class="preview-empty">暂无可展示房源</div>
                 </div>
