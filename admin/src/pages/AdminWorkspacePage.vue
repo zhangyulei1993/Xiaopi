@@ -141,6 +141,11 @@ const channelMapActiveMarker = ref<Record<number, string>>({})
 const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>({})
 const activeChannelIndex = ref(0)
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
+function channelSetupStatus(item: ChannelConfig) {
+  if (!item.title.trim()) return '待填写'
+  if (!item.latitude || !item.longitude) return '待选点'
+  return '已定位'
+}
 const defaultShareCard = () => ({ titlePrefix: '', titleFields: ['community', 'layout'], posterFields: ['rentMonthly', 'depositPayment', 'community', 'areaSqm', 'floorInfo', 'availableDate'] })
 const defaultListingTitle = () => ({ customerAllowedFields: ['community', 'floor', 'layout', 'rentType', 'listingSource', 'fee', 'area'], enabledFields: ['community', 'layout', 'rentType', 'fee'], customerDetailFields: ['community', 'layout', 'rentType', 'fee'], customerShareFields: ['community', 'layout', 'rentType', 'fee'], customerPosterFields: ['community', 'layout', 'rentType', 'fee'], adminEnabledFields: ['unit'], listTagLayout: 'grouped' as const, detailTagLayout: 'wrap' as const, listTagOrder: ['rentType', 'listingSource', 'layout', 'fee', 'floor', 'area'], listTagTopFields: ['rentType', 'listingSource'], detailTagOrder: ['listingSource', 'rentType', 'fee', 'layout', 'area', 'floor'], detailTagTopFields: ['listingSource', 'rentType', 'fee'] })
 const defaultPropertyDetail = () => ({
@@ -1109,10 +1114,11 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             </div>
             <div class="basic-coverage-editor">
               <div class="section-heading config-section-heading"><span>03</span><div><h2>精选频道数据</h2><p>在这里搜索地点、在地图上选点，并设置频道覆盖半径。首页只负责频道卡片的文案、样式和排序。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
-              <div v-if="publicConfig.featuredChannels.length" class="channel-editor-tabs"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`basic-channel-tab-${index}`" type="button" :class="{ active: activeChannelIndex === index }" @click="activeChannelIndex = index"><span>{{ index + 1 }}</span>{{ item.title || `频道 ${index + 1}` }}</button></div>
+              <div v-if="publicConfig.featuredChannels.length" class="channel-editor-tabs"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`basic-channel-tab-${index}`" type="button" :class="{ active: activeChannelIndex === index, configured: item.latitude && item.longitude }" @click="activeChannelIndex = index"><span>{{ index + 1 }}</span><strong>{{ item.title || `频道 ${index + 1}` }}</strong><small>{{ channelSetupStatus(item) }}</small></button></div>
               <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                 <article v-for="(item, index) in publicConfig.featuredChannels" v-show="activeChannelIndex === index" :key="`basic-channel-${index}`" class="channel-editor-card active">
-                  <header><div class="channel-order"><span>频道数据</span><strong>频道 {{ index + 1 }}</strong></div><div class="item-actions"><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
+                  <header><div class="channel-order"><span>频道数据</span><div><strong>频道 {{ index + 1 }}</strong><small>按“基础信息 → 地点 → 范围”完成配置</small></div></div><div class="item-actions"><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
+                  <div class="channel-flow"><span class="active">1 基础信息</span><i>→</i><span :class="{ active: item.latitude && item.longitude }">2 地点定位</span><i>→</i><span :class="{ active: item.latitude && item.longitude && item.radiusKm > 0 }">3 关联范围</span></div>
                   <div class="channel-fields"><label><span>频道名称</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="invalidateChannelLocation(item, index)" /></label><label><span>搜索关键词（未选地点时使用）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" @input="invalidateChannelLocation(item, index)" /></label></div>
                 </article>
               </div>
