@@ -390,3 +390,4 @@ button, input, textarea { font: inherit; }
 .coverage-data-tabs button small { color: #96a395; font-size: 10px; font-weight: 600; }
 .coverage-data-tabs button.active { background: #40543f; color: #fff; box-shadow: 0 4px 10px rgba(64,84,63,.14); }
 .coverage-data-tabs button.active small { color: #dce8d8; }
+.basic-phone-preview .basic-preview-content { overflow-y: auto; }

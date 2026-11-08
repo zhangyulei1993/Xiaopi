@@ -1241,7 +1241,7 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
                 </template>
                 <template v-else>
                   <div class="basic-preview-caption">房源详情 · 设施与环境</div>
-                  <div class="basic-preview-facilities"><i v-for="facility in publicConfig.propertyDetail.facilities.filter(item => item.enabled).slice(0, 8)" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b><span>{{ facility.label }}</span></i></div>
+                  <div class="basic-preview-facilities"><i v-for="facility in publicConfig.propertyDetail.facilities.filter(item => item.enabled)" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b><span>{{ facility.label }}</span></i></div>
                   <div v-if="!publicConfig.propertyDetail.facilities.some(item => item.enabled)" class="preview-empty">暂未启用设施</div>
                   <div class="basic-preview-hint">录入房源时，仅展示这里已启用的设施选项。</div>
                 </template>
