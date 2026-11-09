@@ -1497,7 +1497,7 @@ const mediaUrl = resolveAssetUrl;
           <swiper-item class="review-preview-item"><view class="review-list-card admin-review-card"><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small class="review-admin-doorplate" v-if="adminDisplayTags.includes('unit')">门牌 {{ displayTagValue("unit") || "待补充" }}</small><small>{{ reviewLocation }}</small><view v-if="previewAdminPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewAdminPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="review-tags review-secondary-tags"><text v-for="label in previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view></swiper-item></swiper></view>
         <text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text>
       </view>
-      ><view class="save-space" /><view class="save-bar"
+      <view class="save-space" /><view class="save-bar"
         ><view v-if="saving" class="progress">{{ uploadProgress }}</view
         ><view v-if="activeSection < 4" class="step-actions" :class="{ 'three-actions': activeSection > 0 }"
           ><button
