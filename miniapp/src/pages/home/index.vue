@@ -2,7 +2,7 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
-import { getPublicConfig, listProperties, type Property, type PublicConfig } from "../../api/properties";
+import { getPublicConfig, listFavorites, listProperties, setFavorite, type Property, type PublicConfig } from "../../api/properties";
 import pinIcon from "../../static/icons/pin.svg";
 import searchIcon from "../../static/icons/search.svg";
 import heartIcon from "../../static/icons/heart.svg";
@@ -12,6 +12,7 @@ import editIcon from "../../static/icons/edit.svg";
 import heroFallback from "../../static/home-lifestyle-hero.jpg";
 import { getSession } from "../../auth/session";
 import { listingDoorplate, listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
+import { clearPendingAction, peekPendingAction, savePendingAction } from "../../utils/pending-action";
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 3 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 3 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 3 }] };
 const priceRanges = [
@@ -21,6 +22,7 @@ const priceRanges = [
   { label: "¥4,000+", min: 4000, max: 0 },
 ];
 const properties = ref<Property[]>([]);
+const favoriteIDs = ref<string[]>([]);
 const config = ref<PublicConfig>(defaultConfig);
 const activeKind = ref("推荐");
 const selectedArea = ref("全部");
@@ -146,6 +148,16 @@ onShow(async () => {
     config.value = { ...defaultConfig, ...configResult.value };
     uni.setNavigationBarTitle({ title: config.value.heroTitle || "小皮租房" });
   }
+  if (getSession()?.role === "user") {
+    favoriteIDs.value = await listFavorites().catch(() => []);
+    const pending = peekPendingAction();
+    if (pending?.type === "favorite" && pending.propertyId) {
+      clearPendingAction();
+      await toggleFavorite(pending.propertyId);
+    }
+  } else if (peekPendingAction()) {
+    clearPendingAction();
+  }
 });
 const open = (id: string) => uni.navigateTo({ url: `/pages/properties/detail?id=${id}` });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
@@ -158,6 +170,25 @@ const browseFiltered = () => {
   browse();
 };
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
+const toggleFavorite = async (propertyID: string) => {
+  const session = getSession();
+  if (!session) {
+    savePendingAction({ type: "favorite", propertyId: propertyID });
+    uni.navigateTo({ url: "/pages/auth/login?reason=favorite" });
+    return;
+  }
+  if (session.role !== "user") return;
+  const next = !favoriteIDs.value.includes(propertyID);
+  try {
+    await setFavorite(propertyID, next);
+    favoriteIDs.value = next
+      ? [...favoriteIDs.value, propertyID]
+      : favoriteIDs.value.filter((id) => id !== propertyID);
+    uni.showToast({ title: next ? "已关注" : "已取消关注" });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "操作失败", icon: "none" });
+  }
+};
 const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
   uni.setStorageSync("xiaopi_property_filter", JSON.stringify({ area: channel.title }));
   browse();
@@ -184,7 +215,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? (homePresentation.recommendationTitle || "推荐房源") : `${activeKind}房源` }}</strong><b @click="browseFiltered">{{ homePresentation.viewAllText || '查看房源' }}</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-if="!isAdmin" class="home-masonry"><view v-for="(column, columnIndex) in homeMasonryColumns" :key="`home-column-${columnIndex}`" class="home-masonry-column"><view v-for="item in column" :key="item.id" class="home-masonry-card" @click="open(item.id)"><view class="home-masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play">▶</view><view v-if="channelLabel(item)" class="home-cover-location">⌖ {{ channelLabel(item) }}</view><view class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="home-masonry-copy" :class="{ 'without-tags': !allLabels(item).length }"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="allLabels(item).length" class="home-masonry-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></view><view v-else v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing admin-listing" @click="open(item.id)"><view class="listing-image"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play admin-video-play">▶</view><view v-if="channelLabel(item)" class="admin-cover-location">⌖ {{ channelLabel(item) }}</view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-if="!isAdmin" class="home-masonry"><view v-for="(column, columnIndex) in homeMasonryColumns" :key="`home-column-${columnIndex}`" class="home-masonry-column"><view v-for="item in column" :key="item.id" class="home-masonry-card" @click="open(item.id)"><view class="home-masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play">▶</view><view v-if="channelLabel(item)" class="home-cover-location">⌖ {{ channelLabel(item) }}</view><view class="heart-button" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="home-masonry-copy" :class="{ 'without-tags': !allLabels(item).length }"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="allLabels(item).length" class="home-masonry-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></view><view v-else v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing admin-listing" @click="open(item.id)"><view class="listing-image"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play admin-video-play">▶</view><view v-if="channelLabel(item)" class="admin-cover-location">⌖ {{ channelLabel(item) }}</view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -264,4 +295,5 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing:not(.admin-listing) .listing-info{align-items:flex-end;text-align:right}.listing:not(.admin-listing) .home-listing-title,.listing:not(.admin-listing) .home-listing-address,.listing:not(.admin-listing) .home-admin-doorplate{text-align:right}
 .home-masonry-cover video{width:100%;height:100%}
 .admin-listing .listing-image video{display:block;width:100%;height:100%}.admin-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:24rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:18rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.admin-video-play{width:54rpx;height:54rpx;font-size:24rpx}.admin-listing .home-admin-doorplate{margin-top:8rpx}.admin-listing .tag-stack{margin-top:10rpx}
+.home-masonry-cover .heart-button.active{background:#d76440}.home-masonry-cover .heart-button:active{transform:scale(.9);opacity:.86}
 </style>

@@ -481,6 +481,20 @@ func TestAppointmentRequiresBoundPhone(t *testing.T) {
 	}
 }
 
+func TestGeneralRequestRequiresBoundPhone(t *testing.T) {
+	server := testServer(&fakeStore{})
+	userToken, err := server.tokens.issue("user-without-phone", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{
+		"requestType": "general", "location": "金融港", "budgetMin": 1500, "budgetMax": 2500,
+	}, userToken)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "绑定手机号") {
+		t.Fatalf("expected phone-binding rejection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestAppointmentIsIdempotentWithinThirtyMinutes(t *testing.T) {
 	dataStore := &fakeStore{
 		users:      []domain.User{{ID: "user-1", Phone: "13800138000"}},

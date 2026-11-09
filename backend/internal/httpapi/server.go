@@ -312,10 +312,10 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if item.RequestType == "appointment" || item.RequestType == "area_subscription" {
+	if item.RequestType == "appointment" || item.RequestType == "area_subscription" || item.RequestType == "general" {
 		phone, ok := s.boundUserPhone(r.Context(), userID)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "预约服务需要先绑定手机号")
+			writeError(w, http.StatusBadRequest, "提交找房需求需要先绑定手机号")
 			return
 		}
 		// Never accept an arbitrary number from the client for a high-intent

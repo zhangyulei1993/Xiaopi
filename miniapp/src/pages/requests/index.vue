@@ -15,7 +15,10 @@ const propertyID = ref(""),
   pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
 const areaTemplateID = ref("");
-const requiresPhoneBinding = computed(() => Boolean(propertyID.value || areaMode.value));
+// A find-home request is actionable only when staff can reach the requester.
+// Every request type therefore uses the verified WeChat-bound number.
+const requiresPhoneBinding = computed(() => true);
+const maskedPhone = computed(() => form.phone.length >= 7 ? `${form.phone.slice(0, 3)}****${form.phone.slice(-4)}` : form.phone);
 const form = reactive({
 	contactName: "",
 	preferredTime: "",
@@ -143,12 +146,7 @@ const call = () => callPhone(contactPhone.value);
       }}</small></view
     ><view class="card form"
 	  ><view v-if="propertyID" class="field"><text>怎么称呼您 *</text><input v-model.trim="form.contactName" placeholder="例如：张女士" /></view
-      ><view v-if="!areaMode" class="field"
-        ><text>联系电话 *</text
-        ><input
-          v-model.trim="form.phone"
-          type="number"
-          placeholder="用于接收匹配和预约通知" /></view
+      ><view class="field"><text>联系手机号 *</text><view class="verified-phone" :class="{ empty: !form.phone }">{{ form.phone ? `已绑定 ${maskedPhone}` : '提交时需绑定微信手机号' }}</view></view
       ><view v-if="!propertyID" class="field"
         ><text>意向地区 *</text
         ><input
@@ -189,12 +187,12 @@ const call = () => callPhone(contactPhone.value);
           :placeholder="propertyID ? '例如：工作日晚上、周末上午，或想先了解的问题' : '通勤地点、整租/合租、楼层、宠物、采光等'"
         ></textarea></view></view
     ><view class="privacy"
-      >提交即表示同意小皮根据以上信息联系你，仅用于本次找房服务。</view
+      >提交即表示同意小皮使用已绑定手机号联系你，仅用于本次找房服务。</view
     ><view class="button" @click="submit">{{
       submitting ? "提交中..." : propertyID ? "登记看房时间" : areaMode ? "预约该片区新房" : "提交找房需求"
     }}</view
     ><view class="contact" @click="call">想马上确认房源？联系小皮 ›</view></view
-    ><view v-if="appointmentCreated" class="phone-bind-mask"><view class="phone-bind-sheet"><view class="phone-bind-mark">✓</view><strong>{{ requiresPhoneBinding ? '先绑定手机号' : propertyID ? '预约已登记' : areaMode ? '片区预约已登记' : '找房需求已提交' }}</strong><text>{{ requiresPhoneBinding ? '预约看房和片区上新提醒需要绑定手机号，方便小皮与您确认。' : '绑定手机号后，小皮可以主动联系你确认需求。' }}</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAppointment">绑定手机号并继续</button><view v-if="!requiresPhoneBinding" @click="appointmentCreated = false; finishAppointment()">暂不绑定</view></view></view
+    ><view v-if="appointmentCreated" class="phone-bind-mask"><view class="phone-bind-sheet"><view class="phone-bind-mark">✓</view><strong>先绑定手机号</strong><text>找房需求、片区订阅和预约看房都需要绑定手机号，方便小皮确认。</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAppointment">绑定手机号并继续</button></view></view
   >
 </template>
 <style scoped>
@@ -249,6 +247,7 @@ const call = () => callPhone(contactPhone.value);
   font-size: 28rpx;
   box-sizing: border-box;
 }
+.verified-phone{padding:20rpx 22rpx;border-radius:14rpx;background:#eef3e9;color:#476044;font-size:27rpx;font-weight:650}.verified-phone.empty{background:#f7f4ee;color:#8b9288;font-weight:400}
 .field textarea {
   height: 150rpx;
 }
