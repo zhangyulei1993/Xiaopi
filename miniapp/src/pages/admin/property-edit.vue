@@ -50,6 +50,7 @@ const id = ref(""),
   existingMedia = ref<PropertyMedia[]>([]),
   pendingCoverSelected = ref(false),
   reviewProperties = ref<Property[]>([]),
+  stepScrollLeft = ref(0),
   reviewPerspective = ref<"customer" | "admin">("customer");
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "adminPropertyEdit",
@@ -99,6 +100,8 @@ const form = reactive<Partial<Property>>({
 });
 const customerDisplayTags = ref<string[]>(["layout", "rentType", "listingSource", "fee"]);
 const adminDisplayTags = ref<string[]>(["unit", "layout", "rentType", "fee"]);
+const previewListTagOrder = ref<string[]>(["listingSource", "rentType", "layout", "fee", "floor", "area"]);
+const previewListTagTopFields = ref<string[]>(["rentType", "listingSource"]);
 const roomCount = ref("1"),
   customRoomCount = ref(""),
   hallCount = ref("1"),
@@ -205,8 +208,14 @@ const requiredReady = computed(() =>
   ),
 );
 const sectionSteps = ["位置门牌", "户型出租", "环境配套", "租金入住", "素材发布"];
+const centerActiveStep = (index: number) => {
+  const viewportWidth = uni.getSystemInfoSync().windowWidth || 375;
+  const stepWidth = 75;
+  stepScrollLeft.value = Math.max(0, index * stepWidth + stepWidth / 2 - viewportWidth / 2);
+};
 const goToSection = (index: number) => {
   activeSection.value = Math.max(0, Math.min(sectionSteps.length - 1, index));
+  centerActiveStep(activeSection.value);
   uni.pageScrollTo({ scrollTop: 0, duration: 220 });
 };
 const geoReady = computed(() =>
@@ -308,6 +317,8 @@ const loadChannels = async () => {
       .filter((key) => key !== "community");
     adminDisplayTags.value = (config.listingTitle?.adminEnabledFields || [])
       .filter((key) => key !== "community");
+    if (Array.isArray(config.listingTitle?.listTagOrder)) previewListTagOrder.value = config.listingTitle.listTagOrder;
+    if (Array.isArray(config.listingTitle?.listTagTopFields)) previewListTagTopFields.value = config.listingTitle.listTagTopFields;
     marketingPhrases.value = (config.listingTitle?.marketingPhrases || [])
       .map((item) => String(item || "").trim())
       .filter(Boolean);
@@ -457,10 +468,15 @@ const displayTagValue = (key: string) => {
   return "";
 };
 const tagLabels = (fields: string[], keys: string[]) => keys.filter((key) => fields.includes(key)).map((key) => displayTagValue(key)).filter(Boolean);
-const previewPrimaryTags = computed(() => tagLabels(customerDisplayTags.value, ["rentType", "listingSource"]));
-const previewSecondaryTags = computed(() => tagLabels(customerDisplayTags.value, ["unit", "layout", "floor", "area", "fee"]));
-const previewAdminPrimaryTags = computed(() => tagLabels(adminDisplayTags.value, ["rentType", "listingSource"]));
-const previewAdminSecondaryTags = computed(() => tagLabels(adminDisplayTags.value, ["unit", "layout", "floor", "area", "fee"]));
+const previewTagFields = computed(() => previewListTagOrder.value.filter((key) => customerDisplayTags.value.includes(key)));
+const previewPrimaryTagFields = computed(() => previewTagFields.value.filter((key) => previewListTagTopFields.value.includes(key)));
+const previewSecondaryTagFields = computed(() => previewTagFields.value.filter((key) => !previewListTagTopFields.value.includes(key)));
+const previewPrimaryTags = computed(() => tagLabels(customerDisplayTags.value, previewPrimaryTagFields.value));
+const previewSecondaryTags = computed(() => tagLabels(customerDisplayTags.value, previewSecondaryTagFields.value));
+// Admin cards use the same public information tag stack as the formal admin
+// list. The admin-only configuration controls whether the doorplate appears.
+const previewAdminPrimaryTags = computed(() => previewPrimaryTags.value);
+const previewAdminSecondaryTags = computed(() => previewSecondaryTags.value);
 const reviewCoverUrl = computed(() => {
   const pending = orderedImages.value[0]?.path;
   if (pending) return pending;
@@ -1203,7 +1219,7 @@ const mediaUrl = resolveAssetUrl;
       ><view class="completion"
         ><strong>{{ completionCount }}/5</strong><small>已完成</small></view
       ></view
-    ><scroll-view class="step-nav" scroll-x :show-scrollbar="false"
+    ><scroll-view class="step-nav" scroll-x :show-scrollbar="false" :scroll-left="stepScrollLeft" :scroll-with-animation="true"
       ><view class="step-track"
         ><view
           v-for="(step, index) in sectionSteps"
@@ -1385,8 +1401,8 @@ const mediaUrl = resolveAssetUrl;
           ><text>入住规则</text
           ><input v-model.trim="form.rulesText" maxlength="200" placeholder="如：可做饭，宠物需沟通，女生优先" /></view
         ><view v-if="!detailModuleEnabled('facilities') && !detailModuleEnabled('description')" class="module-entry-disabled">当前后台未启用“房屋设施”或“房源简介”，此步无需填写。</view>
-        ></view
-      ><view v-show="activeSection === 3" class="section-card"
+        ></view>
+      <view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
           ><text>04</text
           ><view><strong>租金与入住</strong><small>把价格、付款与入住条件集中填写</small></view
@@ -1520,10 +1536,10 @@ const mediaUrl = resolveAssetUrl;
         <view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>以下为保存后首页与“房源”页的真实卡片布局</small></view><view class="review-perspective-switch"><view :class="{ active: reviewPerspective === 'customer' }" @click="reviewPerspective = 'customer'">普通用户 · 瀑布流</view><view :class="{ active: reviewPerspective === 'admin' }" @click="reviewPerspective = 'admin'">管理员 · 列表</view></view>
           <swiper class="review-preview-swiper" :current="reviewPerspective === 'customer' ? 0 : 1" :duration="260" @change="reviewPerspective = Number($event.detail.current) === 0 ? 'customer' : 'admin'">
             <swiper-item class="review-preview-item">
-              <view class="preview-home-masonry"><view class="preview-home-masonry-column"><view class="preview-home-masonry-card current"><view class="preview-home-masonry-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" :style="{ objectPosition: `${form.coverFocusX ?? 50}% ${form.coverFocusY ?? 50}%` }" mode="aspectFill"/><text v-else>小皮</text><view class="preview-listing-status">可租</view><view class="preview-current-label">当前编辑</view><view v-if="videoCount" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ form.areaLabel || reviewLocation }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ customerGeneratedTitle }}</view><view v-if="previewPrimaryTags.length || previewSecondaryTags.length" class="preview-home-masonry-tags"><text v-for="label in [...previewPrimaryTags, ...previewSecondaryTags]" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ Number(form.rentMonthly) || 0 }}<text>/月</text></view></view></view><view v-for="property in reviewReferenceProperties.filter((_, index) => index % 2 === 1)" :key="property.id" class="preview-home-masonry-card"><view class="preview-home-masonry-cover"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ publicListingTitle(property) }}</view><view class="preview-home-masonry-tags"><text v-for="label in referenceTags(property, customerDisplayTags)" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view><view class="preview-home-masonry-column"><view v-for="property in reviewReferenceProperties.filter((_, index) => index % 2 === 0)" :key="property.id" class="preview-home-masonry-card"><view class="preview-home-masonry-cover"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ publicListingTitle(property) }}</view><view class="preview-home-masonry-tags"><text v-for="label in referenceTags(property, customerDisplayTags)" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view></view>
+              <view class="preview-home-masonry"><view class="preview-home-masonry-column"><view class="preview-home-masonry-card current"><view class="preview-home-masonry-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" :style="{ objectPosition: `${form.coverFocusX ?? 50}% ${form.coverFocusY ?? 50}%` }" mode="aspectFill"/><text v-else>小皮</text><view class="preview-listing-status">可租</view><view class="preview-current-label">当前编辑</view><view v-if="videoCount" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ form.areaLabel || reviewLocation }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ customerGeneratedTitle }}</view><view v-if="previewPrimaryTags.length || previewSecondaryTags.length" class="preview-home-masonry-tags"><text v-for="label in [...previewPrimaryTags, ...previewSecondaryTags]" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ Number(form.rentMonthly) || 0 }}<text>/月</text></view></view></view><view v-for="property in reviewReferenceProperties.filter((_, index) => index % 2 === 1)" :key="property.id" class="preview-home-masonry-card"><view class="preview-home-masonry-cover"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ publicListingTitle(property) }}</view><view class="preview-home-masonry-tags"><text v-for="label in referenceTags(property, previewTagFields)" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view><view class="preview-home-masonry-column"><view v-for="property in reviewReferenceProperties.filter((_, index) => index % 2 === 0)" :key="property.id" class="preview-home-masonry-card"><view class="preview-home-masonry-cover"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ publicListingTitle(property) }}</view><view class="preview-home-masonry-tags"><text v-for="label in referenceTags(property, previewTagFields)" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view></view>
             </swiper-item>
             <swiper-item class="review-preview-item">
-              <view class="preview-admin-list"><view class="preview-admin-listing current"><view class="preview-admin-image"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>小皮</text><view class="preview-listing-status">可租</view><view class="preview-current-label">当前编辑</view><view v-if="videoCount" class="preview-admin-video-play">▶</view><view class="preview-admin-cover-location">⌖ {{ form.areaLabel || reviewLocation }}</view></view><view class="preview-admin-info"><view class="preview-home-listing-title">{{ generatedTitle }}</view><view class="preview-admin-doorplate">门牌 · {{ displayTagValue("unit") || "待补充" }}</view><view class="preview-admin-tags"><view v-if="previewAdminPrimaryTags.length" class="preview-tags primary"><text v-for="label in previewAdminPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="preview-tags fee"><text v-for="label in previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view></view><view class="preview-listing-price">¥ {{ Number(form.rentMonthly) || 0 }}<text>/月</text></view></view></view><view v-for="property in reviewReferenceProperties" :key="property.id" class="preview-admin-listing"><view class="preview-admin-image"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-admin-video-play">▶</view><view class="preview-admin-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-admin-info"><view class="preview-home-listing-title">{{ property.community || property.title || "房源" }}</view><view class="preview-admin-doorplate">门牌 · {{ listingDoorplate(property) || "待补充" }}</view><view class="preview-admin-tags"><view class="preview-tags primary"><text v-for="label in referenceTags(property, adminDisplayTags.filter((field) => ['rentType', 'listingSource'].includes(field)))" :key="label">{{ label }}</text></view><view class="preview-tags fee"><text v-for="label in referenceTags(property, adminDisplayTags.filter((field) => !['rentType', 'listingSource'].includes(field)))" :key="label">{{ label }}</text></view></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view>
+              <view class="preview-admin-list"><view class="preview-admin-listing current"><view class="preview-admin-image"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>小皮</text><view class="preview-listing-status">可租</view><view class="preview-current-label">当前编辑</view><view v-if="videoCount" class="preview-admin-video-play">▶</view><view class="preview-admin-cover-location">⌖ {{ form.areaLabel || reviewLocation }}</view></view><view class="preview-admin-info"><view class="preview-home-listing-title">{{ generatedTitle }}</view><view class="preview-admin-doorplate">门牌 · {{ displayTagValue("unit") || "待补充" }}</view><view class="preview-admin-tags"><view v-if="previewAdminPrimaryTags.length" class="preview-tags primary"><text v-for="label in previewAdminPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="preview-tags fee"><text v-for="label in previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view></view><view class="preview-listing-price">¥ {{ Number(form.rentMonthly) || 0 }}<text>/月</text></view></view></view><view v-for="property in reviewReferenceProperties" :key="property.id" class="preview-admin-listing"><view class="preview-admin-image"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-admin-video-play">▶</view><view class="preview-admin-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-admin-info"><view class="preview-home-listing-title">{{ property.community || property.title || "房源" }}</view><view class="preview-admin-doorplate">门牌 · {{ listingDoorplate(property) || "待补充" }}</view><view class="preview-admin-tags"><view class="preview-tags primary"><text v-for="label in referenceTags(property, previewPrimaryTagFields)" :key="label">{{ label }}</text></view><view class="preview-tags fee"><text v-for="label in referenceTags(property, previewSecondaryTagFields)" :key="label">{{ label }}</text></view></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view>
             </swiper-item>
           </swiper>
         </view>
