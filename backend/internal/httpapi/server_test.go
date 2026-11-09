@@ -71,6 +71,15 @@ func (*fakeStore) UpsertUser(context.Context, domain.User) error                
 func (f *fakeStore) ListRentalRequests(context.Context) ([]domain.RentalRequest, error) {
 	return f.rentalRequests, nil
 }
+func (f *fakeStore) ListRentalRequestsByUser(_ context.Context, userID string) ([]domain.RentalRequest, error) {
+	items := make([]domain.RentalRequest, 0)
+	for _, item := range f.rentalRequests {
+		if item.UserID == userID {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
 func (f *fakeStore) FindRecentAppointment(_ context.Context, userID, propertyID string, since time.Time) (*domain.RentalRequest, error) {
 	for index := len(f.rentalRequests) - 1; index >= 0; index-- {
 		item := f.rentalRequests[index]
@@ -492,6 +501,21 @@ func TestGeneralRequestRequiresBoundPhone(t *testing.T) {
 	}, userToken)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "绑定手机号") {
 		t.Fatalf("expected phone-binding rejection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestUserCanOnlyListOwnRentalRequests(t *testing.T) {
+	server := testServer(&fakeStore{rentalRequests: []domain.RentalRequest{
+		{ID: "mine", UserID: "user-a", RequestType: "appointment", PropertyID: "property-1", Status: "new"},
+		{ID: "other", UserID: "user-b", RequestType: "general", Location: "金融港", Status: "contacted"},
+	}})
+	token, err := server.tokens.issue("user-a", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/rental-requests/mine", nil, token)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"id":"mine"`) || strings.Contains(response.Body.String(), `"id":"other"`) {
+		t.Fatalf("expected only the current user's requests, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

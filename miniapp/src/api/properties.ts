@@ -129,6 +129,8 @@ export interface OperationLog { id: string; targetType: string; targetId: string
 export interface FavoriteContact { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
 export const createRentalRequest = (item: RentalRequest) =>
   request<RentalRequest>("/v1/rental-requests", { method: "POST", data: item });
+export const listMyRentalRequests = () =>
+  request<RentalRequest[]>("/v1/rental-requests/mine");
 export interface ContactEvent {
   id?: string;
   userId?: string;

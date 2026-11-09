@@ -5,6 +5,7 @@
     { "path": "pages/properties/detail", "style": { "navigationStyle": "custom" } },
     { "path": "pages/footprints/index", "style": { "navigationBarTitleText": "浏览足迹" } },
     { "path": "pages/requests/index", "style": { "navigationBarTitleText": "找房需求" } },
+    { "path": "pages/requests/history", "style": { "navigationBarTitleText": "我的找房记录" } },
     { "path": "pages/publish/index", "style": { "navigationBarTitleText": "发布房源" } },
     { "path": "pages/me/index", "style": { "navigationBarTitleText": "我的" } },
     { "path": "pages/admin/index", "style": { "navigationBarTitleText": "小皮工作台" } },

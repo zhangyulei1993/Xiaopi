@@ -37,6 +37,7 @@ type Store interface {
 	ReplacePropertyMedia(context.Context, string, []string) error
 	UpsertUser(context.Context, domain.User) error
 	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
+	ListRentalRequestsByUser(context.Context, string) ([]domain.RentalRequest, error)
 	FindRecentAppointment(context.Context, string, string, time.Time) (*domain.RentalRequest, error)
 	CreateRentalRequest(context.Context, domain.RentalRequest) error
 	UpdateRentalRequestFollowUp(context.Context, string, string, string) error
@@ -132,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/contact-events", s.requireRoles(s.listContactEvents, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/operation-logs", s.requireRoles(s.listOperationLogs, roleAdmin))
 	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))
+	mux.HandleFunc("GET /api/v1/rental-requests/mine", s.requireRoles(s.listMyRentalRequests, roleUser))
 	mux.HandleFunc("POST /api/v1/contact-events", s.requireRoles(s.createContactEvent, roleUser))
 	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
 	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
@@ -355,6 +357,18 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	go s.notifyAdminsOfRequest(context.Background(), item)
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": item})
+}
+
+// listMyRentalRequests deliberately scopes records at the store boundary. A
+// customer can review progress without ever receiving another customer's
+// phone number, note, or follow-up history.
+func (s *Server) listMyRentalRequests(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListRentalRequestsByUser(r.Context(), claimsFromContext(r.Context()).Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list rental requests")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
 }
 
 func (s *Server) listFavoriteContacts(w http.ResponseWriter, r *http.Request) {

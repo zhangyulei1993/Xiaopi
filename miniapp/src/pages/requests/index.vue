@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onLoad } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
 import { bindWechatPhone, createRentalRequest, getPublicConfig, getSubscriptionTemplates, getWechatUserProfile, refreshAuth, registerMessageSubscription } from "../../api/properties";
@@ -30,6 +30,16 @@ const form = reactive({
   moveInDate: "",
   note: "",
 });
+const refreshBoundProfile = async () => {
+	if (getSession()?.role !== "user") return;
+	const profile = await getWechatUserProfile().catch(() => null);
+	if (!profile) return;
+	if (profile.phone) {
+		form.phone = profile.phone;
+		uni.setStorageSync("xiaopi_bound_phone", profile.phone);
+	}
+	if (profile.nickname && !form.contactName) form.contactName = profile.nickname;
+};
 onLoad(async (query) => {
   if (getSession()?.role === "admin") {
     uni.switchTab({ url: "/pages/me/index" });
@@ -44,15 +54,10 @@ onLoad(async (query) => {
   contactPhone.value = config?.contactPhone || "";
   brandName.value = config?.heroTitle || brandName.value;
   pagePresentation.value = { ...pagePresentation.value, ...(config?.pagePresentations?.requests || {}) };
-	if (getSession()?.role === "user") {
-		const profile = await getWechatUserProfile().catch(() => null);
-		if (profile?.phone) {
-			form.phone = profile.phone;
-			uni.setStorageSync("xiaopi_bound_phone", profile.phone);
-		}
-		if (profile?.nickname) form.contactName = profile.nickname;
-	}
+	await refreshBoundProfile();
 });
+// The login page returns here with navigateBack, so onLoad does not run again.
+onShow(() => { void refreshBoundProfile(); });
 const ensureLogin = () => {
   if (getSession()?.role === "user") return true;
   uni.showModal({
@@ -98,7 +103,6 @@ const submit = async () => {
       note: form.note,
     });
 	if (messageAccepted) await registerMessageSubscription(areaTemplateID.value, form.location).catch(() => null);
-	if (!form.phone) { appointmentCreated.value = true; return; }
     uni.showModal({
       title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交",
       content: areaMode.value ? "管理员会补充该片区房源；微信新房通知需完成订阅授权。" : `${brandName.value}会根据你的条件匹配房源并联系你。`,
@@ -114,7 +118,6 @@ const submit = async () => {
     submitting.value = false;
   }
 };
-const finishAppointment = () => uni.showModal({ title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交", content: areaMode.value ? "该片区有新房源时会提醒你。" : `${brandName.value}会联系你确认需求。`, showCancel: false, success: () => uni.navigateBack() });
 const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) => {
 	const code = event.detail.code;
 	if (!code || bindingPhone.value) return;
@@ -125,7 +128,7 @@ const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) =
 		uni.setStorageSync("xiaopi_bound_phone", result.phone);
 		const refreshed = await refreshAuth(); saveSession(refreshed.accessToken, refreshed.role);
 		appointmentCreated.value = false;
-		if (requiresPhoneBinding.value) await submit(); else finishAppointment();
+		await submit();
 	} catch (error) { uni.showToast({ title: error instanceof Error ? error.message : "绑定失败", icon: "none" }); }
 	finally { bindingPhone.value = false; }
 };

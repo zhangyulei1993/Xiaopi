@@ -136,6 +136,7 @@ const saveNickname = async () => {
 const publish = () => uni.navigateTo({ url: "/pages/publish/index" });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
+const openRequestHistory = () => requireLogin("登录后查看找房记录", "预约、订阅和找房需求会同步到你的微信账号", () => uni.navigateTo({ url: "/pages/requests/history" }));
 const openFavorites = () => {
   uni.setStorageSync("xiaopi_show_favorites", true);
   browse();
@@ -258,6 +259,7 @@ const logout = () => {
 
     <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><strong>全部房源</strong><text>无需登录</text></view><view @click="favorites"><i class="shortcut-icon favorite"></i><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : "登录后查看" }}</text></view><view @click="footprints"><i class="shortcut-icon footprint"></i><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : "登录后查看" }}</text></view><view @click="requestHome"><i class="shortcut-icon request"></i><strong>找房需求</strong><text>提交时登录</text></view></view>
     </view>
+    <view v-if="!isAdmin" class="card secondary-entry request-history-entry" @click="openRequestHistory"><view><strong>我的预约与找房记录</strong><text>{{ isLoggedIn ? "查看预约、订阅和跟进进度" : "登录后可查看" }}</text></view><text>›</text></view>
     <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>有房源想推荐？</strong><text>无需登录，提交后电话核验</text></view><text>›</text></view>
 
     <view v-if="isAdmin" class="admin-identity">
