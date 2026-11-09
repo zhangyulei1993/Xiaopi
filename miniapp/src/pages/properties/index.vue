@@ -252,6 +252,7 @@ const resumePendingAction = async () => {
   }
 };
 onShow(async () => {
+	uni.$emit("xiaopi-tab-active", "pages/properties/index");
   await load();
   await resumePendingAction();
 });
@@ -785,4 +786,5 @@ const subscribeArea = () => {
 .customer-masonry-grid{display:flex;align-items:flex-start;gap:16rpx;margin-top:30rpx}.masonry-column{min-width:0;flex:1}.masonry-property{overflow:hidden;margin-bottom:16rpx;border:1rpx solid #e9e2d8;border-radius:20rpx;background:#fffdf9;box-shadow:0 7rpx 18rpx rgba(55,65,50,.05)}.masonry-cover{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;background:#dde5d4}.masonry-cover image{width:100%;height:100%}.masonry-cover>text{display:grid;width:100%;height:100%;place-items:center;color:#fff;font-size:25rpx}.masonry-cover .favorite{top:10rpx;right:10rpx;width:42rpx;height:42rpx}.masonry-cover .favorite image{width:26rpx;height:26rpx}.masonry-video-play{position:absolute;top:50%;left:50%;display:grid;width:62rpx;height:62rpx;place-items:center;border:2rpx solid rgba(255,255,255,.88);border-radius:50%;background:rgba(28,38,30,.5);color:#fff;font-size:28rpx;line-height:1;transform:translate(-50%,-50%);padding-left:4rpx;box-sizing:border-box}.masonry-copy{padding:15rpx 14rpx 16rpx}.masonry-copy .property-listing-title{display:-webkit-box;overflow:hidden;font-size:26rpx;line-height:1.35;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.masonry-copy .property-listing-address{display:-webkit-box;max-height:none;margin-top:8rpx;font-size:19rpx;line-height:1.45;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.masonry-tags{display:flex;flex-wrap:wrap;gap:6rpx;margin-top:10rpx}.masonry-tags text{padding:5rpx 7rpx;border-radius:6rpx;background:#edf0dc;color:#536a45;font-size:17rpx;line-height:1.15}.masonry-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}.masonry-copy .price{display:inline-flex;margin-top:14rpx;color:#d76440;font-size:30rpx;font-weight:800;line-height:1}.masonry-copy .price .price-unit{margin-left:3rpx;color:#8a8f85;font-size:18rpx;font-weight:400}
 .masonry-copy.without-tags .price{margin-top:10rpx}
 .masonry-cover video{width:100%;height:100%}
+.page{padding-bottom:calc(156rpx + env(safe-area-inset-bottom))}
 </style>

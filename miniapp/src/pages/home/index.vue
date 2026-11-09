@@ -141,6 +141,7 @@ const channelLabel = (item: Property) => {
     .sort((left, right) => left.distance - right.distance)[0]?.channel.title || "";
 };
 onShow(async () => {
+	uni.$emit("xiaopi-tab-active", "pages/home/index");
   isAdmin.value = getSession()?.role === "admin";
   const [propertyResult, configResult] = await Promise.allSettled([listProperties(), getPublicConfig()]);
   if (propertyResult.status === "fulfilled") properties.value = propertyResult.value;
@@ -242,7 +243,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 
 /* Final visual baseline: keep the first screen on a single 32rpx grid and
    neutralise the legacy selector rules above while old data remains compatible. */
-.home-page{padding-bottom:48rpx}
+.home-page{padding-bottom:calc(156rpx + env(safe-area-inset-bottom))}
 .hero{height:564rpx;padding:40rpx 32rpx 0}
 .city{margin-top:0}
 .hero-copy{margin-top:48rpx}
