@@ -19,6 +19,7 @@ import {
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
+import { listingDoorplate, listingTagValue, publicListingTitle } from "../../utils/listing-title";
 import { usePagePresentation } from "../../utils/presentation";
 
 type PendingImage = {
@@ -48,6 +49,7 @@ const id = ref(""),
   playingVideoId = ref(""),
   existingMedia = ref<PropertyMedia[]>([]),
   pendingCoverSelected = ref(false),
+  reviewProperties = ref<Property[]>([]),
   reviewPerspective = ref<"customer" | "admin">("customer");
 const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "adminPropertyEdit",
@@ -472,6 +474,24 @@ const reviewLocation = computed(() => {
   const landmark = raw.match(/[^省市区\s·・]*(?:大道|一路|二路|三路|路|街道|街|商圈)/)?.[0];
   return [district, landmark].filter(Boolean).join(" · ") || raw.split(/[·・]/)[0].trim();
 });
+const reviewReferenceProperties = computed(() => {
+  const live = reviewProperties.value
+    .filter((item) => item.id !== id.value && ["published", "available", "rented"].includes(item.status))
+    .filter((item) => item.media?.some((media) => media.type === "image"));
+  const currentArea = String(form.areaLabel || "").trim();
+  return [...live]
+    .sort((left, right) => Number(String(right.areaLabel || "") === currentArea) - Number(String(left.areaLabel || "") === currentArea))
+    .slice(0, 2);
+});
+const referenceCoverUrl = (item: Property) => {
+  const media = item.media?.find((entry) => entry.type === "image");
+  return media?.url ? resolveAssetUrl(media.url) : "";
+};
+const referenceLocation = (item: Property) => String(item.areaLabel || item.location || "位置待补充").trim();
+const referenceTags = (item: Property, fields: string[]) => fields
+  .map((field) => listingTagValue(item, field))
+  .filter(Boolean)
+  .slice(0, 4);
 watch([() => form.community], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
@@ -710,10 +730,15 @@ const parseLayout = (value = "", rentTypeHint = "") => {
   }
 };
 const loadProperty = async () => {
-  if (!id.value) return;
+  if (!id.value) {
+    reviewProperties.value = await listProperties().catch(() => []);
+    return;
+  }
   loading.value = true;
   try {
-    const property = (await listProperties()).find(
+    const properties = await listProperties();
+    reviewProperties.value = properties;
+    const property = properties.find(
       (item) => item.id === id.value,
     );
     if (!property) throw new Error("房源不存在");
@@ -1500,15 +1525,13 @@ const mediaUrl = resolveAssetUrl;
                   <view class="review-masonry-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" :style="{ objectPosition: `${form.coverFocusX ?? 50}% ${form.coverFocusY ?? 50}%` }" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>当前编辑</i><b v-if="videoCount">▶</b></view>
                   <view class="review-masonry-copy"><strong>{{ customerGeneratedTitle }}</strong><view v-if="previewPrimaryTags.length || previewSecondaryTags.length" class="review-tags review-primary-tags"><text v-for="label in [...previewPrimaryTags, ...previewSecondaryTags]" :key="label">{{ label }}</text></view><em class="preview-rent">¥ {{ Number(form.rentMonthly) || 0 }}<small>/月</small></em></view>
                 </view>
-                <view class="review-masonry-card sample-card"><view class="sample-cover sample-cover-one"><text>精选房源</text></view><view class="review-masonry-copy"><strong>关山大道品质一居</strong><view class="review-tags review-primary-tags"><text>整租</text><text>近地铁</text></view><em class="preview-rent">¥ 2500<small>/月</small></em></view></view>
-                <view class="review-masonry-card sample-card"><view class="sample-cover sample-cover-two"><text>通勤优选</text></view><view class="review-masonry-copy"><strong>金融港舒适次卧</strong><view class="review-tags review-primary-tags"><text>合租</text><text>独卫</text></view><em class="preview-rent">¥ 1350<small>/月</small></em></view></view>
+                <view v-for="property in reviewReferenceProperties" :key="property.id" class="review-masonry-card reference-card"><view class="review-masonry-cover"><image v-if="referenceCoverUrl(property)" :src="referenceCoverUrl(property)" mode="aspectFill"/><text v-else>{{ property.community?.slice(0, 2) || "房源" }}</text><b v-if="property.media?.some((media) => media.type === 'video')">▶</b></view><view class="review-masonry-copy"><strong>{{ publicListingTitle(property) }}</strong><view class="review-tags review-primary-tags"><text v-for="label in referenceTags(property, customerDisplayTags)" :key="label">{{ label }}</text></view><em class="preview-rent">¥ {{ property.rentMonthly }}<small>/月</small></em></view></view>
               </view>
             </swiper-item>
             <swiper-item class="review-preview-item">
               <view class="admin-list-stage">
                 <view class="review-list-card admin-review-card current"><text class="preview-current-label">当前编辑</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small class="review-admin-doorplate" v-if="adminDisplayTags.includes('unit')">门牌 {{ displayTagValue("unit") || "待补充" }}</small><small>{{ reviewLocation }}</small><view v-if="previewAdminPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewAdminPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="review-tags review-secondary-tags"><text v-for="label in previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view><b class="preview-rent">¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view>
-                <view class="review-list-card admin-review-card"><view class="review-card-main"><view class="review-cover sample-cover-one"><text>可租</text></view><view class="review-copy"><strong>关山大道品质一居</strong><small>门牌 · 5栋1单元802室</small><small>关山大道</small><view class="review-tags review-primary-tags"><text>整租</text><text>一居</text><text>近地铁</text></view><b class="preview-rent">¥ 2500<em>/月</em></b></view></view></view>
-                <view class="review-list-card admin-review-card"><view class="review-card-main"><view class="review-cover sample-cover-two"><text>可租</text></view><view class="review-copy"><strong>金融港舒适次卧</strong><small>门牌 · 3栋2单元1603室</small><small>金融港</small><view class="review-tags review-primary-tags"><text>合租</text><text>独卫</text><text>通勤优选</text></view><b class="preview-rent">¥ 1350<em>/月</em></b></view></view></view>
+                <view v-for="property in reviewReferenceProperties" :key="property.id" class="review-list-card admin-review-card"><view class="review-card-main"><view class="review-cover"><image v-if="referenceCoverUrl(property)" :src="referenceCoverUrl(property)" mode="aspectFill"/><text v-else>{{ property.community?.slice(0, 2) || "房源" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ property.community || property.title || "房源" }}</strong><small>门牌 · {{ listingDoorplate(property) || "待补充" }}</small><small>{{ referenceLocation(property) }}</small><view class="review-tags review-primary-tags"><text v-for="label in referenceTags(property, adminDisplayTags)" :key="label">{{ label }}</text></view><b class="preview-rent">¥ {{ property.rentMonthly }}<em>/月</em></b></view></view></view>
               </view>
             </swiper-item>
           </swiper>
