@@ -309,9 +309,14 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if item.RequestType == "appointment" {
-		if !s.isAvailableProperty(r.Context(), item.PropertyID) {
+		property, ok := s.findProperty(r.Context(), item.PropertyID)
+		if !ok || property.Status != domain.PropertyAvailable {
 			writeError(w, http.StatusNotFound, "可租房源不存在或已下架")
 			return
+		}
+		item.PropertyTitle = strings.TrimSpace(property.Community)
+		if item.PropertyTitle == "" {
+			item.PropertyTitle = strings.TrimSpace(property.Title)
 		}
 	}
 	if item.RequestType == "appointment" || item.RequestType == "area_subscription" || item.RequestType == "general" {
@@ -823,11 +828,16 @@ func containsString(values []string, target string) bool {
 }
 
 func (s *Server) isAvailableProperty(ctx context.Context, propertyID string) bool {
+	item, ok := s.findProperty(ctx, propertyID)
+	return ok && item.Status == domain.PropertyAvailable
+}
+
+func (s *Server) findProperty(ctx context.Context, propertyID string) (domain.Property, bool) {
 	var items []domain.Property
 	if s.store != nil {
 		loaded, err := s.store.ListProperties(ctx)
 		if err != nil {
-			return false
+			return domain.Property{}, false
 		}
 		items = loaded
 	} else {
@@ -835,10 +845,10 @@ func (s *Server) isAvailableProperty(ctx context.Context, propertyID string) boo
 	}
 	for _, item := range items {
 		if item.ID == propertyID {
-			return item.Status == domain.PropertyAvailable
+			return item, true
 		}
 	}
-	return false
+	return domain.Property{}, false
 }
 
 // normalizeCoverFocus keeps the display rule deliberately simple: a focal

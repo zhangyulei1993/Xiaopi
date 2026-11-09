@@ -130,9 +130,9 @@ func (s *MySQL) UpsertBuildingRule(ctx context.Context, rule domain.BuildingRule
 }
 
 // DeleteProperty removes a listing and its listing-specific traces in one
-// transaction. Appointment records are intentionally retained: their
-// property_id is cleared so an operator can still follow up with the customer
-// after a listing has been removed.
+// transaction. Appointment records intentionally retain their property ID and
+// title snapshot so the customer and operator can trace the original listing
+// after it has been removed.
 func (s *MySQL) DeleteProperty(ctx context.Context, propertyID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -149,9 +149,6 @@ func (s *MySQL) DeleteProperty(ctx context.Context, propertyID string) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM property_status_history WHERE property_id=?`, propertyID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE rental_requests SET property_id='' WHERE property_id=?`, propertyID); err != nil {
 		return err
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM properties WHERE id=?`, propertyID)
@@ -187,7 +184,7 @@ func (s *MySQL) CreatePropertyLead(ctx context.Context, lead domain.PropertyLead
 }
 
 func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id,r.user_id,r.request_type,r.property_id,r.property_title,(p.id IS NOT NULL),r.contact_name,r.phone,r.preferred_time,r.location,r.layout,r.budget_min,r.budget_max,r.move_in_date,r.note,r.follow_up_note,r.status,r.created_at,r.updated_at FROM rental_requests r LEFT JOIN properties p ON p.id=r.property_id ORDER BY r.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +192,7 @@ func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest,
 	items := make([]domain.RentalRequest, 0)
 	for rows.Next() {
 		var item domain.RentalRequest
-		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.ContactName, &item.Phone, &item.PreferredTime, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.PropertyTitle, &item.PropertyAvailable, &item.ContactName, &item.Phone, &item.PreferredTime, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -204,7 +201,7 @@ func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest,
 }
 
 func (s *MySQL) ListRentalRequestsByUser(ctx context.Context, userID string) ([]domain.RentalRequest, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests WHERE user_id=? ORDER BY created_at DESC`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id,r.user_id,r.request_type,r.property_id,r.property_title,(p.id IS NOT NULL),r.contact_name,r.phone,r.preferred_time,r.location,r.layout,r.budget_min,r.budget_max,r.move_in_date,r.note,r.follow_up_note,r.status,r.created_at,r.updated_at FROM rental_requests r LEFT JOIN properties p ON p.id=r.property_id WHERE r.user_id=? ORDER BY r.created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +209,7 @@ func (s *MySQL) ListRentalRequestsByUser(ctx context.Context, userID string) ([]
 	items := make([]domain.RentalRequest, 0)
 	for rows.Next() {
 		var item domain.RentalRequest
-		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.ContactName, &item.Phone, &item.PreferredTime, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.PropertyTitle, &item.PropertyAvailable, &item.ContactName, &item.Phone, &item.PreferredTime, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -265,7 +262,7 @@ func (s *MySQL) ListOperationLogs(ctx context.Context, limit int) ([]domain.Oper
 }
 
 func (s *MySQL) CreateRentalRequest(ctx context.Context, item domain.RentalRequest) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rental_requests (id,user_id,request_type,property_id,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.UserID, item.RequestType, item.PropertyID, item.ContactName, item.Phone, item.PreferredTime, item.Location, item.Layout, item.BudgetMin, item.BudgetMax, item.MoveInDate, item.Note, item.Status, item.CreatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rental_requests (id,user_id,request_type,property_id,property_title,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.UserID, item.RequestType, item.PropertyID, item.PropertyTitle, item.ContactName, item.Phone, item.PreferredTime, item.Location, item.Layout, item.BudgetMin, item.BudgetMax, item.MoveInDate, item.Note, item.Status, item.CreatedAt)
 	return err
 }
 

@@ -112,6 +112,8 @@ export interface RentalRequest {
   id?: string;
   requestType: "general" | "appointment" | "area_subscription";
   propertyId?: string;
+	propertyTitle?: string;
+	propertyAvailable?: boolean;
 	contactName?: string;
   phone: string;
 	preferredTime?: string;

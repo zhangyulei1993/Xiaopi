@@ -2,7 +2,7 @@
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { clearSession, getSession, saveSession } from '../../auth/session'
-import { API_ORIGIN } from '../../api/client'
+import { API_ORIGIN, resetReauthentication } from '../../api/client'
 import { getWechatUserProfile, refreshAuth, temporaryLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
 import { usePagePresentation } from '../../utils/presentation'
 
@@ -19,10 +19,11 @@ const brandName = ref('小皮租房')
 const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
 
 onLoad(async (query) => {
+	resetReauthentication()
   const config = await loadPresentation()
   brandName.value = config?.heroTitle || brandName.value
   const reason = String(query?.reason || '')
-  loginReason.value = reason === 'favorites' ? '登录后查看并同步你的关注房源' : reason === 'footprints' ? '登录后查看最近浏览过的房源' : loginReason.value
+  loginReason.value = ['favorite', 'favorites'].includes(reason) ? '登录后查看并同步你的关注房源' : reason === 'footprints' ? '登录后查看最近浏览过的房源' : reason === 'area_subscription' ? '登录后预约该片区新房源' : reason === 'requests' ? '登录后查看你的预约与找房记录' : reason === 'expired' ? '登录状态已过期，请重新登录后继续' : loginReason.value
 })
 onShow(() => {
   const croppedAvatar = String(uni.getStorageSync('xiaopi-avatar-crop-result') || '')

@@ -27,6 +27,22 @@ export class ApiError extends Error {
   }
 }
 
+let reauthOpening = false
+export const resetReauthentication = () => { reauthOpening = false }
+const beginReauthentication = () => {
+  if (reauthOpening) return
+  const pages = getCurrentPages()
+  const current = pages[pages.length - 1] as { route?: string } | undefined
+  if (current?.route === 'pages/auth/login') return
+  reauthOpening = true
+  // navigateTo keeps the page that triggered the request beneath the login
+  // page. After a successful login, the existing navigateBack flow resumes it.
+  uni.navigateTo({
+    url: '/pages/auth/login?reason=expired',
+    fail: () => { reauthOpening = false },
+  })
+}
+
 export function request<T>(url: string, options: RequestOptions = {}) {
   return new Promise<T>((resolve, reject) => {
     const session = getSession()
@@ -45,7 +61,11 @@ export function request<T>(url: string, options: RequestOptions = {}) {
           return
         }
 
-		if (res.statusCode === 401 || (res.statusCode === 404 && url.startsWith('/v1/auth/'))) clearSession()
+		if (res.statusCode === 401) {
+          const hadSession = Boolean(session?.accessToken)
+          clearSession()
+          if (hadSession) beginReauthentication()
+        } else if (res.statusCode === 404 && url.startsWith('/v1/auth/')) clearSession()
         reject(new ApiError(body?.message || `请求失败（${res.statusCode}）`, res.statusCode, body?.code))
       },
       fail: (error) => reject(new ApiError(error.errMsg || '网络连接失败')),

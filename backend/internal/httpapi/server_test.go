@@ -449,7 +449,7 @@ func TestTemporaryAccessAuthenticatesExistingBoundWechatUser(t *testing.T) {
 func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 	dataStore := &fakeStore{
 		users:      []domain.User{{ID: "user-1", Phone: "13800138000"}},
-		properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}},
+		properties: []domain.Property{{ID: "property-1", Community: "中建大公馆3期", Status: domain.PropertyAvailable}},
 	}
 	server := testServer(dataStore)
 	userToken, err := server.tokens.issue("user-1", roleUser)
@@ -471,7 +471,7 @@ func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 	if created.Code != http.StatusCreated {
 		t.Fatalf("rental request failed: %d %s", created.Code, created.Body.String())
 	}
-	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" || dataStore.rentalRequests[0].Phone != "13800138000" {
+	if len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].UserID != "user-1" || dataStore.rentalRequests[0].Phone != "13800138000" || dataStore.rentalRequests[0].PropertyTitle != "中建大公馆3期" {
 		t.Fatalf("unexpected request: %#v", dataStore.rentalRequests)
 	}
 }
