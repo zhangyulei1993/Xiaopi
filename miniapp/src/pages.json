@@ -14,7 +14,7 @@
     { "path": "pages/auth/avatar-crop", "style": { "navigationBarTitleText": "调整头像" } },
     { "path": "pages/auth/login", "style": { "navigationBarTitleText": "微信登录" } }
   ],
-  "tabBar": { "color": "#7d867a", "selectedColor": "#40543f", "backgroundColor": "#fffdf9", "borderStyle": "white", "list": [
+  "tabBar": { "color": "#8a958a", "selectedColor": "#40543f", "backgroundColor": "#fffdf9", "borderStyle": "black", "position": "bottom", "list": [
     { "pagePath": "pages/home/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },
     { "pagePath": "pages/properties/index", "text": "房源", "iconPath": "static/tabbar/house.png", "selectedIconPath": "static/tabbar/house-active.png" },
     { "pagePath": "pages/me/index", "text": "我的", "iconPath": "static/tabbar/me.png", "selectedIconPath": "static/tabbar/me-active.png" }
