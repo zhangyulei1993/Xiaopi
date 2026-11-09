@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"xiaopi/backend/internal/domain"
 )
@@ -570,14 +571,19 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 type publicProperty struct {
 	ID                   string                 `json:"id"`
 	Title                string                 `json:"title"`
+	MarketingPhrase      string                 `json:"marketingPhrase,omitempty"`
 	Community            string                 `json:"community"`
 	Location             string                 `json:"location"`
 	AreaLabel            string                 `json:"areaLabel"`
+	CoverFocusX           int                    `json:"coverFocusX"`
+	CoverFocusY           int                    `json:"coverFocusY"`
 	DoorplateLabel       string                 `json:"doorplateLabel,omitempty"`
 	DisplayTags          []string               `json:"displayTags,omitempty"`
 	Latitude             float64                `json:"latitude"`
 	Longitude            float64                `json:"longitude"`
 	Layout               string                 `json:"layout"`
+	ActualLayout         string                 `json:"actualLayout"`
+	WholeLayout          string                 `json:"wholeLayout"`
 	RentMonthly          int64                  `json:"rentMonthly"`
 	FeeText              string                 `json:"feeText"`
 	RentType             string                 `json:"rentType"`
@@ -588,6 +594,8 @@ type publicProperty struct {
 	DepositPayment       string                 `json:"depositPayment"`
 	UtilitiesText        string                 `json:"utilitiesText"`
 	AreaSqm              int                    `json:"areaSqm"`
+	ActualAreaSqm        int                    `json:"actualAreaSqm"`
+	WholeAreaSqm         int                    `json:"wholeAreaSqm"`
 	FloorInfo            string                 `json:"floorInfo"`
 	Orientation          string                 `json:"orientation"`
 	Elevator             string                 `json:"elevator"`
@@ -626,8 +634,9 @@ func publicDoorplateLabel(item domain.Property) string {
 // precise address facts. This also prevents old composed titles from leaking a
 // doorplate when the badge is disabled.
 func publicListingTitle(item domain.Property) string {
+	base := ""
 	if community := strings.TrimSpace(item.Community); community != "" {
-		return community
+		base = community
 	}
 	title := strings.TrimSpace(item.Title)
 	building := strings.TrimSpace(item.BuildingNo)
@@ -654,10 +663,16 @@ func publicListingTitle(item domain.Property) string {
 		title = strings.ReplaceAll(title, "· ·", "·")
 		title = strings.ReplaceAll(title, "··", "·")
 	}
-	if title != "" {
-		return title
+	if base == "" && title != "" {
+		base = title
 	}
-	return "房源"
+	if base == "" {
+		base = "房源"
+	}
+	if phrase := strings.TrimSpace(item.MarketingPhrase); phrase != "" {
+		return base + " · " + phrase
+	}
+	return base
 }
 
 func publicProperties(items []domain.Property, config domain.PublicConfig) []publicProperty {
@@ -671,11 +686,11 @@ func publicProperties(items []domain.Property, config domain.PublicConfig) []pub
 			continue
 		}
 		property := publicProperty{
-			ID: item.ID, Title: publicListingTitle(item), Community: item.Community, Location: item.Location, AreaLabel: item.AreaLabel,
-			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout,
+			ID: item.ID, Title: publicListingTitle(item), MarketingPhrase: item.MarketingPhrase, Community: item.Community, Location: item.Location, AreaLabel: item.AreaLabel, CoverFocusX: item.CoverFocusX, CoverFocusY: item.CoverFocusY,
+			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout, ActualLayout: item.ActualLayout, WholeLayout: item.WholeLayout,
 			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType, ListingSource: item.ListingSource, RemainingLeaseMonths: item.RemainingLeaseMonths, TransferDeposit: item.TransferDeposit,
 			AvailableDate: item.AvailableDate, DepositPayment: item.DepositPayment,
-			UtilitiesText: item.UtilitiesText, AreaSqm: item.AreaSqm, FloorInfo: item.FloorInfo,
+			UtilitiesText: item.UtilitiesText, AreaSqm: item.AreaSqm, ActualAreaSqm: item.ActualAreaSqm, WholeAreaSqm: item.WholeAreaSqm, FloorInfo: item.FloorInfo,
 			Orientation: item.Orientation, Elevator: item.Elevator, MetroMinutes: item.MetroMinutes,
 			VerificationDate: item.VerificationDate, RulesText: item.RulesText,
 			Description: item.Description, Status: item.Status, Media: item.Media,
@@ -728,13 +743,31 @@ func (s *Server) isAvailableProperty(ctx context.Context, propertyID string) boo
 	return false
 }
 
+// normalizeCoverFocus keeps the display rule deliberately simple: a focal
+// point is optional and coarse-grained, so one original asset can safely feed
+// both horizontal list cards and vertical masonry cards without extra uploads.
+func normalizeCoverFocus(value int) int {
+	if value <= 24 {
+		return 0
+	}
+	if value >= 76 {
+		return 100
+	}
+	return 50
+}
+
 func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 	var p domain.Property
 	if err := decodeJSON(w, r, &p); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid property"})
 		return
 	}
-	p.Title, p.Community = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community)
+	p.Title, p.Community, p.MarketingPhrase = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community), strings.TrimSpace(p.MarketingPhrase)
+	p.CoverFocusX, p.CoverFocusY = normalizeCoverFocus(p.CoverFocusX), normalizeCoverFocus(p.CoverFocusY)
+	if utf8.RuneCountInString(p.MarketingPhrase) > 16 {
+		writeError(w, http.StatusBadRequest, "marketingPhrase must not exceed 16 characters")
+		return
+	}
 	if p.Title == "" || p.Community == "" || p.RentMonthly < 0 {
 		writeError(w, http.StatusBadRequest, "title, community and a non-negative rentMonthly are required")
 		return
@@ -769,7 +802,9 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid property payload"})
 		return
 	}
-	missing := make([]string, 0, 4)
+	p.Title, p.Community, p.MarketingPhrase = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community), strings.TrimSpace(p.MarketingPhrase)
+	p.CoverFocusX, p.CoverFocusY = normalizeCoverFocus(p.CoverFocusX), normalizeCoverFocus(p.CoverFocusY)
+	missing := make([]string, 0, 5)
 	if strings.TrimSpace(p.ID) == "" {
 		missing = append(missing, "id")
 	}
@@ -781,6 +816,9 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.RentMonthly < 0 {
 		missing = append(missing, "non-negative rentMonthly")
+	}
+	if utf8.RuneCountInString(p.MarketingPhrase) > 16 {
+		missing = append(missing, "marketingPhrase must not exceed 16 characters")
 	}
 	if len(missing) > 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "missing or invalid: " + strings.Join(missing, ", ")})

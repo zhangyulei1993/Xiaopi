@@ -21,15 +21,20 @@ const (
 type Property struct {
 	ID                   string          `json:"id"`
 	Title                string          `json:"title"`
+	MarketingPhrase      string          `json:"marketingPhrase"`
 	Community            string          `json:"community"`
 	Location             string          `json:"location"`
 	AreaLabel            string          `json:"areaLabel"`
+	CoverFocusX          int             `json:"coverFocusX"`
+	CoverFocusY          int             `json:"coverFocusY"`
 	BuildingNo           string          `json:"buildingNo"`
 	UnitNo               string          `json:"unitNo"`
 	RoomNo               string          `json:"roomNo"`
 	Latitude             float64         `json:"latitude"`
 	Longitude            float64         `json:"longitude"`
 	Layout               string          `json:"layout"`
+	ActualLayout         string          `json:"actualLayout"`
+	WholeLayout          string          `json:"wholeLayout"`
 	RentMonthly          int64           `json:"rentMonthly"`
 	FeeText              string          `json:"feeText"`
 	RentType             string          `json:"rentType"`
@@ -40,6 +45,8 @@ type Property struct {
 	DepositPayment       string          `json:"depositPayment"`
 	UtilitiesText        string          `json:"utilitiesText"`
 	AreaSqm              int             `json:"areaSqm"`
+	ActualAreaSqm        int             `json:"actualAreaSqm"`
+	WholeAreaSqm         int             `json:"wholeAreaSqm"`
 	FloorInfo            string          `json:"floorInfo"`
 	Orientation          string          `json:"orientation"`
 	Elevator             string          `json:"elevator"`

@@ -62,5 +62,7 @@ export const publicListingTitle = (item: Property, fields?: string[]) => {
   // Public cards use the community as a stable title. Everything else belongs
   // to configurable tags, never to an auto-composed title.
   void fields;
-  return String(item.community || item.title || "房源").trim();
+  const base = String(item.community || item.title || "房源").trim();
+  const phrase = String(item.marketingPhrase || "").trim();
+  return phrase ? `${base} · ${phrase}` : base;
 };

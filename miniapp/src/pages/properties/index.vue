@@ -144,6 +144,18 @@ const filteredProperties = computed(() => {
     );
   });
 });
+const customerMasonryColumns = computed(() => {
+  const columns: Property[][] = [[], []];
+  const heights = [0, 0];
+  filteredProperties.value.forEach((item) => {
+    const copyLength = `${listingTitle(item)} ${cardTags(item).join(' ')}`.length;
+    const estimate = 360 + Math.ceil(copyLength / 12) * 38;
+    const index = heights[0] <= heights[1] ? 0 : 1;
+    columns[index].push(item);
+    heights[index] += estimate;
+  });
+  return columns;
+});
 const distanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const rad = Math.PI / 180,
     dLat = (lat2 - lat1) * rad,
@@ -232,6 +244,13 @@ const coverUrl = (item: Property) => {
   const cover = item.media?.find((media) => media.type === "image")?.url;
   return cover ? resolveAssetUrl(cover) : "";
 };
+const masonryMedia = (item: Property) =>
+  item.media?.find((media) => media.type === "video") || item.media?.find((media) => media.type === "image");
+const coverObjectPosition = (item: Property) => {
+  const x = [0, 50, 100].includes(Number(item.coverFocusX)) ? Number(item.coverFocusX) : 50;
+  const y = [0, 50, 100].includes(Number(item.coverFocusY)) ? Number(item.coverFocusY) : 50;
+  return `${x}% ${y}%`;
+};
 const orderedFields = () => [...listTagOrder.value, ...listingTitleFields.value].filter((field, index, all) => field !== "community" && field !== "unit" && listingTitleFields.value.includes(field) && all.indexOf(field) === index);
 const primaryLabels = (item: Property) => uniqueListingTags(orderedFields().filter(field => listTagTopFields.value.includes(field)).map((field) => compactCardTag(field, item)));
 const compactCardTag = (field: string, item: Property) => {
@@ -248,7 +267,9 @@ const cardTags = (item: Property) => uniqueListingTags([...primaryLabels(item), 
 const adminDoorplate = (item: Property) =>
   isAdmin.value && adminDoorplateEnabled.value ? listingDoorplate(item) : "";
 const listingTitle = (item: Property) => {
-  return publicListingTitle(item, listingTitleFields.value);
+  return isAdmin.value
+    ? String(item.community || item.title || "房源").trim()
+    : publicListingTitle(item, listingTitleFields.value);
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -259,6 +280,16 @@ const cardLocation = (value: unknown) => {
 };
 const listingSubtitle = (item: Property) => {
   return cardLocation(item.location);
+};
+const channelLabel = (item: Property) => {
+  const direct = configuredChannels.value.find((channel) => channel.title && channel.title === item.areaLabel);
+  if (direct) return direct.title;
+  if (!item.latitude || !item.longitude) return "";
+  return configuredChannels.value
+    .filter((channel) => channel.title && channel.latitude && channel.longitude)
+    .map((channel) => ({ channel, distance: distanceKm(Number(channel.latitude), Number(channel.longitude), item.latitude!, item.longitude!) }))
+    .filter(({ channel, distance }) => distance <= Number(channel.radiusKm || 3))
+    .sort((left, right) => left.distance - right.distance)[0]?.channel.title || "";
 };
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
@@ -372,8 +403,9 @@ const subscribeArea = () => {
     ><view v-else-if="loadFailed" class="state card"
       ><view>房源加载失败</view
       ><button size="mini" @click="load">重新加载</button></view
-    ><view v-else-if="filteredProperties.length" class="grid"
-      ><view
+    ><view v-else-if="filteredProperties.length" class="grid" :class="{ 'customer-masonry-grid': !isAdmin }"
+      ><template v-if="!isAdmin"><view v-for="(column, columnIndex) in customerMasonryColumns" :key="`column-${columnIndex}`" class="masonry-column"><view v-for="item in column" :key="item.id" class="masonry-property" @click="open(item.id)"><view class="masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover" /><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill" /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">可租</view><view v-if="masonryMedia(item)?.type === 'video'" class="masonry-video-play">▶</view><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view><view class="favorite" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="masonry-copy" :class="{ 'without-tags': !cardTags(item).length }"><view class="property-listing-title">{{ listingTitle(item) }}</view><view v-if="cardTags(item).length" class="masonry-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view><view class="price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></template><view
+        v-else
         v-for="item in filteredProperties"
         :key="item.id"
         class="property card"
@@ -381,11 +413,14 @@ const subscribeArea = () => {
         @click="open(item.id)"
         ><view class="property-main"
           ><view class="cover"
-            ><image
-              v-if="coverUrl(item)"
-              :src="coverUrl(item)"
-              mode="aspectFill"
+            ><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover" />
+            <image
+              v-else-if="masonryMedia(item)?.url"
+              :src="resolveAssetUrl(masonryMedia(item)?.url || '')"
+              :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"
             /><text v-else>小皮</text><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
+            ><view v-if="masonryMedia(item)?.type === 'video'" class="cover-video" aria-label="包含视频">▶</view
+            ><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view
             ><view
               v-if="!isAdmin"
               class="favorite"
@@ -395,7 +430,6 @@ const subscribeArea = () => {
             ></view
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
-          ><view class="property-listing-address">{{ listingSubtitle(item) }}</view
           ><view v-if="adminDoorplate(item)" class="admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view
           ><view class="service-tag-stack" :class="`tag-layout-${listTagLayout}`"><template v-if="listTagLayout === 'grouped'"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="service-tags all-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
@@ -516,7 +550,7 @@ const subscribeArea = () => {
   position: relative;
   overflow: hidden;
 }
-.cover image {
+.cover image,.cover video {
   width: 100%;
   height: 100%;
 }
@@ -714,6 +748,8 @@ const subscribeArea = () => {
 .service-tags{height:34rpx;gap:8rpx;margin-top:10rpx}.service-tags text{padding:6rpx 9rpx;border-radius:8rpx;font-size:18rpx}
 .property>.property-copy>.price{min-height:36rpx;padding-top:8rpx;font-size:35rpx;line-height:1}.property>.property-copy>.price .price-unit{font-size:19rpx}
 .admin-property{height:auto;min-height:0;padding:14rpx;border-radius:22rpx}.admin-property .property-main{height:208rpx;min-height:208rpx}.admin-property .property-copy{height:208rpx}.admin-card-actions{margin-top:14rpx;padding-top:14rpx}.admin-inline-actions{gap:9rpx}.admin-inline-actions button{min-width:98rpx;min-height:54rpx;border-radius:10rpx;font-size:21rpx;line-height:52rpx}
+/* Preserve the information-dense list while giving each cover more visual weight. */
+.cover{width:276rpx;height:208rpx}.property-main{gap:16rpx}.cover-video{position:absolute;top:10rpx;right:10rpx;display:grid;width:38rpx;height:38rpx;place-items:center;border:1rpx solid rgba(255,255,255,.72);border-radius:50%;box-sizing:border-box;background:rgba(34,44,35,.58);color:#fff;font-size:18rpx;font-weight:700;line-height:1;padding-left:2rpx}.cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:20rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(27,35,28,.66));color:#fff;font-size:18rpx;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}.admin-property .property-main{height:208rpx;min-height:208rpx}
 .service-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.service-tag-stack .service-tags{height:29rpx;margin:0}.service-tag-stack .service-tags text{padding:4rpx 8rpx;font-size:19rpx;line-height:1.1}.service-tag-stack .fee-tags text{background:#f8eadf;color:#b7644b}
 /* Admin cards carry a doorplate, but it is metadata rather than another tag. */
 .admin-property .property-main{height:auto;min-height:244rpx;align-items:flex-start}
@@ -722,4 +758,8 @@ const subscribeArea = () => {
 .admin-property .service-tag-stack{gap:5rpx;margin-top:8rpx}
 .admin-property .service-tags{max-width:100%;overflow:hidden}
 .tag-layout-wrap .all-tags{display:flex;height:auto;max-height:58rpx;flex-wrap:wrap;gap:5rpx 7rpx;overflow:hidden}.tag-layout-wrap .all-tags text{padding:4rpx 8rpx;font-size:19rpx}.tag-layout-wrap .all-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}
+/* Customer browsing uses two independently flowing columns; management keeps its action-oriented row cards. */
+.customer-masonry-grid{display:flex;align-items:flex-start;gap:16rpx;margin-top:30rpx}.masonry-column{min-width:0;flex:1}.masonry-property{overflow:hidden;margin-bottom:16rpx;border:1rpx solid #e9e2d8;border-radius:20rpx;background:#fffdf9;box-shadow:0 7rpx 18rpx rgba(55,65,50,.05)}.masonry-cover{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;background:#dde5d4}.masonry-cover image{width:100%;height:100%}.masonry-cover>text{display:grid;width:100%;height:100%;place-items:center;color:#fff;font-size:25rpx}.masonry-cover .favorite{top:10rpx;right:10rpx;width:42rpx;height:42rpx}.masonry-cover .favorite image{width:26rpx;height:26rpx}.masonry-video-play{position:absolute;top:50%;left:50%;display:grid;width:62rpx;height:62rpx;place-items:center;border:2rpx solid rgba(255,255,255,.88);border-radius:50%;background:rgba(28,38,30,.5);color:#fff;font-size:28rpx;line-height:1;transform:translate(-50%,-50%);padding-left:4rpx;box-sizing:border-box}.masonry-copy{padding:15rpx 14rpx 16rpx}.masonry-copy .property-listing-title{display:-webkit-box;overflow:hidden;font-size:26rpx;line-height:1.35;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.masonry-copy .property-listing-address{display:-webkit-box;max-height:none;margin-top:8rpx;font-size:19rpx;line-height:1.45;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.masonry-tags{display:flex;flex-wrap:wrap;gap:6rpx;margin-top:10rpx}.masonry-tags text{padding:5rpx 7rpx;border-radius:6rpx;background:#edf0dc;color:#536a45;font-size:17rpx;line-height:1.15}.masonry-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}.masonry-copy .price{display:inline-flex;margin-top:14rpx;color:#d76440;font-size:30rpx;font-weight:800;line-height:1}.masonry-copy .price .price-unit{margin-left:3rpx;color:#8a8f85;font-size:18rpx;font-weight:400}
+.masonry-copy.without-tags .price{margin-top:10rpx}
+.masonry-cover video{width:100%;height:100%}
 </style>

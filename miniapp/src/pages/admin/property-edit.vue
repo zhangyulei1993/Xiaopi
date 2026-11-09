@@ -60,6 +60,7 @@ const locationResults = ref<LocationSearchItem[]>([]);
 let locationSearchTimer: ReturnType<typeof setTimeout> | undefined;
 const form = reactive<Partial<Property>>({
   title: "",
+  marketingPhrase: "",
   community: "",
   location: "",
   buildingNo: "",
@@ -68,6 +69,8 @@ const form = reactive<Partial<Property>>({
   latitude: 0,
   longitude: 0,
   layout: "",
+  actualLayout: "",
+  wholeLayout: "",
   rentMonthly: 0,
   feeText: "无中介费",
   rentType: "整租",
@@ -78,6 +81,10 @@ const form = reactive<Partial<Property>>({
   depositPayment: "押一付一",
   utilitiesText: "民水民电",
   areaSqm: 0,
+  coverFocusX: 50,
+  coverFocusY: 50,
+  actualAreaSqm: 0,
+  wholeAreaSqm: 0,
   floorInfo: "",
   orientation: "",
   elevator: "",
@@ -117,8 +124,8 @@ const amenityOptions = ref([...defaultAmenityOptions]);
 const configuredDetailModules = ref<{ key: string; title: string; enabled: boolean }[]>([
   { key: "overview", title: "房屋概况", enabled: true },
   { key: "location", title: "位置与周边", enabled: true },
-  { key: "facilities", title: "房屋设施与环境", enabled: true },
-  { key: "description", title: "房源描述", enabled: true },
+  { key: "facilities", title: "房屋设施", enabled: true },
+  { key: "description", title: "房源简介", enabled: true },
   { key: "nearby", title: "附近房源", enabled: true },
 ]);
 // Preserve data from an existing property when an operator temporarily turns a
@@ -126,7 +133,7 @@ const configuredDetailModules = ref<{ key: string; title: string; enabled: boole
 const preservedAmenities = ref<string[]>([]);
 const preservedDescription = ref("");
 const detailModuleEnabled = (key: string) =>
-  configuredDetailModules.value.find((module) => module.key === key)?.enabled !== false;
+  key === "overview" || configuredDetailModules.value.find((module) => module.key === key)?.enabled !== false;
 const rentTypes = ["整租", "合租"],
   roomTypes = ["主卧", "次卧", "单间", "床位"],
   toilets = ["独卫", "非独卫"],
@@ -298,6 +305,9 @@ const loadChannels = async () => {
       .filter((key) => key !== "community");
     adminDisplayTags.value = (config.listingTitle?.adminEnabledFields || [])
       .filter((key) => key !== "community");
+    marketingPhrases.value = (config.listingTitle?.marketingPhrases || [])
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
     if (config.featuredChannels?.length) {
       channels.value = config.featuredChannels;
       if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
@@ -422,6 +432,17 @@ const generatedTitle = computed(() => {
   const community = String(form.community || "").trim();
   return community || "选择小区后自动生成";
 });
+const marketingPhrases = ref<string[]>([]);
+const marketingPhraseOptions = computed(() => ["不使用广告词", ...marketingPhrases.value]);
+const marketingPhraseIndex = computed(() => Math.max(0, marketingPhrases.value.indexOf(String(form.marketingPhrase || "").trim()) + 1));
+const customerGeneratedTitle = computed(() => {
+  const base = generatedTitle.value;
+  const phrase = String(form.marketingPhrase || "").trim();
+  return phrase ? `${base} · ${phrase}` : base;
+});
+const chooseMarketingPhrase = (event: { detail?: { value?: string | number } }) => {
+  form.marketingPhrase = marketingPhrases.value[Number(event.detail?.value) - 1] || "";
+};
 const displayTagValue = (key: string) => {
   if (key === "unit") return [buildingNo.value, unitNo.value && `${unitNo.value}单元`, roomNo.value && `${roomNo.value}室`].filter(Boolean).join("");
   if (key === "floor") return form.floorInfo || (selectedFloor.value ? `${selectedFloor.value}层` : "");
@@ -598,9 +619,15 @@ const saveCurrentBuildingRule = async () => {
 const syncLayout = () => {
   toiletType.value = privateBathroom.value ? "独卫" : "非独卫";
   bayWindow.value = hasBayWindow.value ? "有飘窗" : "无飘窗";
-  form.layout = rentType.value === "整租"
-    ? wholeLayoutText.value
-    : [roomType.value, toiletType.value, bayWindow.value].filter(Boolean).join(" · ");
+  if (rentType.value === "整租") {
+    form.layout = wholeLayoutText.value;
+    form.actualLayout = "";
+    form.actualAreaSqm = 0;
+    form.wholeLayout = "";
+    form.wholeAreaSqm = 0;
+  } else if (!String(form.layout || "").trim() || form.rentType !== "合租") {
+    form.layout = [roomType.value, toiletType.value, bayWindow.value].filter(Boolean).join(" · ");
+  }
   form.rentType = rentType.value;
 };
 const pickLayoutValue = (values: string[], index: string | number) =>
@@ -1017,7 +1044,12 @@ const save = async (mode: SaveMode = "draft") => {
     const payload = {
       ...propertyFields,
       title: finalTitle,
+      marketingPhrase: String(form.marketingPhrase || "").trim(),
       listingSource: form.listingSource || "直租",
+      actualLayout: "",
+      actualAreaSqm: 0,
+      wholeLayout: rentType.value === "合租" ? String(form.wholeLayout || "").trim() : "",
+      wholeAreaSqm: rentType.value === "合租" ? Number(form.wholeAreaSqm) || 0 : 0,
       remainingLeaseMonths: form.listingSource === "转租" ? Number(form.remainingLeaseMonths) || 0 : 0,
       transferDeposit: form.listingSource === "转租" ? transferDepositAmount.value : 0,
       community: finalCommunity,
@@ -1051,9 +1083,14 @@ const save = async (mode: SaveMode = "draft") => {
     }
     const uploadedImages = uploaded.filter((item) => item.type === "image");
     const uploadedVideos = uploaded.filter((item) => item.type === "video");
-    const finalMedia = pendingCoverSelected.value
-      ? [...uploadedImages, ...existingMedia.value, ...uploadedVideos]
-      : [...existingMedia.value, ...uploadedImages, ...uploadedVideos];
+    const existingImages = existingMedia.value.filter((item) => item.type === "image");
+    const existingVideos = existingMedia.value.filter((item) => item.type === "video");
+    // Video is the lead media whenever it exists, so list cards and the detail
+    // gallery agree on what the customer sees first.
+    const finalImages = pendingCoverSelected.value
+      ? [...uploadedImages, ...existingImages]
+      : [...existingImages, ...uploadedImages];
+    const finalMedia = [...existingVideos, ...uploadedVideos, ...finalImages];
     await replacePropertyMedia(property.id, finalMedia.map((item) => item.id));
     existingMedia.value = finalMedia;
     images.value = [];
@@ -1193,6 +1230,11 @@ const mediaUrl = resolveAssetUrl;
           ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
         ><view v-if="form.community" class="unit-selector-card" :class="{ selected: Boolean(roomNo) }" @click="openStructurePicker"
           ><view><strong>{{ roomNo ? "已选门牌" : "门牌信息" }}</strong><text>{{ structureSummary }}</text></view><b>{{ roomNo ? "重选 ›" : "选择 ›" }}</b></view
+        ><view class="field"
+          ><text>客户广告词</text
+          ><picker :range="marketingPhraseOptions" :value="marketingPhraseIndex" @change="chooseMarketingPhrase"
+            ><view class="channel-picker marketing-phrase-picker"><view><strong>{{ form.marketingPhrase || "不使用广告词" }}</strong><small>仅用于客户标题；管理员仅显示房源原始数据</small></view><text>选择 ›</text></view></picker
+          ></view
         ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>{{ showStructureSetup ? "门牌规则设置" : `默认门牌规则：${selectedBuildingRule?.unitCount || 3} 单元 · ${selectedBuildingRule?.floorCount || 33} 层` }}</text><b>{{ showStructureSetup ? "收起" : "调整 ›" }}</b></view
         ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
               ><view class="rule-setup-head"><text>门牌规则</text><small>保存后，同一小区下次录入将直接使用</small></view
@@ -1249,7 +1291,7 @@ const mediaUrl = resolveAssetUrl;
           ></view
         ><view class="rent-type-tabs"><view :class="{ active: rentType === '整租' }" @click="setRentType('整租')"><strong>整租</strong><small>发布整套房源</small></view><view :class="{ active: rentType === '合租' }" @click="setRentType('合租')"><strong>合租</strong><small>发布单个房间</small></view></view
         ><view class="listing-source"><text>出租来源</text><view class="listing-source-options"><view :class="{ active: form.listingSource === '直租' }" @click="setListingSource('直租')"><text>{{ form.listingSource === '直租' ? '✓' : '' }}</text>直租</view><view :class="{ active: form.listingSource === '转租' }" @click="setListingSource('转租')"><text>{{ form.listingSource === '转租' ? '✓' : '' }}</text>转租</view></view></view
-        ><view class="layout-guidance">{{ rentType === "整租" ? "填写整套户型、卫生间与阳台信息。" : "填写本次出租的房间配置，不再重复填写整套户型。" }}</view
+        ><view class="layout-guidance">{{ rentType === "整租" ? "户型与面积就是整套房源的实际使用空间，会同步到列表标签。" : "户型与面积填写本次出租房间的实际使用空间，会同步到列表标签；整套参数仅用于详情概况。" }}</view
         ><view class="picker-grid"
           ><template v-if="rentType === '整租'"><view class="whole-rental-options"><view class="whole-option-row"><text>房间</text><view><button v-for="count in [1, 2, 3]" :key="count" :class="{ active: roomCount === String(count) }" @click="roomCount = String(count); syncLayout()">{{ count }}</button><button :class="{ active: roomCount === 'custom' }" @click="roomCount = 'custom'; syncLayout()">手动</button><input v-if="roomCount === 'custom'" v-model.number="customRoomCount" type="number" maxlength="2" placeholder="数" @input="syncLayout" /></view></view><view class="whole-option-row"><text>客厅</text><view><button v-for="count in [0, 1, 2, 3]" :key="count" :class="{ active: hallCount === String(count) }" @click="hallCount = String(count); syncLayout()">{{ count === 0 ? '-' : count }}</button></view></view><view class="whole-option-row"><text>厨房</text><view><button v-for="item in [{ value: '1', label: '有' }, { value: '0', label: '无' }]" :key="item.value" :class="{ active: kitchenCount === item.value }" @click="kitchenCount = item.value; syncLayout()">{{ item.label }}</button></view></view><view class="whole-option-row"><text>卫生间</text><view><button v-for="count in [1, 2, 3]" :key="count" :class="{ active: bathroomCount === String(count) }" @click="bathroomCount = String(count); syncLayout()">{{ count }}</button></view></view><view class="whole-option-row"><text>阳台</text><view><button v-for="count in [0, 1, 2]" :key="count" :class="{ active: balcony === String(count) }" @click="balcony = String(count); syncLayout()">{{ count === 0 ? '无' : count }}</button></view></view></view></template
           ><template v-else><view class="shared-rental-options"
@@ -1275,7 +1317,9 @@ const mediaUrl = resolveAssetUrl;
         ><view class="layout-preview"
           ><text>房源摘要</text><strong>{{ form.layout }}</strong></view
         ><view v-if="detailModuleEnabled('overview') || detailModuleEnabled('location')" class="detail-grid"
-          ><template v-if="detailModuleEnabled('overview')"><view class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
+          ><template v-if="detailModuleEnabled('overview')"><view v-if="rentType === '合租'" class="field"><text>整套户型（概况）</text><input v-model.trim="form.wholeLayout" maxlength="32" placeholder="如：3室2厅2卫1阳台" /></view
+          ><view v-if="rentType === '合租'" class="field"><text>整套面积（㎡）</text><input v-model.number="form.wholeAreaSqm" type="number" placeholder="如：105" /></view
+          ><view v-if="rentType === '整租'" class="field"><text>面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：55" /></view
           ><view class="field auto-floor"><text>楼层</text><strong>{{ automaticFloorInfo || form.floorInfo || "选择门牌后自动生成" }}</strong></view
           ><view class="field"><text>朝向</text><input v-model.trim="form.orientation" maxlength="32" placeholder="如：南" /></view
           ><view class="field option-field"><text>楼内配置</text><checkbox-group @change="toggleElevator"><label><checkbox value="elevator" :checked="form.elevator === '有电梯'" color="#40543f" />有电梯</label></checkbox-group></view></template
@@ -1314,7 +1358,7 @@ const mediaUrl = resolveAssetUrl;
         ><view v-if="detailModuleEnabled('description')" class="field"
           ><text>入住规则</text
           ><input v-model.trim="form.rulesText" maxlength="200" placeholder="如：可做饭，宠物需沟通，女生优先" /></view
-        ><view v-if="!detailModuleEnabled('facilities') && !detailModuleEnabled('description')" class="module-entry-disabled">当前后台未启用“设施与环境”或“房源描述”，此步无需填写。</view>
+        ><view v-if="!detailModuleEnabled('facilities') && !detailModuleEnabled('description')" class="module-entry-disabled">当前后台未启用“房屋设施”或“房源简介”，此步无需填写。</view>
         ></view
       ><view v-show="activeSection === 3" class="section-card"
         ><view class="section-head"
@@ -1328,6 +1372,7 @@ const mediaUrl = resolveAssetUrl;
           ><view class="field option-field"
             ><text>中介费</text><checkbox-group @change="toggleNoAgentFee"><label><checkbox value="no-agent-fee" :checked="noAgentFee" color="#40543f" />无中介费</label></checkbox-group></view></view
         ><view class="term-block"><text>押付方式 *</text><view class="payment-options"><view class="payment-fixed">押一</view><view v-for="cycle in paymentCycles" :key="cycle" :class="{ active: paymentCycle === cycle }" @click="setPaymentCycle(cycle)">{{ cycle }}</view></view></view
+        ><view v-if="rentType === '合租'" class="detail-grid shared-space-grid"><view class="field"><text>实际使用空间</text><input v-model.trim="form.layout" maxlength="32" placeholder="如：次卧 · 独卫 · 有飘窗" /></view><view class="field"><text>实际使用面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：21" /></view></view
         ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>只记录剩余月数与押金，具体费用线下沟通</small></view><text>转租</text></view><view class="transfer-choice transfer-stepper"><text>剩余租期</text><view><button @click="adjustTransferMonths(-1)">−</button><input :value="form.remainingLeaseMonths || ''" type="number" maxlength="2" placeholder="月" @input="setTransferMonths(Number($event.detail.value))" /><text>个月</text><button @click="adjustTransferMonths(1)">＋</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><small>当前选择</small><strong>剩余 {{ form.remainingLeaseMonths || 0 }} 个月 · {{ transferDepositMultiplier ? `承接押金 ¥${transferDepositAmount}` : '无需承接押金' }}</strong></view></view
         ><view class="rent-row detail-row"
           ><view class="field"
@@ -1344,8 +1389,11 @@ const mediaUrl = resolveAssetUrl;
             ><strong>图片与视频</strong></view
           ></view
         ><view class="media-guidance"
-          ><strong>封面图片</strong
-          ><text>首张为封面 · 可重裁</text></view
+          ><strong>封面素材</strong
+          ><text>上传一次即可：列表横向裁切、瀑布流竖向裁切；详情保持原比例。</text></view
+        ><view class="cover-focus-control"
+          ><view><strong>封面焦点（可选）</strong><text>默认居中；仅在主体靠边时调整，横图和竖图会共用。</text></view
+          ><view class="focus-options"><view><text>水平</text><picker :range="['靠左', '居中', '靠右']" :value="[0, 50, 100].indexOf(Number(form.coverFocusX ?? 50))" @change="form.coverFocusX = [0, 50, 100][Number($event.detail.value)]"><view>{{ ['靠左', '居中', '靠右'][[0, 50, 100].indexOf(Number(form.coverFocusX ?? 50))] || '居中' }}</view></picker></view><view><text>垂直</text><picker :range="['靠上', '居中', '靠下']" :value="[0, 50, 100].indexOf(Number(form.coverFocusY ?? 50))" @change="form.coverFocusY = [0, 50, 100][Number($event.detail.value)]"><view>{{ ['靠上', '居中', '靠下'][[0, 50, 100].indexOf(Number(form.coverFocusY ?? 50))] || '居中' }}</view></picker></view></view></view
         ><view v-if="existingImages.length" class="uploaded-gallery"
           ><text class="media-group-title">已上传图片</text
           ><view class="photo-grid"
@@ -1434,7 +1482,7 @@ const mediaUrl = resolveAssetUrl;
         >图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</view
       ><view v-if="activeSection === 4" class="title-composer final-title-composer"
         ><view><strong>列表展示规则</strong><small>由后台“小程序配置”的客户与非客户视角统一控制，录入时无需单独选择</small></view
-        ><view class="auto-title"><text>主标题预览</text><strong>{{ generatedTitle }}</strong></view></view
+        ><view class="auto-title"><text>客户标题预览</text><strong>{{ customerGeneratedTitle }}</strong></view></view
       ><view v-if="activeSection === 4" class="final-review"
         ><view class="final-review-head"><view><strong>发布前核对</strong><small>可点上方步骤返回修改</small></view><text>{{ completionCount }}/5</text></view
         ><view class="final-review-grid"
@@ -1444,7 +1492,7 @@ const mediaUrl = resolveAssetUrl;
           ><view :class="{ ready: sectionReady[4] }"><text>图片素材</text><small>{{ mediaCount }}/9 张图片 · {{ videoCount }} 个视频</small></view
         ></view
         ><view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>以下为保存后首页与“房源”页的真实卡片布局</small></view
-          ><view class="review-list-card"><text class="review-perspective">普通用户视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small>{{ reviewLocation }}</small><view v-if="previewPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewSecondaryTags.length" class="review-tags review-secondary-tags"><text v-for="label in previewSecondaryTags" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view
+          ><view class="review-list-card"><text class="review-perspective">普通用户视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ customerGeneratedTitle }}</strong><small>{{ reviewLocation }}</small><view v-if="previewPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewSecondaryTags.length" class="review-tags review-secondary-tags"><text v-for="label in previewSecondaryTags" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view
           ><view class="review-list-card admin-review-card"><text class="review-perspective">管理员视角</text><view class="review-card-main"><view class="review-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" mode="aspectFill"/><text v-else>{{ form.community?.slice(0, 2) || "小皮" }}</text><i>可租</i></view><view class="review-copy"><strong>{{ generatedTitle }}</strong><small class="review-admin-doorplate" v-if="adminDisplayTags.includes('unit')">门牌 {{ displayTagValue("unit") || "待补充" }}</small><small>{{ reviewLocation }}</small><view v-if="previewAdminPrimaryTags.length" class="review-tags review-primary-tags"><text v-for="label in previewAdminPrimaryTags" :key="label">{{ label }}</text></view><view v-if="previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit')).length" class="review-tags review-secondary-tags"><text v-for="label in previewAdminSecondaryTags.filter(label => label !== displayTagValue('unit'))" :key="label">{{ label }}</text></view><b>¥ {{ Number(form.rentMonthly) || 0 }}<em>/月</em></b></view></view></view></view
         ><text v-if="id && currentStatus === 'draft'" class="draft-delete-link" @click="deleteDraft">删除当前草稿</text></view
       ><view class="save-space" /><view class="save-bar"
@@ -2408,5 +2456,6 @@ const mediaUrl = resolveAssetUrl;
   text-align: center;
 }
 .editor-page .page-presentation-head{margin-bottom:26rpx}.editor-hero{margin:8rpx -32rpx 0;padding-top:34rpx;padding-bottom:58rpx}.step-nav{margin-top:-30rpx;margin-bottom:28rpx}.section-card{margin-bottom:24rpx;padding:36rpx 30rpx 42rpx}.section-head{margin-bottom:22rpx}.field{margin-top:20rpx;padding:22rpx}.map-section-heading{margin-top:38rpx;margin-bottom:18rpx}
+.cover-focus-control{margin-top:18rpx;padding:20rpx;border:1rpx solid #dfe9df;border-radius:16rpx;background:#f8fbf7}.cover-focus-control>view:first-child strong,.cover-focus-control>view:first-child text{display:block}.cover-focus-control>view:first-child strong{color:#385446;font-size:25rpx}.cover-focus-control>view:first-child text{margin-top:6rpx;color:#77877d;font-size:20rpx;line-height:1.4}.focus-options{display:flex;gap:14rpx;margin-top:16rpx}.focus-options>view{display:flex;min-width:0;flex:1;align-items:center;justify-content:space-between;padding:14rpx;border-radius:12rpx;background:#fff}.focus-options text{color:#75847a;font-size:21rpx}.focus-options picker{color:#365447;font-size:22rpx;font-weight:700}
 .editor-hero view:first-child>text{font-size:40rpx;line-height:1.25}.step-item small{font-size:21rpx;line-height:1.25}.section-head strong{font-size:33rpx;line-height:1.3}.field>text{font-size:25rpx;line-height:1.25}.field input{font-size:28rpx;line-height:1.4}.map-section-heading strong{font-size:32rpx;line-height:1.3}.location-search-box input{font-size:27rpx}.channel-scope>text{font-size:25rpx}.channel-picker{padding:22rpx}.channel-picker strong{font-size:28rpx;line-height:1.3}.channel-picker small{margin-top:7rpx;line-height:1.45}.map-picker-footer{padding:20rpx 22rpx}.map-picker-footer small{margin-top:8rpx;line-height:1.5}.picker-item{min-height:116rpx}.picker-item strong{font-size:29rpx;line-height:1.25}.picker-item small{margin-top:7rpx;line-height:1.2}
 </style>

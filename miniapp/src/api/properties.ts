@@ -3,9 +3,12 @@ import { request } from "./client";
 export interface Property {
   id: string;
   title: string;
+  marketingPhrase?: string;
   community: string;
   location: string;
   areaLabel?: string;
+  coverFocusX?: number;
+  coverFocusY?: number;
   doorplateLabel?: string;
   displayTags?: string[];
   buildingNo?: string;
@@ -14,6 +17,8 @@ export interface Property {
   latitude?: number;
   longitude?: number;
   layout: string;
+  actualLayout?: string;
+  wholeLayout?: string;
   rentMonthly: number;
   feeText: string;
   rentType?: string;
@@ -24,6 +29,8 @@ export interface Property {
   depositPayment?: string;
   utilitiesText?: string;
   areaSqm?: number;
+  actualAreaSqm?: number;
+  wholeAreaSqm?: number;
   floorInfo?: string;
   orientation?: string;
   elevator?: string;
@@ -160,6 +167,11 @@ export interface PublicConfig {
     title?: string;
     subtitle?: string;
     backgroundImage?: string;
+    channelTitle?: string;
+    allChannelsText?: string;
+    recommendationTitle?: string;
+    viewAllText?: string;
+    nearbyLabel?: string;
   }>;
   shareCard?: {
     titlePrefix?: string;
@@ -167,6 +179,7 @@ export interface PublicConfig {
     posterFields?: string[];
   };
   listingTitle?: {
+    marketingPhrases?: string[];
     customerAllowedFields?: string[];
     enabledFields?: string[];
     customerDetailFields?: string[];

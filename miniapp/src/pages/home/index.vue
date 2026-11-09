@@ -87,13 +87,36 @@ const coverUrl = (item?: Property) => {
   const cover = item?.media?.find((media) => media.type === "image")?.url;
   return cover ? resolveAssetUrl(cover) : "";
 };
+const masonryMedia = (item: Property) =>
+  item.media?.find((media) => media.type === "video") || item.media?.find((media) => media.type === "image");
+const coverObjectPosition = (item: Property) => {
+  const x = [0, 50, 100].includes(Number(item.coverFocusX)) ? Number(item.coverFocusX) : 50;
+  const y = [0, 50, 100].includes(Number(item.coverFocusY)) ? Number(item.coverFocusY) : 50;
+  return `${x}% ${y}%`;
+};
 const orderedFields = () => [...(config.value.listingTitle?.listTagOrder || []), ...(config.value.listingTitle?.enabledFields || [])].filter((field, index, all) => field !== "community" && field !== "unit" && (config.value.listingTitle?.enabledFields || []).includes(field) && all.indexOf(field) === index);
 const primaryLabels = (item: Property) => uniqueListingTags(orderedFields().filter(field => (config.value.listingTitle?.listTagTopFields || []).includes(field)).map((field) => listingTagValue(item, field)));
 const secondaryLabels = (item: Property) => uniqueListingTags(orderedFields().filter(field => !(config.value.listingTitle?.listTagTopFields || []).includes(field)).map((field) => listingTagValue(item, field)));
 const allLabels = (item: Property) => uniqueListingTags([...primaryLabels(item), ...secondaryLabels(item)]);
-const adminDoorplate = (item: Property) => isAdmin.value && config.value.listingTitle?.adminEnabledFields?.includes("unit") ? listingDoorplate(item) : "";
+const homeMasonryColumns = computed(() => {
+  const columns: Property[][] = [[], []];
+  const heights = [0, 0];
+  homeProperties.value.slice(0, 6).forEach((item) => {
+    const copyLength = `${listingTitle(item)} ${allLabels(item).join(' ')}`.length;
+    const estimate = 360 + Math.ceil(copyLength / 12) * 36;
+    const index = heights[0] <= heights[1] ? 0 : 1;
+    columns[index].push(item);
+    heights[index] += estimate;
+  });
+  return columns;
+});
+// The operator card always carries the unit identifier. It is operational
+// metadata, so it must not depend on the public-facing tag configuration.
+const adminDoorplate = (item: Property) => listingDoorplate(item) || "待补充";
 const listingTitle = (item: Property) => {
-  return publicListingTitle(item, config.value.listingTitle?.enabledFields);
+  return isAdmin.value
+    ? String(item.community || item.title || "房源").trim()
+    : publicListingTitle(item, config.value.listingTitle?.enabledFields);
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -104,6 +127,16 @@ const cardLocation = (value: unknown) => {
 };
 const listingSubtitle = (item: Property) => {
   return cardLocation(item.location);
+};
+const channelLabel = (item: Property) => {
+  const direct = config.value.featuredChannels.find((channel) => channel.title && channel.title === item.areaLabel);
+  if (direct) return direct.title;
+  if (!item.latitude || !item.longitude) return "";
+  return config.value.featuredChannels
+    .filter((channel) => channel.title && channel.latitude && channel.longitude)
+    .map((channel) => ({ channel, distance: distanceKm(Number(channel.latitude), Number(channel.longitude), item.latitude!, item.longitude!) }))
+    .filter(({ channel, distance }) => distance <= Number(channel.radiusKm || 3))
+    .sort((left, right) => left.distance - right.distance)[0]?.channel.title || "";
 };
 onShow(async () => {
   isAdmin.value = getSession()?.role === "admin";
@@ -151,7 +184,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? (homePresentation.recommendationTitle || "推荐房源") : `${activeKind}房源` }}</strong><b @click="browseFiltered">{{ homePresentation.viewAllText || '查看房源' }}</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing" :class="{ 'admin-listing': isAdmin }" @click="open(item.id)"><view class="listing-image"><image v-if="coverUrl(item)" :src="coverUrl(item)" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">可租</view><view v-if="!isAdmin" class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-listing-address">{{ listingSubtitle(item) }}</view><view v-if="adminDoorplate(item)" class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-if="homeProperties.length" class="property-list"><view v-if="!isAdmin" class="home-masonry"><view v-for="(column, columnIndex) in homeMasonryColumns" :key="`home-column-${columnIndex}`" class="home-masonry-column"><view v-for="item in column" :key="item.id" class="home-masonry-card" @click="open(item.id)"><view class="home-masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play">▶</view><view v-if="channelLabel(item)" class="home-cover-location">⌖ {{ channelLabel(item) }}</view><view class="heart-button"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="home-masonry-copy" :class="{ 'without-tags': !allLabels(item).length }"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="allLabels(item).length" class="home-masonry-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></view><view v-else v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing admin-listing" @click="open(item.id)"><view class="listing-image"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play admin-video-play">▶</view><view v-if="channelLabel(item)" class="admin-cover-location">⌖ {{ channelLabel(item) }}</view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
   </view>
 </template>
@@ -172,6 +205,9 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 /* Keep the primary CTA in the document flow: it should never cover a channel or heading. */
 .home-page{padding-bottom:42rpx}.request-fab{position:static;display:flex;align-items:center;justify-content:center;gap:8rpx;width:max-content;margin:28rpx 32rpx 0;padding:18rpx 22rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:999rpx;background:#5e6d2e;color:#fff;box-shadow:0 10rpx 22rpx rgba(58,65,26,.18);font-size:25rpx;font-weight:700;line-height:1.2}.request-fab image{width:30rpx;height:30rpx}.recommend-head{margin-top:46rpx}.channel{flex:none}.channel-title,.channel-subtitle{max-width:100%}
 .quick-kind-scroll{width:100%;white-space:nowrap}.quick-kind-row{display:inline-flex;align-items:center;gap:10rpx;padding:18rpx 30rpx 2rpx}.quick-kind-row text{padding:11rpx 18rpx;border:1rpx solid #e8e4db;border-radius:14rpx;background:#fffaf4;color:#697363;font-size:22rpx;line-height:1}.quick-kind-row .quick-kind-label{border:0;background:transparent;color:#4b583f;font-size:23rpx;font-weight:800}.quick-kind-row text.active{border-color:#5e6d2e;background:#e6ecd7;color:#40543f;font-weight:800}
+/* Customer recommendations are a true two-column masonry: image-first, with cards growing only for their own content. */
+.home-masonry{display:flex;align-items:flex-start;gap:16rpx}.home-masonry-column{min-width:0;flex:1}.home-masonry-card{overflow:hidden;margin-bottom:16rpx;border:1rpx solid #e9e2d8;border-radius:20rpx;background:#fffdf9;box-shadow:0 7rpx 18rpx rgba(55,65,50,.05)}.home-masonry-cover{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;background:#dfd4be}.home-masonry-cover image{width:100%;height:100%}.home-masonry-cover .heart-button{top:10rpx;right:10rpx;width:42rpx;height:42rpx}.home-masonry-cover .heart-button image{width:26rpx;height:26rpx}.home-video-play{position:absolute;top:50%;left:50%;display:grid;width:62rpx;height:62rpx;place-items:center;border:2rpx solid rgba(255,255,255,.88);border-radius:50%;background:rgba(28,38,30,.5);color:#fff;font-size:28rpx;line-height:1;transform:translate(-50%,-50%);padding-left:4rpx;box-sizing:border-box}.home-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:28rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:17rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.home-masonry-copy{padding:15rpx 14rpx 16rpx}.home-masonry-copy .home-listing-title{display:-webkit-box;overflow:hidden;font-size:26rpx;line-height:1.35;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.home-masonry-copy .home-listing-address{display:-webkit-box;max-height:none;margin-top:8rpx;font-size:19rpx;line-height:1.45;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.home-masonry-tags{display:flex;flex-wrap:wrap;gap:6rpx;margin-top:10rpx}.home-masonry-tags text{padding:5rpx 7rpx;border-radius:6rpx;background:#edf0dc;color:#536a45;font-size:17rpx;line-height:1.15}.home-masonry-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}.home-masonry-copy .listing-price{display:inline-flex;margin-top:14rpx;color:#d76440;font-size:30rpx;font-weight:800;line-height:1}.home-masonry-copy .listing-price .price-unit{margin-left:3rpx;color:#8a8f85;font-size:18rpx;font-weight:400}
+.home-masonry-copy.without-tags .listing-price{margin-top:10rpx}
 
 /* Final visual baseline: keep the first screen on a single 32rpx grid and
    neutralise the legacy selector rules above while old data remains compatible. */
@@ -222,4 +258,10 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .listing:active{opacity:.9;transform:scale(.995)}
 .tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.listing-info .tag-stack .tags{height:29rpx;margin:0}.listing-info .tag-stack .tags text{padding:4rpx 8rpx;font-size:19rpx;line-height:1.1}.listing-info .fee-tags text{background:#f8eadf;color:#b7644b}
 .admin-listing{height:auto;min-height:250rpx}.admin-listing .listing-image,.admin-listing .listing-info{height:auto;min-height:226rpx}.tag-layout-wrap .all-tags{height:auto!important;max-height:58rpx;flex-wrap:wrap;gap:5rpx 7rpx;overflow:hidden}.tag-layout-wrap .all-tags text{padding:4rpx 8rpx;font-size:19rpx}.tag-layout-wrap .all-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}
+/* Recommendation cards use a responsive photo/text ratio: 44% / 53%, with a 3% gutter. */
+.listing:not(.admin-listing){display:grid;grid-template-columns:44% minmax(0,1fr);column-gap:3%;height:232rpx}.listing:not(.admin-listing) .listing-image{width:100%;height:208rpx}.listing:not(.admin-listing) .listing-info{width:auto;height:208rpx;min-width:0}
+.listing:not(.admin-listing) .tag-stack{width:100%;align-items:flex-end}.listing:not(.admin-listing) .tag-stack .tags{width:100%;justify-content:flex-end}
+.listing:not(.admin-listing) .listing-info{align-items:flex-end;text-align:right}.listing:not(.admin-listing) .home-listing-title,.listing:not(.admin-listing) .home-listing-address,.listing:not(.admin-listing) .home-admin-doorplate{text-align:right}
+.home-masonry-cover video{width:100%;height:100%}
+.admin-listing .listing-image video{display:block;width:100%;height:100%}.admin-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:24rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:18rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.admin-video-play{width:54rpx;height:54rpx;font-size:24rpx}.admin-listing .home-admin-doorplate{margin-top:8rpx}.admin-listing .tag-stack{margin-top:10rpx}
 </style>

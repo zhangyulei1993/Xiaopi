@@ -17,7 +17,7 @@ type MiniappLocation struct {
 }
 
 type FeaturedChannel struct {
-	ID        string `json:"id,omitempty"`
+	ID        string  `json:"id,omitempty"`
 	Icon      string  `json:"icon"`
 	Title     string  `json:"title"`
 	Subtitle  string  `json:"subtitle"`
@@ -30,24 +30,23 @@ type FeaturedChannel struct {
 // PagePresentation is intentionally small: it gives operations control over
 // page-facing copy and an optional background without making layout editable.
 type PagePresentation struct {
-	Title           string `json:"title"`
-	Subtitle        string `json:"subtitle"`
-	BackgroundImage string `json:"backgroundImage"`
-	ChannelTitle string `json:"channelTitle,omitempty"`
-	AllChannelsText string `json:"allChannelsText,omitempty"`
+	Title               string `json:"title"`
+	Subtitle            string `json:"subtitle"`
+	BackgroundImage     string `json:"backgroundImage"`
+	ChannelTitle        string `json:"channelTitle,omitempty"`
+	AllChannelsText     string `json:"allChannelsText,omitempty"`
 	RecommendationTitle string `json:"recommendationTitle,omitempty"`
-	ViewAllText string `json:"viewAllText,omitempty"`
-	EmptyText string `json:"emptyText,omitempty"`
-	NearbyLabel string `json:"nearbyLabel,omitempty"`
+	ViewAllText         string `json:"viewAllText,omitempty"`
+	NearbyLabel         string `json:"nearbyLabel,omitempty"`
 }
 
 type PropertyStatusLabels struct {
-	Draft string `json:"draft"`
+	Draft         string `json:"draft"`
 	PendingReview string `json:"pendingReview"`
-	Published string `json:"published"`
-	Available string `json:"available"`
-	Rented string `json:"rented"`
-	Offline string `json:"offline"`
+	Published     string `json:"published"`
+	Available     string `json:"available"`
+	Rented        string `json:"rented"`
+	Offline       string `json:"offline"`
 }
 
 type ShareCardConfig struct {
@@ -57,6 +56,9 @@ type ShareCardConfig struct {
 }
 
 type ListingTitleConfig struct {
+	// MarketingPhrases is the operator-maintained source for optional
+	// customer-facing title copy. Each listing saves its selected text.
+	MarketingPhrases []string `json:"marketingPhrases"`
 	// CustomerAllowedFields is the operator-managed set of fields the customer
 	// perspective is allowed to choose from. EnabledFields is its final visible
 	// subset, so operators can prepare choices without exposing every field.
@@ -148,7 +150,7 @@ func DefaultPublicConfig() PublicConfig {
 			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 3},
 		},
 		PagePresentations: map[string]PagePresentation{
-			"home":              {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈", ChannelTitle: "精选频道", AllChannelsText: "全部频道", RecommendationTitle: "推荐房源", ViewAllText: "查看全部", EmptyText: "暂时没有匹配的房源", NearbyLabel: "附近"},
+			"home":              {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈", ChannelTitle: "精选频道", AllChannelsText: "全部频道", RecommendationTitle: "推荐房源", ViewAllText: "查看全部", NearbyLabel: "附近"},
 			"properties":        {Title: "找一处合适的家", Subtitle: "按地区和预算筛选"},
 			"propertyDetail":    {Title: "房源详情", Subtitle: "真实房源，放心查看"},
 			"requests":          {Title: "小皮帮你找房", Subtitle: "告诉我们你的找房需求"},
@@ -164,6 +166,7 @@ func DefaultPublicConfig() PublicConfig {
 			PosterFields: []string{"rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"},
 		},
 		ListingTitle: ListingTitleConfig{
+			MarketingPhrases: []string{"好房快抢", "捡漏不等人"},
 			// 门牌属于精确住址信息，默认不向普通用户列表公开；管理员可在后台
 			// 明确确认风险后开启独立的“门牌标签”。
 			CustomerAllowedFields: []string{"community", "floor", "layout", "rentType", "listingSource", "fee", "area"},
@@ -183,8 +186,8 @@ func DefaultPublicConfig() PublicConfig {
 			Modules: []PropertyDetailModule{
 				{Key: "overview", Title: "房屋概况", Enabled: true},
 				{Key: "location", Title: "位置与周边", Enabled: true},
-				{Key: "facilities", Title: "房屋设施与环境", Enabled: true},
-				{Key: "description", Title: "房源描述", Enabled: true},
+				{Key: "facilities", Title: "房屋设施", Enabled: true},
+				{Key: "description", Title: "房源简介", Enabled: true},
 				{Key: "nearby", Title: "附近房源", Enabled: true},
 			},
 			Nearby: PropertyDetailNearbyConfig{RadiusKm: 3, Relation: "distance", Sort: "distance", Limit: 4},
@@ -242,17 +245,28 @@ func (config *PublicConfig) Normalize() {
 		presentation.AllChannelsText = strings.TrimSpace(presentation.AllChannelsText)
 		presentation.RecommendationTitle = strings.TrimSpace(presentation.RecommendationTitle)
 		presentation.ViewAllText = strings.TrimSpace(presentation.ViewAllText)
-		presentation.EmptyText = strings.TrimSpace(presentation.EmptyText)
 		presentation.NearbyLabel = strings.TrimSpace(presentation.NearbyLabel)
 		config.PagePresentations[key] = presentation
 	}
 	statusDefaults := DefaultPublicConfig().StatusLabels
-	if config.StatusLabels.Draft == "" { config.StatusLabels.Draft = statusDefaults.Draft }
-	if config.StatusLabels.PendingReview == "" { config.StatusLabels.PendingReview = statusDefaults.PendingReview }
-	if config.StatusLabels.Published == "" { config.StatusLabels.Published = statusDefaults.Published }
-	if config.StatusLabels.Available == "" { config.StatusLabels.Available = statusDefaults.Available }
-	if config.StatusLabels.Rented == "" { config.StatusLabels.Rented = statusDefaults.Rented }
-	if config.StatusLabels.Offline == "" { config.StatusLabels.Offline = statusDefaults.Offline }
+	if config.StatusLabels.Draft == "" {
+		config.StatusLabels.Draft = statusDefaults.Draft
+	}
+	if config.StatusLabels.PendingReview == "" {
+		config.StatusLabels.PendingReview = statusDefaults.PendingReview
+	}
+	if config.StatusLabels.Published == "" {
+		config.StatusLabels.Published = statusDefaults.Published
+	}
+	if config.StatusLabels.Available == "" {
+		config.StatusLabels.Available = statusDefaults.Available
+	}
+	if config.StatusLabels.Rented == "" {
+		config.StatusLabels.Rented = statusDefaults.Rented
+	}
+	if config.StatusLabels.Offline == "" {
+		config.StatusLabels.Offline = statusDefaults.Offline
+	}
 	config.ShareCard.TitlePrefix = strings.TrimSpace(config.ShareCard.TitlePrefix)
 	if len(config.ShareCard.TitleFields) == 0 {
 		config.ShareCard.TitleFields = append([]string(nil), DefaultPublicConfig().ShareCard.TitleFields...)
@@ -265,6 +279,23 @@ func (config *PublicConfig) Normalize() {
 	if config.ListingTitle.EnabledFields == nil {
 		config.ListingTitle.EnabledFields = append([]string(nil), DefaultPublicConfig().ListingTitle.EnabledFields...)
 	}
+	if config.ListingTitle.MarketingPhrases == nil {
+		config.ListingTitle.MarketingPhrases = append([]string(nil), DefaultPublicConfig().ListingTitle.MarketingPhrases...)
+	}
+	phrases := make([]string, 0, len(config.ListingTitle.MarketingPhrases))
+	knownPhrases := map[string]struct{}{}
+	for _, phrase := range config.ListingTitle.MarketingPhrases {
+		phrase = strings.TrimSpace(phrase)
+		if phrase == "" {
+			continue
+		}
+		if _, exists := knownPhrases[phrase]; exists {
+			continue
+		}
+		knownPhrases[phrase] = struct{}{}
+		phrases = append(phrases, phrase)
+	}
+	config.ListingTitle.MarketingPhrases = phrases
 	if config.ListingTitle.CustomerDetailFields == nil {
 		// Legacy configurations had one public tag list; preserve that result
 		// as the initial detail setting until operations changes it explicitly.
@@ -441,6 +472,20 @@ func (config PublicConfig) Validate() error {
 	}
 	if config.ContactPhone != "" && !publicConfigPhonePattern.MatchString(config.ContactPhone) {
 		return errors.New("联系电话格式不正确")
+	}
+	if len(config.ListingTitle.MarketingPhrases) > 20 {
+		return errors.New("广告短语最多 20 条")
+	}
+	seenPhrases := map[string]struct{}{}
+	for _, phrase := range config.ListingTitle.MarketingPhrases {
+		phrase = strings.TrimSpace(phrase)
+		if phrase == "" || utf8.RuneCountInString(phrase) > 16 {
+			return errors.New("广告短语需为 1 到 16 个字符")
+		}
+		if _, exists := seenPhrases[phrase]; exists {
+			return errors.New("广告短语不能重复")
+		}
+		seenPhrases[phrase] = struct{}{}
 	}
 	if config.RelatedPropertyRadiusKm < 0.5 || config.RelatedPropertyRadiusKm > 20 {
 		return errors.New("附近房源关联距离必须在 0.5 到 20 公里之间")
