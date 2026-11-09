@@ -112,7 +112,9 @@ export interface RentalRequest {
   id?: string;
   requestType: "general" | "appointment" | "area_subscription";
   propertyId?: string;
+	contactName?: string;
   phone: string;
+	preferredTime?: string;
   location: string;
   layout: string;
   budgetMin: number;
@@ -127,6 +129,20 @@ export interface OperationLog { id: string; targetType: string; targetId: string
 export interface FavoriteContact { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
 export const createRentalRequest = (item: RentalRequest) =>
   request<RentalRequest>("/v1/rental-requests", { method: "POST", data: item });
+export interface ContactEvent {
+  id?: string;
+  userId?: string;
+  propertyId: string;
+  type: "wechat_consult" | "phone_call";
+  source?: string;
+  nickname?: string;
+  phone?: string;
+  propertyName?: string;
+  createdAt?: string;
+}
+export const recordContactEvent = (item: ContactEvent) =>
+  request<{ recorded: boolean }>("/v1/contact-events", { method: "POST", data: item });
+export const listContactEvents = () => request<ContactEvent[]>("/v1/admin/contact-events");
 export const listFavorites = () => request<string[]>("/v1/favorites");
 export const setFavorite = (propertyId: string, favorite: boolean) =>
   request<{ propertyId: string; favorite: boolean }>(

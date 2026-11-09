@@ -25,6 +25,7 @@ type fakeStore struct {
 	temporaryAccess []domain.TemporaryAccess
 	temporaryHashes map[string]string
 	rentalRequests  []domain.RentalRequest
+	contactEvents   []domain.ContactEvent
 	favorites       map[string][]string
 	footprints      map[string][]domain.Footprint
 	statusErr       error
@@ -76,6 +77,18 @@ func (f *fakeStore) CreateRentalRequest(_ context.Context, item domain.RentalReq
 }
 func (*fakeStore) UpdateRentalRequestFollowUp(context.Context, string, string, string) error {
 	return nil
+}
+func (f *fakeStore) ListContactEvents(context.Context) ([]domain.ContactEvent, error) {
+	return f.contactEvents, nil
+}
+func (f *fakeStore) CreateContactEvent(_ context.Context, item domain.ContactEvent) (bool, error) {
+	for _, current := range f.contactEvents {
+		if current.UserID == item.UserID && current.PropertyID == item.PropertyID && current.Type == item.Type && time.Since(current.CreatedAt) < 30*time.Minute {
+			return false, nil
+		}
+	}
+	f.contactEvents = append(f.contactEvents, item)
+	return true, nil
 }
 func (*fakeStore) CreateOperationLog(context.Context, domain.OperationLog) error { return nil }
 func (*fakeStore) ListOperationLogs(context.Context, int) ([]domain.OperationLog, error) {
@@ -436,7 +449,7 @@ func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 		t.Fatalf("unexpected favorites: %#v", ids)
 	}
 
-	created := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "property-1", "budgetMin": 1500, "budgetMax": 2500}, userToken)
+	created := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "property-1", "contactName": "小王", "preferredTime": "周末", "budgetMin": 1500, "budgetMax": 2500}, userToken)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("rental request failed: %d %s", created.Code, created.Body.String())
 	}
@@ -456,6 +469,24 @@ func TestAppointmentRequiresBoundPhone(t *testing.T) {
 	}, userToken)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "绑定手机号") {
 		t.Fatalf("expected phone-binding rejection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestContactEventsAreRecordedAndDeduplicated(t *testing.T) {
+	dataStore := &fakeStore{properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}}}
+	server := testServer(dataStore)
+	userToken, err := server.tokens.issue("user-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/contact-events", map[string]any{"propertyId": "property-1", "type": "wechat_consult", "source": "detail"}, userToken)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("contact event failed: %d %s", response.Code, response.Body.String())
+		}
+	}
+	if len(dataStore.contactEvents) != 1 || dataStore.contactEvents[0].Type != "wechat_consult" {
+		t.Fatalf("expected one deduplicated contact event, got %#v", dataStore.contactEvents)
 	}
 }
 
@@ -488,7 +519,7 @@ func TestUserActionsRejectUnavailablePropertyAndUseBoundPhone(t *testing.T) {
 			t.Fatalf("appointment for %s expected 404, got %d: %s", target, response.Code, response.Body.String())
 		}
 	}
-	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "available", "phone": "13900000000"}, token)
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", map[string]any{"requestType": "appointment", "propertyId": "available", "contactName": "小王", "preferredTime": "周末下午", "phone": "13900000000"}, token)
 	if response.Code != http.StatusCreated || len(dataStore.rentalRequests) != 1 || dataStore.rentalRequests[0].Phone != "13800138000" {
 		t.Fatalf("appointment must use the verified bound phone: %d %#v", response.Code, dataStore.rentalRequests)
 	}

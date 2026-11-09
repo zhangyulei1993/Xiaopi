@@ -39,6 +39,8 @@ type Store interface {
 	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
 	CreateRentalRequest(context.Context, domain.RentalRequest) error
 	UpdateRentalRequestFollowUp(context.Context, string, string, string) error
+	ListContactEvents(context.Context) ([]domain.ContactEvent, error)
+	CreateContactEvent(context.Context, domain.ContactEvent) (bool, error)
 	CreateOperationLog(context.Context, domain.OperationLog) error
 	ListOperationLogs(context.Context, int) ([]domain.OperationLog, error)
 	ListFavoritePropertyIDs(context.Context, string) ([]string, error)
@@ -125,8 +127,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/property-leads/follow-up", s.requireRoles(s.updatePropertyLeadFollowUp, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/rental-requests", s.requireRoles(s.listRentalRequests, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/admin/rental-requests/follow-up", s.requireRoles(s.updateRentalRequestFollowUp, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/contact-events", s.requireRoles(s.listContactEvents, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/operation-logs", s.requireRoles(s.listOperationLogs, roleAdmin))
 	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))
+	mux.HandleFunc("POST /api/v1/contact-events", s.requireRoles(s.createContactEvent, roleUser))
 	mux.HandleFunc("GET /api/v1/favorites", s.requireRoles(s.listFavorites, roleUser))
 	mux.HandleFunc("PUT /api/v1/favorites/{propertyID}", s.requireRoles(s.favoriteProperty, roleUser))
 	mux.HandleFunc("DELETE /api/v1/favorites/{propertyID}", s.requireRoles(s.unfavoriteProperty, roleUser))
@@ -221,6 +225,59 @@ func (s *Server) listRentalRequests(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
 }
 
+func (s *Server) listContactEvents(w http.ResponseWriter, r *http.Request) {
+	items, err := s.store.ListContactEvents(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list contact events")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) createContactEvent(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		PropertyID string `json:"propertyId"`
+		Type       string `json:"type"`
+		Source     string `json:"source"`
+	}
+	if decodeJSON(w, r, &input) != nil {
+		writeError(w, http.StatusBadRequest, "invalid contact event")
+		return
+	}
+	input.PropertyID = strings.TrimSpace(input.PropertyID)
+	input.Type = strings.TrimSpace(input.Type)
+	input.Source = strings.TrimSpace(input.Source)
+	if input.PropertyID == "" || (input.Type != "wechat_consult" && input.Type != "phone_call") {
+		writeError(w, http.StatusBadRequest, "invalid contact event")
+		return
+	}
+	if !s.isAvailableProperty(r.Context(), input.PropertyID) {
+		writeError(w, http.StatusNotFound, "可租房源不存在或已下架")
+		return
+	}
+	if input.Source == "" {
+		input.Source = "detail"
+	}
+	eventID, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create contact event")
+		return
+	}
+	created, err := s.store.CreateContactEvent(r.Context(), domain.ContactEvent{
+		ID:         eventID,
+		UserID:     claimsFromContext(r.Context()).Subject,
+		PropertyID: input.PropertyID,
+		Type:       input.Type,
+		Source:     input.Source,
+		CreatedAt:  time.Now(),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record contact event")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": map[string]any{"recorded": created}})
+}
+
 func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 	var item domain.RentalRequest
 	if decodeJSON(w, r, &item) != nil {
@@ -228,7 +285,9 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item.RequestType = strings.TrimSpace(item.RequestType)
+	item.ContactName = strings.TrimSpace(item.ContactName)
 	item.Phone = normalizePhone(item.Phone)
+	item.PreferredTime = strings.TrimSpace(item.PreferredTime)
 	item.Location = strings.TrimSpace(item.Location)
 	item.Layout = strings.TrimSpace(item.Layout)
 	item.Note = strings.TrimSpace(item.Note)
@@ -260,6 +319,14 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		// Never accept an arbitrary number from the client for a high-intent
 		// request: the verified WeChat-bound number is the contact of record.
 		item.Phone = phone
+	}
+	if item.RequestType == "appointment" && item.ContactName == "" {
+		writeError(w, http.StatusBadRequest, "请填写怎么称呼您")
+		return
+	}
+	if item.RequestType == "appointment" && item.PreferredTime == "" {
+		writeError(w, http.StatusBadRequest, "请选择方便看房的时间")
+		return
 	}
 	item.ID, _ = newID()
 	item.UserID = userID
@@ -575,8 +642,8 @@ type publicProperty struct {
 	Community            string                 `json:"community"`
 	Location             string                 `json:"location"`
 	AreaLabel            string                 `json:"areaLabel"`
-	CoverFocusX           int                    `json:"coverFocusX"`
-	CoverFocusY           int                    `json:"coverFocusY"`
+	CoverFocusX          int                    `json:"coverFocusX"`
+	CoverFocusY          int                    `json:"coverFocusY"`
 	DoorplateLabel       string                 `json:"doorplateLabel,omitempty"`
 	DisplayTags          []string               `json:"displayTags,omitempty"`
 	Latitude             float64                `json:"latitude"`

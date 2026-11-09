@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { onLoad, onShareAppMessage } from "@dcloudio/uni-app";
+import { onLoad, onShow, onShareAppMessage } from "@dcloudio/uni-app";
 import { computed, nextTick, ref } from "vue";
 import { request, resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
   deleteProperty,
+	bindWechatPhone,
+	createRentalRequest,
+	getWechatUserProfile,
   listFavorites,
   listProperties,
+	recordContactEvent,
   recordFootprint,
   setFavorite,
   type Property,
@@ -16,12 +20,20 @@ import { amenityIcon } from "../../utils/amenities";
 import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
 import { listingDoorplate, listingLayout, listingTagValue, uniqueListingTags } from "../../utils/listing-title";
+import { clearPendingAction, peekPendingAction, savePendingAction } from "../../utils/pending-action";
 const item = ref<Property | null>(null),
   contactPhone = ref(""),
   brandName = ref("小皮租房"),
   loading = ref(true),
   loadFailed = ref(false),
-  favorite = ref(false);
+  favorite = ref(false),
+  appointmentOpen = ref(false),
+  appointmentSubmitting = ref(false),
+  appointmentBinding = ref(false),
+  boundPhone = ref(""),
+  appointmentName = ref(""),
+  appointmentTime = ref("今天方便");
+const appointmentTimes = ["今天方便", "明天方便", "工作日晚上", "周末方便", "其他时间"];
 const relatedRadiusKm = ref(3);
 const defaultDetailFacilities = [
   { key: "refrigerator", label: "冰箱", group: "家具家电", enabled: true }, { key: "washer", label: "洗衣机", group: "家具家电", enabled: true },
@@ -108,8 +120,13 @@ const load = async (id = "") => {
       titleFields: config?.shareCard?.titleFields?.length ? config.shareCard.titleFields : ["community", "layout"],
       posterFields: config?.shareCard?.posterFields?.length ? config.shareCard.posterFields : ["rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"],
     };
-    if (getSession()?.role === "user")
+    if (getSession()?.role === "user") {
       favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
+		const profile = await getWechatUserProfile().catch(() => null);
+		boundPhone.value = String(profile?.phone || uni.getStorageSync("xiaopi_bound_phone") || "");
+		if (!appointmentName.value) appointmentName.value = String(profile?.nickname || "").trim();
+	}
+		resumePendingAction();
   } catch (error) {
     loadFailed.value = true;
     uni.showToast({
@@ -126,6 +143,7 @@ onLoad((query) => {
   uni.showShareMenu({ menus: ["shareAppMessage", "shareTimeline"] });
   load(String(query?.id || ""));
 });
+onShow(() => resumePendingAction());
 const mediaUrl = resolveAssetUrl;
 const propertyCover = (property: Property) => {
   const cover = property.media?.find((media) => media.type === "image");
@@ -487,14 +505,18 @@ const openPropertyLocation = () => {
     scale: 16,
   });
 };
-const requireUser = () => {
+const requireUser = (pendingAction?: "appointment" | "favorite") => {
   if (getSession()?.role === "user") return true;
-  if (getSession()?.role === "admin") return false;
-  uni.navigateTo({ url: "/pages/auth/login" });
+  if (getSession()?.role === "admin") {
+    uni.showToast({ title: "请切换到普通用户视角操作", icon: "none" });
+    return false;
+  }
+  if (pendingAction && item.value) savePendingAction({ type: pendingAction, propertyId: item.value.id });
+  uni.navigateTo({ url: `/pages/auth/login?reason=${pendingAction || "detail"}` });
   return false;
 };
 const toggle = async () => {
-  if (!item.value || !requireUser()) return;
+  if (!item.value || !requireUser("favorite")) return;
   const next = !favorite.value;
   try {
     await setFavorite(item.value.id, next);
@@ -507,11 +529,77 @@ const toggle = async () => {
     });
   }
 };
-const reserve = () => {
-  if (!item.value || !requireUser()) return;
-  uni.navigateTo({
-    url: `/pages/requests/index?propertyId=${item.value.id}&title=${encodeURIComponent(item.value.title || item.value.community)}`,
-  });
+const maskedPhone = computed(() => {
+  const phone = boundPhone.value;
+  return phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone;
+});
+const openAppointment = async () => {
+  if (!item.value || !requireUser("appointment")) return;
+  if (!boundPhone.value) {
+    const profile = await getWechatUserProfile().catch(() => null);
+    boundPhone.value = String(profile?.phone || uni.getStorageSync("xiaopi_bound_phone") || "");
+    if (!appointmentName.value) appointmentName.value = String(profile?.nickname || "").trim();
+  }
+  appointmentOpen.value = true;
+};
+const resumePendingAction = () => {
+  const pending = peekPendingAction();
+  if (!pending || getSession()?.role !== "user" || pending.propertyId !== item.value?.id) return;
+  clearPendingAction();
+  if (pending.type === "appointment") openAppointment();
+  if (pending.type === "favorite" && !favorite.value) void toggle();
+};
+const bindAppointmentPhone = async (event: { detail: { code?: string } }) => {
+  const code = event.detail.code;
+  if (!code || appointmentBinding.value) return;
+  appointmentBinding.value = true;
+  try {
+    const result = await bindWechatPhone(code);
+    boundPhone.value = result.phone;
+    uni.setStorageSync("xiaopi_bound_phone", result.phone);
+    uni.showToast({ title: "手机号已绑定" });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "手机号绑定失败", icon: "none" });
+  } finally {
+    appointmentBinding.value = false;
+  }
+};
+const submitAppointment = async () => {
+  if (!item.value || appointmentSubmitting.value) return;
+  if (!boundPhone.value) {
+    uni.showToast({ title: "请先绑定手机号", icon: "none" });
+    return;
+  }
+  if (!appointmentName.value.trim() || !appointmentTime.value) {
+    uni.showToast({ title: "请填写称谓并选择方便时间", icon: "none" });
+    return;
+  }
+  appointmentSubmitting.value = true;
+  try {
+    await createRentalRequest({
+      requestType: "appointment",
+      propertyId: item.value.id,
+      contactName: appointmentName.value.trim(),
+      phone: boundPhone.value,
+      preferredTime: appointmentTime.value,
+      location: item.value.location || item.value.community || "",
+      layout: listingLayout(item.value),
+      budgetMin: Number(item.value.rentMonthly) || 0,
+      budgetMax: Number(item.value.rentMonthly) || 0,
+      moveInDate: "",
+      note: "",
+    });
+    appointmentOpen.value = false;
+    uni.showModal({ title: "预约已提交", content: "小皮会根据你选择的时间联系确认看房。", showCancel: false });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "预约提交失败", icon: "none" });
+  } finally {
+    appointmentSubmitting.value = false;
+  }
+};
+const recordContact = (type: "wechat_consult" | "phone_call") => {
+  if (getSession()?.role !== "user" || !item.value) return;
+  void recordContactEvent({ propertyId: item.value.id, type, source: "detail" }).catch(() => undefined);
 };
 const openProperty = (id: string) =>
   uni.redirectTo({ url: `/pages/properties/detail?id=${id}` });
@@ -577,8 +665,10 @@ const deletePropertyFromPreview = () => {
     },
   });
 };
-const phoneCustomerService = () =>
+const phoneCustomerService = () => {
+  recordContact("phone_call");
   callPhone(contactPhone.value, "客服电话尚未配置");
+};
 </script>
 <template>
   <view v-if="loading" class="page detail-skeleton"
@@ -652,6 +742,7 @@ const phoneCustomerService = () =>
         ><view><small class="kv-key">租赁方式</small><strong class="kv-value">{{ item.rentType || "待补充" }}</strong></view
         ></view
       ></view
+    ><button v-if="!isAdmin" class="appointment-entry" @click="openAppointment"><view><strong>预约看房</strong><text>选个方便时间，小皮来确认</text></view><text>›</text></button
     ><view v-if="item.depositPayment || item.feeText || item.utilitiesText || item.listingSource === '转租' || (item.rentType === '合租' && (item.layout || item.areaSqm))" class="card detail-info"
       ><view class="detail-section-heading compact"><view><view class="title small">租赁信息</view><small>费用与租期说明</small></view></view
       ><view class="detail-info-grid"
@@ -715,8 +806,9 @@ const phoneCustomerService = () =>
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="detail-signature"><text class="detail-signature-mark">皮</text><strong>{{ brandName || '小皮租房' }}</strong></view
-      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom"><text>在线咨询</text></button
+      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom" @click="recordContact('wechat_consult')"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
+    ><view v-if="appointmentOpen" class="appointment-mask" @click.self="appointmentOpen = false"><view class="appointment-sheet"><view class="appointment-sheet-head"><view><strong>预约看房</strong><text>{{ item.title || item.community }}</text></view><text @click="appointmentOpen = false">×</text></view><template v-if="boundPhone"><view class="appointment-field"><text>怎么称呼您</text><input v-model.trim="appointmentName" maxlength="20" placeholder="例如：张女士" /></view><view class="appointment-field"><text>联系手机号</text><strong>{{ maskedPhone }}</strong></view><view class="appointment-field"><text>什么时候方便</text><view class="appointment-times"><text v-for="time in appointmentTimes" :key="time" :class="{ active: appointmentTime === time }" @click="appointmentTime = time">{{ time }}</text></view></view><button class="appointment-submit" :loading="appointmentSubmitting" @click="submitAppointment">提交预约</button></template><template v-else><view class="appointment-bind"><strong>先绑定手机号</strong><text>用于确认看房安排，只会展示脱敏号码。</text><button open-type="getPhoneNumber" :loading="appointmentBinding" @getphonenumber="bindAppointmentPhone">绑定手机号并继续</button></view></template></view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
 </template>
@@ -1058,4 +1150,5 @@ const phoneCustomerService = () =>
 /* Operator-only doorplate is metadata, not part of the public tag stream. */
 .overview-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:8rpx;margin-top:12rpx}.detail-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:8rpx;margin-top:14rpx}.detail-tags-inline{margin-top:0}.detail-tags{display:flex;flex-wrap:wrap;gap:10rpx;margin:0}.detail-tags text{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-detail-doorplate{display:block;box-sizing:border-box;width:max-content;max-width:100%;overflow:hidden;margin-top:13rpx;padding:7rpx 11rpx;border:1rpx solid #d8e2d2;border-radius:9rpx;background:#f3f7ee;color:#40543f;font-size:21rpx;font-weight:700;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
 .detail-tags-classic .detail-tags,.detail-tags-grouped{padding:0;border-radius:0;background:transparent;gap:8rpx}.detail-tags-classic .detail-tags text,.detail-tags-grouped text{background:#fff!important;border:1rpx solid #dce4d5}
+.appointment-entry{box-sizing:border-box;display:flex;width:calc(100% - 48rpx);align-items:center;justify-content:space-between;margin:-2rpx 24rpx 24rpx;padding:22rpx 26rpx;border:1rpx solid #dce7d4;border-radius:20rpx;background:#eef4e9;color:#40543f;text-align:left}.appointment-entry::after{border:0}.appointment-entry view{display:flex;min-width:0;flex-direction:column;gap:6rpx}.appointment-entry strong{font-size:28rpx;line-height:1.2}.appointment-entry view text{color:#7b8974;font-size:21rpx;line-height:1.35}.appointment-entry>text{font-size:38rpx;line-height:1}.appointment-mask{position:fixed;z-index:30;inset:0;display:flex;align-items:flex-end;background:rgba(20,30,22,.46)}.appointment-sheet{box-sizing:border-box;width:100%;padding:30rpx 30rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:30rpx 30rpx 0 0;background:#fffdf9}.appointment-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26rpx}.appointment-sheet-head view{display:flex;min-width:0;flex-direction:column;gap:8rpx}.appointment-sheet-head strong{color:#2c3b2e;font-size:36rpx;line-height:1.2}.appointment-sheet-head view text{overflow:hidden;color:#7a8378;font-size:23rpx;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.appointment-sheet-head>text{width:54rpx;height:54rpx;border-radius:50%;background:#f0f1eb;color:#667260;font-size:42rpx;line-height:49rpx;text-align:center}.appointment-field{padding:22rpx 0;border-top:1rpx solid #ecebe5}.appointment-field>text{display:block;margin-bottom:15rpx;color:#697568;font-size:22rpx}.appointment-field input{height:78rpx;padding:0 20rpx;border-radius:14rpx;background:#f4f5ef;color:#2f3d30;font-size:28rpx}.appointment-field strong{color:#334032;font-size:30rpx;font-weight:600}.appointment-times{display:flex;flex-wrap:wrap;gap:12rpx}.appointment-times text{padding:13rpx 17rpx;border:1rpx solid #dfe5d9;border-radius:12rpx;background:#fff;color:#667260;font-size:22rpx;line-height:1}.appointment-times text.active{border-color:#40543f;background:#40543f;color:#fff}.appointment-submit,.appointment-bind button{margin-top:26rpx;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx;font-weight:750}.appointment-submit::after,.appointment-bind button::after{border:0}.appointment-bind{display:flex;flex-direction:column;gap:13rpx;padding:16rpx 0}.appointment-bind strong{color:#334032;font-size:30rpx}.appointment-bind text{color:#7b8579;font-size:23rpx;line-height:1.55}.appointment-bind button{width:100%}
 </style>

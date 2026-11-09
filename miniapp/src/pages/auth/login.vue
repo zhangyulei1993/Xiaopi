@@ -98,7 +98,9 @@ const loginTemporarily = async () => {
       uni.setStorageSync('xiaopi_bound_phone', result.phone)
       uni.removeStorageSync('xiaopi_show_favorites')
       uni.showToast({ title: '身份已切换' })
-      setTimeout(() => uni.reLaunch({ url: '/pages/me/index' }), 300)
+      // Keep a pending action (for example "预约看房") on its original page.
+      // Temporary access must behave like ordinary WeChat login here.
+      setTimeout(enterApp, 300)
     } catch (error) {
       clearSession()
       uni.removeStorageSync('xiaopi_bound_phone')

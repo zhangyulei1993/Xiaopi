@@ -2,7 +2,7 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { request } from "../../api/client";
-import { getSubscriptionTemplates, registerMessageSubscription, type Property, type PropertyLead, type RentalRequest, type OperationLog, type FavoriteContact } from "../../api/properties";
+import { getSubscriptionTemplates, listContactEvents, registerMessageSubscription, type Property, type PropertyLead, type RentalRequest, type OperationLog, type FavoriteContact, type ContactEvent } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
 import { callPhone } from "../../utils/phone";
@@ -13,6 +13,7 @@ const tab = ref<"leads" | "properties" | "requests" | "interests">("properties")
   requests = ref<RentalRequest[]>([]),
   activities = ref<OperationLog[]>([]),
   interests = ref<FavoriteContact[]>([]),
+	contactEvents = ref<ContactEvent[]>([]),
   loading = ref(false),
   workingID = ref("");
 const appointmentTemplateID = ref("");
@@ -36,12 +37,13 @@ const summary = computed(() => ({
 const load = async () => {
   loading.value = true;
   try {
-    [leads.value, properties.value, requests.value, activities.value, interests.value] = await Promise.all([
+    [leads.value, properties.value, requests.value, activities.value, interests.value, contactEvents.value] = await Promise.all([
       request<PropertyLead[]>("/v1/property-leads"),
       request<Property[]>("/v1/properties"),
       request<RentalRequest[]>("/v1/admin/rental-requests"),
       request<OperationLog[]>("/v1/admin/operation-logs").catch(() => []),
 	  request<FavoriteContact[]>("/v1/admin/favorite-contacts").catch(() => []),
+	  listContactEvents().catch(() => []),
     ]);
 	appointmentTemplateID.value = (await getSubscriptionTemplates().catch(() => null))?.appointment || "";
   } catch (error) {
@@ -186,7 +188,7 @@ const copyProperty = async (property: Property) => {
       ><text :class="{ active: tab === 'requests' }" @click="tab = 'requests'"
         >客户需求 {{ requests.length }}</text
       ><text :class="{ active: tab === 'interests' }" @click="tab = 'interests'"
-        >用户意向 {{ interests.length }}</text
+        >用户意向 {{ interests.length + contactEvents.length }}</text
       ></view
     ><view v-if="tab === 'properties'" class="new-property" @click="edit()"
       ><text>＋</text
@@ -219,6 +221,7 @@ const copyProperty = async (property: Property) => {
     ><template v-else-if="tab === 'requests'"
       ><view v-for="item in requests" :key="item.id" class="card item"
         ><view class="row"><view class="title small">{{ item.requestType === 'appointment' ? '预约看房' : item.requestType === 'area_subscription' ? '片区新房预约' : '找房需求' }}</view><text class="status">{{ item.status || 'new' }}</text></view
+		><view v-if="item.requestType === 'appointment'" class="muted info">{{ item.contactName || '称谓待补充' }} · {{ item.preferredTime || '时间待确认' }}</view
         ><view class="muted info">{{ item.location || '地区待确认' }} · {{ item.layout || '户型不限' }}</view
         ><view class="property-meta"><text>¥ {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} / 月</text><text>{{ item.moveInDate || '入住时间待定' }}</text></view
         ><view v-if="item.note" class="note">{{ item.note }}</view
@@ -227,7 +230,8 @@ const copyProperty = async (property: Property) => {
       ><view v-if="!requests.length" class="empty muted">暂无客户需求</view
       ></template
     ><template v-else-if="tab === 'interests'"
-      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length" class="empty muted">暂无用户关注记录</view></template
+      ><view v-for="item in contactEvents" :key="item.id" class="card item"><view class="row"><view class="title small">{{ item.propertyName || '房源' }}</view><text class="status">{{ item.type === 'phone_call' ? '点击电话' : '在线咨询' }}</text></view><view class="muted">{{ item.nickname || '微信用户' }} · {{ item.phone || '手机号待绑定' }}</view><view class="property-meta"><text>{{ item.source === 'detail' ? '详情页触发' : item.source || '页面触发' }}</text><text>{{ item.createdAt ? new Date(item.createdAt).toLocaleString() : '' }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view
+      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length && !contactEvents.length" class="empty muted">暂无用户意向记录</view></template
     ><template v-else
       ><view v-for="property in properties" :key="property.id" class="card item"
         ><view class="row"

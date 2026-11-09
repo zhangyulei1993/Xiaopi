@@ -17,6 +17,8 @@ const propertyID = ref(""),
 const areaTemplateID = ref("");
 const requiresPhoneBinding = computed(() => Boolean(propertyID.value || areaMode.value));
 const form = reactive({
+	contactName: "",
+	preferredTime: "",
   phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
   location: "",
   layout: "",
@@ -45,6 +47,7 @@ onLoad(async (query) => {
 			form.phone = profile.phone;
 			uni.setStorageSync("xiaopi_bound_phone", profile.phone);
 		}
+		if (profile?.nickname) form.contactName = profile.nickname;
 	}
 });
 const ensureLogin = () => {
@@ -71,13 +74,19 @@ const submit = async () => {
     uni.showToast({ title: "请完善手机号、地区和预算", icon: "none" });
     return;
   }
+	if (propertyID.value && (!form.contactName.trim() || !form.preferredTime.trim())) {
+		uni.showToast({ title: "请填写称谓和方便看房时间", icon: "none" });
+		return;
+	}
   submitting.value = true;
   try {
 	const messageAccepted = areaMode.value ? await requestMessageSubscription(areaTemplateID.value) : false;
     await createRentalRequest({
       requestType: propertyID.value ? "appointment" : areaMode.value ? "area_subscription" : "general",
       propertyId: propertyID.value,
+		contactName: form.contactName,
       phone: form.phone,
+		preferredTime: form.preferredTime,
       location: form.location,
       layout: form.layout,
       budgetMin: Number(form.budgetMin),
@@ -133,6 +142,7 @@ const call = () => callPhone(contactPhone.value);
           : pagePresentation.subtitle
       }}</small></view
     ><view class="card form"
+	  ><view v-if="propertyID" class="field"><text>怎么称呼您 *</text><input v-model.trim="form.contactName" placeholder="例如：张女士" /></view
       ><view v-if="!areaMode" class="field"
         ><text>联系电话 *</text
         ><input
@@ -170,6 +180,7 @@ const call = () => callPhone(contactPhone.value);
             >{{ form.moveInDate || "选择日期" }} <text>›</text></view
           ></picker
         ></view
+	  ><view v-if="propertyID" class="field"><text>方便看房时间 *</text><input v-model.trim="form.preferredTime" placeholder="例如：周末下午 / 工作日晚上" /></view
       ><view class="field"
         ><text>补充要求</text
         ><textarea

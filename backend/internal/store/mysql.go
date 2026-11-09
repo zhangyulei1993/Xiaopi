@@ -187,7 +187,7 @@ func (s *MySQL) CreatePropertyLead(ctx context.Context, lead domain.PropertyLead
 }
 
 func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,request_type,property_id,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest,
 	items := make([]domain.RentalRequest, 0)
 	for rows.Next() {
 		var item domain.RentalRequest
-		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.Phone, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.ContactName, &item.Phone, &item.PreferredTime, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -236,8 +236,38 @@ func (s *MySQL) ListOperationLogs(ctx context.Context, limit int) ([]domain.Oper
 }
 
 func (s *MySQL) CreateRentalRequest(ctx context.Context, item domain.RentalRequest) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rental_requests (id,user_id,request_type,property_id,phone,location,layout,budget_min,budget_max,move_in_date,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.UserID, item.RequestType, item.PropertyID, item.Phone, item.Location, item.Layout, item.BudgetMin, item.BudgetMax, item.MoveInDate, item.Note, item.Status, item.CreatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rental_requests (id,user_id,request_type,property_id,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.UserID, item.RequestType, item.PropertyID, item.ContactName, item.Phone, item.PreferredTime, item.Location, item.Layout, item.BudgetMin, item.BudgetMax, item.MoveInDate, item.Note, item.Status, item.CreatedAt)
 	return err
+}
+
+func (s *MySQL) ListContactEvents(ctx context.Context) ([]domain.ContactEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.user_id,e.property_id,e.event_type,e.source,COALESCE(u.nickname,''),COALESCE(u.phone,''),COALESCE(NULLIF(p.community,''),p.title,''),e.created_at FROM property_contact_events e LEFT JOIN users u ON u.id=e.user_id LEFT JOIN properties p ON p.id=e.property_id ORDER BY e.created_at DESC LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.ContactEvent, 0)
+	for rows.Next() {
+		var item domain.ContactEvent
+		if err := rows.Scan(&item.ID, &item.UserID, &item.PropertyID, &item.Type, &item.Source, &item.Nickname, &item.Phone, &item.PropertyName, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *MySQL) CreateContactEvent(ctx context.Context, item domain.ContactEvent) (bool, error) {
+	var exists string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM property_contact_events WHERE user_id=? AND property_id=? AND event_type=? AND created_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) ORDER BY created_at DESC LIMIT 1`, item.UserID, item.PropertyID, item.Type).Scan(&exists)
+	if err == nil {
+		return false, nil
+	}
+	if err != sql.ErrNoRows {
+		return false, err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO property_contact_events (id,user_id,property_id,event_type,source,created_at) VALUES (?,?,?,?,?,?)`, item.ID, item.UserID, item.PropertyID, item.Type, item.Source, item.CreatedAt)
+	return err == nil, err
 }
 
 func (s *MySQL) ListFavoritePropertyIDs(ctx context.Context, userID string) ([]string, error) {
