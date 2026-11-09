@@ -15,7 +15,7 @@ import {
   setFavorite,
   type Property,
 } from "../../api/properties";
-import { getSession, hasRole } from "../../auth/session";
+import { getSession } from "../../auth/session";
 import { amenityIcon } from "../../utils/amenities";
 import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
@@ -33,6 +33,7 @@ const item = ref<Property | null>(null),
   boundPhone = ref(""),
   appointmentName = ref(""),
   appointmentTime = ref("今天方便");
+const activeRole = ref<"admin" | "user" | "">(getSession()?.role || "");
 const appointmentTimes = ["今天方便", "明天方便", "工作日晚上", "周末方便", "其他时间"];
 const relatedRadiusKm = ref(3);
 const defaultDetailFacilities = [
@@ -76,7 +77,16 @@ const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "房源详情",
   "真实房源，放心查看",
 );
+const syncAudience = () => {
+  activeRole.value = getSession()?.role || "";
+  if (activeRole.value !== "admin") return;
+  // A management login must never inherit a tenant-side action from the page
+  // that led into login. Hide the customer controls before the page redraws.
+  appointmentOpen.value = false;
+  if (peekPendingAction()?.type === "appointment") clearPendingAction();
+};
 const load = async (id = "") => {
+  syncAudience();
   loading.value = true;
   loadFailed.value = false;
   try {
@@ -120,7 +130,7 @@ const load = async (id = "") => {
       titleFields: config?.shareCard?.titleFields?.length ? config.shareCard.titleFields : ["community", "layout"],
       posterFields: config?.shareCard?.posterFields?.length ? config.shareCard.posterFields : ["rentMonthly", "depositPayment", "community", "areaSqm", "floorInfo", "availableDate"],
     };
-    if (getSession()?.role === "user") {
+    if (activeRole.value === "user") {
       favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
 		const profile = await getWechatUserProfile().catch(() => null);
 		boundPhone.value = String(profile?.phone || uni.getStorageSync("xiaopi_bound_phone") || "");
@@ -143,7 +153,10 @@ onLoad((query) => {
   uni.showShareMenu({ menus: ["shareAppMessage", "shareTimeline"] });
   load(String(query?.id || ""));
 });
-onShow(() => resumePendingAction());
+onShow(() => {
+  syncAudience();
+  if (activeRole.value === "user") resumePendingAction();
+});
 const mediaUrl = resolveAssetUrl;
 const propertyCover = (property: Property) => {
   const cover = property.media?.find((media) => media.type === "image");
@@ -157,7 +170,7 @@ const mediaItems = computed(() => {
 });
 const mediaLabel = (media: { type: string }, index: number) =>
   media.type === "video" ? "视频" : `实拍 ${index + 1}`;
-const isAdmin = computed(() => hasRole("admin"));
+const isAdmin = computed(() => activeRole.value === "admin");
 const detailTags = computed(() => {
   const current = item.value;
   if (!current) return [];
@@ -506,8 +519,9 @@ const openPropertyLocation = () => {
   });
 };
 const requireUser = (pendingAction?: "appointment" | "favorite") => {
-  if (getSession()?.role === "user") return true;
-  if (getSession()?.role === "admin") {
+  syncAudience();
+  if (activeRole.value === "user") return true;
+  if (activeRole.value === "admin") {
     uni.showToast({ title: "请切换到普通用户视角操作", icon: "none" });
     return false;
   }
@@ -544,7 +558,7 @@ const openAppointment = async () => {
 };
 const resumePendingAction = () => {
   const pending = peekPendingAction();
-  if (!pending || getSession()?.role !== "user" || pending.propertyId !== item.value?.id) return;
+  if (!pending || activeRole.value !== "user" || pending.propertyId !== item.value?.id) return;
   clearPendingAction();
   if (pending.type === "appointment") openAppointment();
   if (pending.type === "favorite" && !favorite.value) void toggle();
