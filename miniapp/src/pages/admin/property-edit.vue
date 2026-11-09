@@ -506,8 +506,7 @@ const referenceCoverUrl = (item: Property) => {
 const referenceLocation = (item: Property) => String(item.areaLabel || item.location || "位置待补充").trim();
 const referenceTags = (item: Property, fields: string[]) => fields
   .map((field) => listingTagValue(item, field))
-  .filter(Boolean)
-  .slice(0, 4);
+  .filter(Boolean);
 watch([() => form.community], () => {
   form.title = String(form.community || "").trim()
     ? generatedTitle.value
