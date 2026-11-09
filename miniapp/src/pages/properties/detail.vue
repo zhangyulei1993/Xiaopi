@@ -83,7 +83,7 @@ const syncAudience = () => {
   // A management login must never inherit a tenant-side action from the page
   // that led into login. Hide the customer controls before the page redraws.
   appointmentOpen.value = false;
-  if (peekPendingAction()?.type === "appointment") clearPendingAction();
+  if (peekPendingAction()) clearPendingAction();
 };
 const load = async (id = "") => {
   syncAudience();
@@ -155,6 +155,7 @@ onLoad((query) => {
 });
 onShow(() => {
   syncAudience();
+  void flushPendingContactEvents();
   if (activeRole.value === "user") resumePendingAction();
 });
 const mediaUrl = resolveAssetUrl;
@@ -611,9 +612,27 @@ const submitAppointment = async () => {
     appointmentSubmitting.value = false;
   }
 };
-const recordContact = (type: "wechat_consult" | "phone_call") => {
+type ContactEntryType = "consult_entry_click" | "phone_entry_click";
+const pendingContactEventsKey = "xiaopi_pending_contact_events";
+const pendingContactEvents = () => (uni.getStorageSync(pendingContactEventsKey) as Array<{ propertyId: string; type: ContactEntryType }> | undefined) || [];
+const queueContactEvent = (propertyId: string, type: ContactEntryType) => {
+  const queued = pendingContactEvents().filter((event) => event.propertyId !== propertyId || event.type !== type);
+  uni.setStorageSync(pendingContactEventsKey, [...queued, { propertyId, type }].slice(-10));
+};
+const flushPendingContactEvents = async () => {
+  if (getSession()?.role !== "user") return;
+  const remaining: Array<{ propertyId: string; type: ContactEntryType }> = [];
+  for (const event of pendingContactEvents()) {
+    try { await recordContactEvent({ ...event, source: "detail" }); }
+    catch { remaining.push(event); }
+  }
+  if (remaining.length) uni.setStorageSync(pendingContactEventsKey, remaining);
+  else uni.removeStorageSync(pendingContactEventsKey);
+};
+const recordContact = (type: ContactEntryType) => {
   if (getSession()?.role !== "user" || !item.value) return;
-  void recordContactEvent({ propertyId: item.value.id, type, source: "detail" }).catch(() => undefined);
+  const propertyId = item.value.id;
+  void recordContactEvent({ propertyId, type, source: "detail" }).catch(() => queueContactEvent(propertyId, type));
 };
 const openProperty = (id: string) =>
   uni.redirectTo({ url: `/pages/properties/detail?id=${id}` });
@@ -680,7 +699,7 @@ const deletePropertyFromPreview = () => {
   });
 };
 const phoneCustomerService = () => {
-  recordContact("phone_call");
+  recordContact("phone_entry_click");
   callPhone(contactPhone.value, "客服电话尚未配置");
 };
 </script>
@@ -820,7 +839,7 @@ const phoneCustomerService = () => {
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="detail-signature"><text class="detail-signature-mark">皮</text><strong>{{ brandName || '小皮租房' }}</strong></view
-      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom" @click="recordContact('wechat_consult')"><text>在线咨询</text></button
+      ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom" @click="recordContact('consult_entry_click')"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
     ><view v-if="appointmentOpen" class="appointment-mask" @click.self="appointmentOpen = false"><view class="appointment-sheet"><view class="appointment-sheet-head"><view><strong>预约看房</strong><text>{{ item.title || item.community }}</text></view><text @click="appointmentOpen = false">×</text></view><template v-if="boundPhone"><view class="appointment-field"><text>怎么称呼您</text><input v-model.trim="appointmentName" maxlength="20" placeholder="例如：张女士" /></view><view class="appointment-field"><text>联系手机号</text><strong>{{ maskedPhone }}</strong></view><view class="appointment-field"><text>什么时候方便</text><view class="appointment-times"><text v-for="time in appointmentTimes" :key="time" :class="{ active: appointmentTime === time }" @click="appointmentTime = time">{{ time }}</text></view></view><button class="appointment-submit" :loading="appointmentSubmitting" @click="submitAppointment">提交预约</button></template><template v-else><view class="appointment-bind"><strong>先绑定手机号</strong><text>用于确认看房安排，只会展示脱敏号码。</text><button open-type="getPhoneNumber" :loading="appointmentBinding" @getphonenumber="bindAppointmentPhone">绑定手机号并继续</button></view></template></view></view
     ></view

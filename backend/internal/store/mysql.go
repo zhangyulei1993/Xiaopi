@@ -203,6 +203,18 @@ func (s *MySQL) ListRentalRequests(ctx context.Context) ([]domain.RentalRequest,
 	return items, rows.Err()
 }
 
+func (s *MySQL) FindRecentAppointment(ctx context.Context, userID, propertyID string, since time.Time) (*domain.RentalRequest, error) {
+	var item domain.RentalRequest
+	err := s.db.QueryRowContext(ctx, `SELECT id,user_id,request_type,property_id,contact_name,phone,preferred_time,location,layout,budget_min,budget_max,move_in_date,note,follow_up_note,status,created_at,updated_at FROM rental_requests WHERE user_id=? AND property_id=? AND request_type='appointment' AND created_at>=? ORDER BY created_at DESC LIMIT 1`, userID, propertyID, since).Scan(&item.ID, &item.UserID, &item.RequestType, &item.PropertyID, &item.ContactName, &item.Phone, &item.PreferredTime, &item.Location, &item.Layout, &item.BudgetMin, &item.BudgetMax, &item.MoveInDate, &item.Note, &item.FollowUpNote, &item.Status, &item.CreatedAt, &item.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (s *MySQL) UpdatePropertyLeadFollowUp(ctx context.Context, id, status, note string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE property_leads SET status=?,follow_up_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, status, note, id)
 	return err

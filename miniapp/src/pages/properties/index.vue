@@ -11,6 +11,7 @@ import {
   type Property,
 } from "../../api/properties";
 import { getSession } from "../../auth/session";
+import { clearPendingAction, peekPendingAction, savePendingAction } from "../../utils/pending-action";
 import searchIcon from "../../static/icons/search.svg";
 import filterIcon from "../../static/icons/filter.svg";
 import heartIcon from "../../static/icons/heart.svg";
@@ -169,6 +170,8 @@ const load = async () => {
   loading.value = true;
   loadFailed.value = false;
   currentRole.value = getSession()?.role || "";
+  // A tenant-only action must not survive a switch to an operator account.
+  if (currentRole.value !== "user" && peekPendingAction()) clearPendingAction();
   try {
     const [items, config] = await Promise.all([
       listProperties(),
@@ -236,7 +239,22 @@ const load = async () => {
     loading.value = false;
   }
 };
-onShow(load);
+const resumePendingAction = async () => {
+  const pending = peekPendingAction();
+  if (!pending || getSession()?.role !== "user") return;
+  clearPendingAction();
+  if (pending.type === "favorite" && pending.propertyId) {
+    await toggleFavorite(pending.propertyId);
+    return;
+  }
+  if (pending.type === "area_subscription" && pending.area) {
+    uni.navigateTo({ url: `/pages/requests/index?mode=area&area=${encodeURIComponent(pending.area)}` });
+  }
+};
+onShow(async () => {
+  await load();
+  await resumePendingAction();
+});
 const open = (id: string) =>
     uni.navigateTo({ url: `/pages/properties/detail?id=${id}` }),
   requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
@@ -293,7 +311,8 @@ const channelLabel = (item: Property) => {
 };
 const toggleFavorite = async (id: string) => {
   if (!getSession()) {
-    uni.navigateTo({ url: "/pages/auth/login" });
+    savePendingAction({ type: "favorite", propertyId: id });
+    uni.navigateTo({ url: "/pages/auth/login?reason=favorite" });
     return;
   }
   if (getSession()?.role === "admin") {
@@ -341,10 +360,14 @@ const removeProperty = (property: Property) => {
   }});
 };
 const subscribeArea = () => {
-	if (!getSession()) { uni.navigateTo({ url: "/pages/auth/login" }); return; }
-	if (isAdmin.value) return;
 	const area = activeAreaName.value;
 	if (!area) { uni.showToast({ title: "请先选择或搜索片区", icon: "none" }); return; }
+	if (!getSession()) {
+      savePendingAction({ type: "area_subscription", area });
+      uni.navigateTo({ url: "/pages/auth/login?reason=area_subscription" });
+      return;
+    }
+	if (isAdmin.value) return;
 	uni.navigateTo({ url: `/pages/requests/index?mode=area&area=${encodeURIComponent(area)}` });
 };
 </script>

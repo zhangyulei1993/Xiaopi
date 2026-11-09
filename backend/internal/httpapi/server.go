@@ -37,6 +37,7 @@ type Store interface {
 	ReplacePropertyMedia(context.Context, string, []string) error
 	UpsertUser(context.Context, domain.User) error
 	ListRentalRequests(context.Context) ([]domain.RentalRequest, error)
+	FindRecentAppointment(context.Context, string, string, time.Time) (*domain.RentalRequest, error)
 	CreateRentalRequest(context.Context, domain.RentalRequest) error
 	UpdateRentalRequestFollowUp(context.Context, string, string, string) error
 	ListContactEvents(context.Context) ([]domain.ContactEvent, error)
@@ -65,6 +66,7 @@ type Server struct {
 	staticMaps    map[string]staticMapCacheEntry
 	loginMu       sync.Mutex
 	loginAttempts map[string]loginAttempt
+	appointmentMu sync.Mutex
 }
 
 type staticMapCacheEntry struct {
@@ -247,7 +249,7 @@ func (s *Server) createContactEvent(w http.ResponseWriter, r *http.Request) {
 	input.PropertyID = strings.TrimSpace(input.PropertyID)
 	input.Type = strings.TrimSpace(input.Type)
 	input.Source = strings.TrimSpace(input.Source)
-	if input.PropertyID == "" || (input.Type != "wechat_consult" && input.Type != "phone_call") {
+	if input.PropertyID == "" || (input.Type != "consult_entry_click" && input.Type != "phone_entry_click") {
 		writeError(w, http.StatusBadRequest, "invalid contact event")
 		return
 	}
@@ -328,10 +330,25 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请选择方便看房的时间")
 		return
 	}
-	item.ID, _ = newID()
 	item.UserID = userID
 	item.Status = "new"
 	item.CreatedAt = time.Now()
+	// Protect against double taps and network retries. The store lookup also
+	// covers a retried request after the process has restarted.
+	if item.RequestType == "appointment" {
+		s.appointmentMu.Lock()
+		defer s.appointmentMu.Unlock()
+		current, err := s.store.FindRecentAppointment(r.Context(), userID, item.PropertyID, item.CreatedAt.Add(-30*time.Minute))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to check appointment")
+			return
+		}
+		if current != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "appointment already submitted", "data": current})
+			return
+		}
+	}
+	item.ID, _ = newID()
 	if err := s.store.CreateRentalRequest(r.Context(), item); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create rental request")
 		return

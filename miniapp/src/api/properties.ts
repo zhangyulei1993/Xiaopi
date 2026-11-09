@@ -133,7 +133,7 @@ export interface ContactEvent {
   id?: string;
   userId?: string;
   propertyId: string;
-  type: "wechat_consult" | "phone_call";
+  type: "consult_entry_click" | "phone_entry_click";
   source?: string;
   nickname?: string;
   phone?: string;

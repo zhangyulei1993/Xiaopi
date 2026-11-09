@@ -71,6 +71,15 @@ func (*fakeStore) UpsertUser(context.Context, domain.User) error                
 func (f *fakeStore) ListRentalRequests(context.Context) ([]domain.RentalRequest, error) {
 	return f.rentalRequests, nil
 }
+func (f *fakeStore) FindRecentAppointment(_ context.Context, userID, propertyID string, since time.Time) (*domain.RentalRequest, error) {
+	for index := len(f.rentalRequests) - 1; index >= 0; index-- {
+		item := f.rentalRequests[index]
+		if item.UserID == userID && item.PropertyID == propertyID && item.RequestType == "appointment" && !item.CreatedAt.Before(since) {
+			return &item, nil
+		}
+	}
+	return nil, nil
+}
 func (f *fakeStore) CreateRentalRequest(_ context.Context, item domain.RentalRequest) error {
 	f.rentalRequests = append(f.rentalRequests, item)
 	return nil
@@ -472,6 +481,27 @@ func TestAppointmentRequiresBoundPhone(t *testing.T) {
 	}
 }
 
+func TestAppointmentIsIdempotentWithinThirtyMinutes(t *testing.T) {
+	dataStore := &fakeStore{
+		users:      []domain.User{{ID: "user-1", Phone: "13800138000"}},
+		properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}},
+	}
+	server := testServer(dataStore)
+	userToken, err := server.tokens.issue("user-1", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{"requestType": "appointment", "propertyId": "property-1", "contactName": "小王", "preferredTime": "周末下午"}
+	first := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", payload, userToken)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first appointment failed: %d %s", first.Code, first.Body.String())
+	}
+	second := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/rental-requests", payload, userToken)
+	if second.Code != http.StatusOK || len(dataStore.rentalRequests) != 1 {
+		t.Fatalf("expected idempotent appointment response, got %d requests=%#v", second.Code, dataStore.rentalRequests)
+	}
+}
+
 func TestContactEventsAreRecordedAndDeduplicated(t *testing.T) {
 	dataStore := &fakeStore{properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}}}
 	server := testServer(dataStore)
@@ -480,12 +510,12 @@ func TestContactEventsAreRecordedAndDeduplicated(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/contact-events", map[string]any{"propertyId": "property-1", "type": "wechat_consult", "source": "detail"}, userToken)
+		response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/contact-events", map[string]any{"propertyId": "property-1", "type": "consult_entry_click", "source": "detail"}, userToken)
 		if response.Code != http.StatusCreated {
 			t.Fatalf("contact event failed: %d %s", response.Code, response.Body.String())
 		}
 	}
-	if len(dataStore.contactEvents) != 1 || dataStore.contactEvents[0].Type != "wechat_consult" {
+	if len(dataStore.contactEvents) != 1 || dataStore.contactEvents[0].Type != "consult_entry_click" {
 		t.Fatalf("expected one deduplicated contact event, got %#v", dataStore.contactEvents)
 	}
 }
