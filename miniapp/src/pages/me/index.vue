@@ -17,7 +17,6 @@ import {
 } from "../../api/properties";
 import type { Property, PropertyLead, RentalRequest, FavoriteContact } from "../../api/properties";
 import { usePagePresentation } from "../../utils/presentation";
-import AppBottomDock from "../../components/AppBottomDock.vue";
 
 const role = ref<SessionRole | null>(null);
 const phone = ref("");
@@ -38,7 +37,7 @@ const avatarDisplay = computed(() =>
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("me", "我的", "管理关注与找房需求");
 
 onShow(async () => {
-  uni.hideTabBar({ animation: false });
+	uni.$emit("xiaopi-tab-active", "pages/me/index");
   await loadPresentation();
   const session = getSession();
   role.value = session?.role || null;
@@ -281,7 +280,6 @@ const logout = () => {
     </view>
 
     <view v-if="isLoggedIn" class="session-actions"><text v-if="canUseAccessCode" class="role-access-code" @click="openAccessCodeLogin">访问码登录</text><button class="logout" @click="logout">退出登录</button></view>
-    <AppBottomDock active="me" />
   </view>
 </template>
 
