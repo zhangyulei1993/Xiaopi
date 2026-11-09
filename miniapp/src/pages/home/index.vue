@@ -7,6 +7,7 @@ import pinIcon from "../../static/icons/pin.svg";
 import searchIcon from "../../static/icons/search.svg";
 import heartIcon from "../../static/icons/heart.svg";
 import editIcon from "../../static/icons/edit.svg";
+import AppBottomDock from "../../components/AppBottomDock.vue";
 // Keep the first-screen asset small: the source PNG was 1.7 MB and delayed
 // first render on mobile networks. This 1440px JPEG is visually equivalent.
 import heroFallback from "../../static/home-lifestyle-hero.jpg";
@@ -141,7 +142,7 @@ const channelLabel = (item: Property) => {
     .sort((left, right) => left.distance - right.distance)[0]?.channel.title || "";
 };
 onShow(async () => {
-	uni.$emit("xiaopi-tab-active", "pages/home/index");
+  uni.hideTabBar({ animation: false });
   isAdmin.value = getSession()?.role === "admin";
   const [propertyResult, configResult] = await Promise.allSettled([listProperties(), getPublicConfig()]);
   if (propertyResult.status === "fulfilled") properties.value = propertyResult.value;
@@ -218,6 +219,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? (homePresentation.recommendationTitle || "推荐房源") : `${activeKind}房源` }}</strong><b @click="browseFiltered">{{ homePresentation.viewAllText || '查看房源' }}</b></view>
     <view v-if="homeProperties.length" class="property-list"><view v-if="!isAdmin" class="home-masonry"><view v-for="(column, columnIndex) in homeMasonryColumns" :key="`home-column-${columnIndex}`" class="home-masonry-column"><view v-for="item in column" :key="item.id" class="home-masonry-card" @click="open(item.id)"><view class="home-masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play">▶</view><view v-if="channelLabel(item)" class="home-cover-location">⌖ {{ channelLabel(item) }}</view><view class="heart-button" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="home-masonry-copy" :class="{ 'without-tags': !allLabels(item).length }"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="allLabels(item).length" class="home-masonry-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></view><view v-else v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing admin-listing" @click="open(item.id)"><view class="listing-image"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play admin-video-play">▶</view><view v-if="channelLabel(item)" class="admin-cover-location">⌖ {{ channelLabel(item) }}</view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
     <view v-else class="empty">新房源正在整理中</view>
+    <AppBottomDock active="home" />
   </view>
 </template>
 

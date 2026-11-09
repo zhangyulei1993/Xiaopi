@@ -16,6 +16,7 @@ import searchIcon from "../../static/icons/search.svg";
 import filterIcon from "../../static/icons/filter.svg";
 import heartIcon from "../../static/icons/heart.svg";
 import { listingDoorplate, listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
+import AppBottomDock from "../../components/AppBottomDock.vue";
 
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
@@ -252,7 +253,7 @@ const resumePendingAction = async () => {
   }
 };
 onShow(async () => {
-	uni.$emit("xiaopi-tab-active", "pages/properties/index");
+  uni.hideTabBar({ animation: false });
   await load();
   await resumePendingAction();
 });
@@ -478,6 +479,7 @@ const subscribeArea = () => {
         ><text>告诉小皮你的预算和入住要求</text></view
       ><text><image :src="filterIcon" mode="aspectFit" />发布需求 ›</text></view
     ></view
+    <AppBottomDock active="properties" />
   >
 </template>
 <style scoped>
