@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { computed, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { API_ORIGIN, request, resolveAssetUrl } from "../../api/client";
 import {
   createProperty,
@@ -208,16 +208,22 @@ const requiredReady = computed(() =>
   ),
 );
 const sectionSteps = ["位置门牌", "户型出租", "环境配套", "租金入住", "素材发布"];
-const centerActiveStep = (index: number) => {
-  const viewportWidth = uni.getSystemInfoSync().windowWidth || 375;
-  const stepWidth = 75;
-  stepScrollLeft.value = Math.max(0, index * stepWidth + stepWidth / 2 - viewportWidth / 2);
+const syncStepViewport = (index: number) => {
+  // Keep a stable three-step window: previous, current, next. At both ends
+  // the window pins to the edge, so the fifth step is never implied off-screen.
+  const visibleSteps = 3;
+  const stepWidth = 80;
+  const firstVisible = Math.max(0, Math.min(index - 1, sectionSteps.length - visibleSteps));
+  nextTick(() => {
+    stepScrollLeft.value = firstVisible * stepWidth;
+  });
 };
 const goToSection = (index: number) => {
   activeSection.value = Math.max(0, Math.min(sectionSteps.length - 1, index));
-  centerActiveStep(activeSection.value);
+  syncStepViewport(activeSection.value);
   uni.pageScrollTo({ scrollTop: 0, duration: 220 });
 };
+watch(activeSection, syncStepViewport, { immediate: true });
 const geoReady = computed(() =>
   Boolean(Number(form.latitude) && Number(form.longitude)),
 );
@@ -1643,13 +1649,14 @@ const mediaUrl = resolveAssetUrl;
 }
 .step-track {
   display: flex;
-  min-width: 680rpx;
+  min-width: 800rpx;
   padding: 14rpx 10rpx;
 }
 .step-item {
   display: flex;
-  min-width: 150rpx;
-  flex: 1;
+  width: 160rpx;
+  min-width: 160rpx;
+  flex: none;
   align-items: center;
   gap: 8rpx;
   padding: 12rpx 10rpx;
