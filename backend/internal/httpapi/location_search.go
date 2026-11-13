@@ -31,6 +31,13 @@ func (s *Server) searchLocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请输入2到32个字的小区或街道名称")
 		return
 	}
+	if s.config.TestFakeMapEnabled {
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": []locationSearchItem{{
+			ID: "qa-map-wuhan-community", Title: "QA 测试小区", Address: "光谷大道 1 号", District: "洪山区",
+			Latitude: 30.460402, Longitude: 114.422247,
+		}}})
+		return
+	}
 	if s.config.TencentMapKey == "" {
 		writeError(w, http.StatusServiceUnavailable, "地图搜索服务尚未配置")
 		return

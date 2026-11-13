@@ -83,7 +83,7 @@ func NewServerWithConfig(dataStore Store, config Config) *Server {
 		store:         dataStore,
 		config:        config,
 		tokens:        newTokenManager(config),
-		httpClient:    &http.Client{Timeout: 5 * time.Second},
+		httpClient:    newOutboundHTTPClient(5 * time.Second),
 		staticMaps:    map[string]staticMapCacheEntry{},
 		loginAttempts: map[string]loginAttempt{},
 	}
@@ -525,7 +525,20 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 		Code string `json:"code"`
 	}
 	if err := decodeJSON(w, r, &input); err != nil || strings.TrimSpace(input.Code) == "" {
+		if os.Getenv("APP_ENV") == "test" {
+			writeError(w, http.StatusBadRequest, "test mode requires a synthetic test credential")
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "code is required"})
+		return
+	}
+	if os.Getenv("APP_ENV") == "test" {
+		code := strings.TrimSpace(input.Code)
+		if !strings.HasPrefix(code, "qa-") || len(code) > 64 {
+			writeError(w, http.StatusUnauthorized, "test mode does not allow real WeChat authentication")
+			return
+		}
+		s.testWechatLogin(w, r, code)
 		return
 	}
 	appID, secret := os.Getenv("WECHAT_MINI_APP_ID"), os.Getenv("WECHAT_MINI_APP_SECRET")

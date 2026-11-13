@@ -22,17 +22,18 @@ const (
 var errInvalidToken = errors.New("invalid or expired access token")
 
 type Config struct {
-	AdminUsername string
-	AdminPassword string
-	TokenSecret   string
-	TokenTTL      time.Duration
-	TencentMapKey string
-	TencentMapURL string
-	COSBucket     string
-	COSRegion     string
-	COSSecretID   string
-	COSSecretKey  string
-	COSPublicBase string
+	AdminUsername      string
+	AdminPassword      string
+	TokenSecret        string
+	TokenTTL           time.Duration
+	TencentMapKey      string
+	TencentMapURL      string
+	TestFakeMapEnabled bool
+	COSBucket          string
+	COSRegion          string
+	COSSecretID        string
+	COSSecretKey       string
+	COSPublicBase      string
 }
 
 func ConfigFromEnv() Config {
@@ -49,17 +50,18 @@ func ConfigFromEnv() Config {
 		mapURL = "https://apis.map.qq.com"
 	}
 	return Config{
-		AdminUsername: os.Getenv("ADMIN_USERNAME"),
-		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
-		TokenSecret:   secret,
-		TokenTTL:      ttl,
-		TencentMapKey: strings.TrimSpace(os.Getenv("TENCENT_MAP_KEY")),
-		TencentMapURL: strings.TrimRight(mapURL, "/"),
-		COSBucket:     strings.TrimSpace(os.Getenv("COS_BUCKET")),
-		COSRegion:     strings.TrimSpace(os.Getenv("COS_REGION")),
-		COSSecretID:   strings.TrimSpace(os.Getenv("COS_SECRET_ID")),
-		COSSecretKey:  strings.TrimSpace(os.Getenv("COS_SECRET_KEY")),
-		COSPublicBase: strings.TrimRight(strings.TrimSpace(os.Getenv("COS_PUBLIC_BASE")), "/"),
+		AdminUsername:      os.Getenv("ADMIN_USERNAME"),
+		AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
+		TokenSecret:        secret,
+		TokenTTL:           ttl,
+		TencentMapKey:      strings.TrimSpace(os.Getenv("TENCENT_MAP_KEY")),
+		TencentMapURL:      strings.TrimRight(mapURL, "/"),
+		TestFakeMapEnabled: os.Getenv("APP_ENV") == "test" && strings.EqualFold(strings.TrimSpace(os.Getenv("TEST_FAKE_MAP_ENABLED")), "true"),
+		COSBucket:          strings.TrimSpace(os.Getenv("COS_BUCKET")),
+		COSRegion:          strings.TrimSpace(os.Getenv("COS_REGION")),
+		COSSecretID:        strings.TrimSpace(os.Getenv("COS_SECRET_ID")),
+		COSSecretKey:       strings.TrimSpace(os.Getenv("COS_SECRET_KEY")),
+		COSPublicBase:      strings.TrimRight(strings.TrimSpace(os.Getenv("COS_PUBLIC_BASE")), "/"),
 	}
 }
 

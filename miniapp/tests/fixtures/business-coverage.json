@@ -1,0 +1,141 @@
+{
+  "project": "/Users/zhangyulei/Documents/GitHub/xiaopi-develop-merge/miniapp",
+  "checkedAgainst": [
+    "src/pages.json",
+    "src/pages/home/index.vue",
+    "src/pages/properties/index.vue",
+    "src/pages/properties/detail.vue",
+    "src/pages/requests/index.vue",
+    "src/pages/requests/history.vue",
+    "src/api/properties.ts",
+    "src/api/client.ts"
+  ],
+  "scenarios": [
+    {
+      "name": "home-load",
+      "page": "pages/home/index",
+      "readEndpoints": [
+        "GET /v1/properties",
+        "GET /v1/config/public"
+      ],
+      "status": "passed",
+      "evidence": "L2 smoke report against isolated test API"
+    },
+    {
+      "name": "property-list",
+      "page": "pages/properties/index",
+      "readEndpoints": [
+        "GET /v1/properties",
+        "GET /v1/config/public"
+      ],
+      "status": "passed",
+      "evidence": "L2 smoke report against isolated test API; synthetic listing visible"
+    },
+    {
+      "name": "property-detail",
+      "page": "pages/properties/detail?id=qa-property-1",
+      "readEndpoints": [
+        "GET /v1/properties"
+      ],
+      "sideEffects": [
+        "POST /v1/footprints/:id for signed-in users"
+      ],
+      "status": "passed",
+      "evidence": "Native Agent opened synthetic property; test DB contains QA-user-A footprint"
+    },
+    {
+      "name": "favorite-add-remove",
+      "page": "pages/properties/index → pages/me/index → pages/properties/index (favorites filter)",
+      "writeEndpoints": [
+        "PUT /v1/favorites/:id",
+        "DELETE /v1/favorites/:id"
+      ],
+      "status": "passed",
+      "evidence": "tests/reports/favorites-toggle/2026-11-10T19-31-58.440Z/result.json",
+      "note": "Native listing card toggle and My Favorites verified. A count 0→1→0; B authenticated local API cannot see A favorite. Footprint counts unchanged."
+    },
+    {
+      "name": "appointment-form",
+      "page": "pages/requests/index?propertyId=qa-property-1",
+      "writeEndpoint": "POST /v1/rental-requests",
+      "status": "passed-no-submit",
+      "evidence": "Required-fields test; network query for /v1/rental-requests was empty."
+    },
+    {
+      "name": "appointment-time-validation",
+      "page": "pages/requests/index?propertyId=qa-property-1",
+      "status": "passed-no-submit",
+      "evidence": "Blank required fields kept form on page; no rental-request network entry."
+    },
+    {
+      "name": "general-form-validation",
+      "page": "pages/requests/index",
+      "status": "passed-no-submit",
+      "note": "QA A, empty required region. Toast confirmed from validation.png, no POST, and DB snapshot unchanged. Budget boundary cases not exercised.",
+      "evidence": "tests/reports/general-form-validation/2026-11-10T19-24-27.907Z/result.json"
+    },
+    {
+      "name": "appointment-submit",
+      "page": "pages/properties/detail",
+      "writeEndpoint": "POST /v1/rental-requests",
+      "status": "passed",
+      "note": "QA simulator created one appointment, then repeat submission returned the same ID. Empty-name validation blocked writes. Tested the existing 今天方便 preset.",
+      "evidence": "tests/reports/appointment-ui/report.md"
+    },
+    {
+      "name": "my-appointments-guest-gate",
+      "page": "pages/requests/history",
+      "status": "passed",
+      "sideEffects": [
+        "Local navigation to login screen only"
+      ],
+      "evidence": "tests/reports/request-history-guest/2026-11-10T18-39-06.392Z/result.json",
+      "note": "Guest prompt and reason=requests navigation verified. Network contains no private history fetch or application write. Signed-in history remains separately tracked."
+    },
+    {
+      "name": "my-appointments",
+      "page": "pages/requests/history",
+      "readEndpoint": "GET /v1/rental-requests/mine",
+      "status": "passed",
+      "evidence": "tests/reports/request-history-user/2026-11-10T18-43-58.726Z/result.json",
+      "note": "QA A signed in through the test panel. UI and API show A history with date, time and linked property. B fixture absent. No property-detail navigation."
+    },
+    {
+      "name": "my-appointments-linked-property",
+      "page": "pages/requests/history → pages/properties/detail?id=qa-property-1",
+      "status": "passed",
+      "sideEffects": [
+        "One isolated QA A footprint increment"
+      ],
+      "evidence": "tests/reports/request-history-property/2026-11-10T19-09-43.905Z/result.json",
+      "note": "Native UI link and empty media fallback verified. QA B isolation checked through local authenticated API. Real image rendering not covered by this fixture."
+    },
+    {
+      "name": "appointment-property-association",
+      "page": "pages/admin/index",
+      "readEndpoint": "GET /v1/admin/rental-requests",
+      "status": "passed",
+      "evidence": "tests/reports/admin-appointment-association/2026-11-10T19-27-51.355Z/result.json",
+      "note": "QA admin UI cards matched API and read-only MySQL for user, appointment time, status and title snapshot. Property ID and contact phone verified via API and DB; UI shows a contact action. Existing fixtures all link to qa-property-1; cross-property fixtures not covered."
+    },
+    {
+      "name": "appointment-date-picker",
+      "page": "pages/properties/detail?id=qa-property-1",
+      "status": "NOT_APPLICABLE",
+      "evidence": "tests/reports/appointment-date-picker/2026-11-10T19-18-58.674Z/result.json",
+      "note": "当前产品设计采用预约时间预设，不支持独立预约日期选择。本项排除在适用场景、BLOCKED 和未完成覆盖率统计之外。原始诊断报告与截图保留。"
+    },
+    {
+      "name": "my-footprints-read",
+      "page": "pages/footprints/index",
+      "readEndpoints": [
+        "GET /v1/footprints",
+        "GET /v1/properties",
+        "GET /v1/config/public"
+      ],
+      "status": "passed",
+      "evidence": "tests/reports/footprints-read/2026-11-10T19-22-23.168Z/result.json",
+      "note": "QA user A saw the test property and matching view count. No footprint increment or delete."
+    }
+  ]
+}

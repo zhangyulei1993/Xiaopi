@@ -15,6 +15,10 @@ import (
 )
 
 func (s *Server) bindWechatPhone(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("APP_ENV") == "test" {
+		writeError(w, http.StatusForbidden, "test mode does not allow real WeChat phone authorization")
+		return
+	}
 	var input struct {
 		Code string `json:"code"`
 	}

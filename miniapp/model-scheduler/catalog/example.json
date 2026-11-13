@@ -1,0 +1,32 @@
+{
+  "version": "example-1",
+  "default_model": "replace-economy",
+  "models": [
+    {
+      "model_id": "replace-economy",
+      "model_name": "Economy example",
+      "provider": "example",
+      "capability_level": 2,
+      "coding_score": 60,
+      "reasoning_score": 55,
+      "speed_score": 85,
+      "cost_score": 15,
+      "supported_reasoning_efforts": ["Low", "Medium"],
+      "availability": "disabled",
+      "last_verified_at": null
+    },
+    {
+      "model_id": "replace-expert",
+      "model_name": "Expert example",
+      "provider": "example",
+      "capability_level": 5,
+      "coding_score": 90,
+      "reasoning_score": 90,
+      "speed_score": 45,
+      "cost_score": 85,
+      "supported_reasoning_efforts": ["Medium", "High", "Extra High"],
+      "availability": "disabled",
+      "last_verified_at": null
+    }
+  ]
+}

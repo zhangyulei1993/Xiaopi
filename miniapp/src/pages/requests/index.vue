@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { watchPostEffect } from "vue";
+import { readPrivateCache, writePrivateCache } from "../../auth/private-cache";
+import { permissionAudit } from "../../utils/permission-audit";
+import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
 import { bindWechatPhone, createRentalRequest, getPublicConfig, getSubscriptionTemplates, getWechatUserProfile, refreshAuth, registerMessageSubscription } from "../../api/properties";
@@ -15,14 +18,35 @@ const propertyID = ref(""),
   pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
 const areaTemplateID = ref("");
+const keepFormKeyboard = computed(() => !propertyID.value && !areaMode.value);
+const keyboardInset = ref(0);
+const updateKeyboardInset = (event: { detail: { height: number } }) => {
+  keyboardInset.value = keepFormKeyboard.value ? Math.max(0, event.detail.height || 0) : 0;
+};
+onHide(() => { keyboardInset.value = 0; });
 // A find-home request is actionable only when staff can reach the requester.
 // Every request type therefore uses the verified WeChat-bound number.
 const requiresPhoneBinding = computed(() => true);
-const maskedPhone = computed(() => form.phone.length >= 7 ? `${form.phone.slice(0, 3)}****${form.phone.slice(-4)}` : form.phone);
+const maskedPhone = computed(() => {
+  permissionAudit("private-binding", "masked-phone", Boolean(form.phone));
+  return form.phone.length >= 7 ? `${form.phone.slice(0, 3)}****${form.phone.slice(-4)}` : form.phone;
+});
+const requestPhoneCache = "xiaopi_request_bound_phone";
+let formSession = "";
+function syncFormSession() {
+  const session = getSession();
+  const token = session?.role === "user" ? session.accessToken : "";
+  if (token === formSession) return;
+  formSession = token;
+  form.contactName = "";
+  form.phone = readPrivateCache<string>(session, "user", requestPhoneCache,
+    key => uni.getStorageSync(key),
+    present => permissionAudit("private-read", "bound-phone-cache", present)) || "";
+}
 const form = reactive({
 	contactName: "",
 	preferredTime: "",
-  phone: String(uni.getStorageSync("xiaopi_bound_phone") || ""),
+  phone: "",
   location: "",
   layout: "",
   budgetMin: 0,
@@ -31,20 +55,27 @@ const form = reactive({
   note: "",
 });
 const refreshBoundProfile = async () => {
-	if (getSession()?.role !== "user") return;
+	const session = getSession();
+	if (session?.role !== "user") return;
 	const profile = await getWechatUserProfile().catch(() => null);
-	if (!profile) return;
+	if (!profile || getSession()?.accessToken !== session.accessToken) return;
 	if (profile.phone) {
 		form.phone = profile.phone;
 		uni.setStorageSync("xiaopi_bound_phone", profile.phone);
+		writePrivateCache(session, "user", requestPhoneCache, profile.phone, (key, value) => uni.setStorageSync(key, value));
 	}
 	if (profile.nickname && !form.contactName) form.contactName = profile.nickname;
 };
 onLoad(async (query) => {
-  if (getSession()?.role === "admin") {
+  permissionAudit("onLoad", "request-form");
+  const allowed = getSession()?.role !== "admin";
+  permissionAudit("guard", "request-form", allowed);
+  if (!allowed) {
+    permissionAudit("redirect", "request-form", "pages/me/index");
     uni.switchTab({ url: "/pages/me/index" });
     return;
   }
+  syncFormSession();
   propertyID.value = String(query?.propertyId || "");
   propertyTitle.value = decodeURIComponent(String(query?.title || ""));
 	areaMode.value = String(query?.mode || "") === "area";
@@ -57,7 +88,24 @@ onLoad(async (query) => {
 	await refreshBoundProfile();
 });
 // The login page returns here with navigateBack, so onLoad does not run again.
-onShow(() => { void refreshBoundProfile(); });
+onShow(() => {
+  permissionAudit("onShow", "request-form");
+  const role = getSession()?.role;
+  permissionAudit("guard", "request-form", role !== "admin");
+  syncFormSession();
+  if (role === "admin") {
+    appointmentCreated.value = false;
+    permissionAudit("redirect", "request-form", "pages/me/index");
+    uni.switchTab({ url: "/pages/me/index" });
+    return;
+  }
+  if (role !== "user") {
+    form.phone = "";
+    form.contactName = "";
+    bindingPhone.value = false;
+  }
+  void refreshBoundProfile();
+});
 const ensureLogin = () => {
   if (getSession()?.role === "user") return true;
   uni.showModal({
@@ -133,6 +181,9 @@ const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) =
 	finally { bindingPhone.value = false; }
 };
 const call = () => callPhone(contactPhone.value);
+if (import.meta.env.MODE === "test") {
+  watchPostEffect(() => permissionAudit("render-state", "request-form", Boolean(form.phone || form.contactName)));
+}
 </script>
 <template>
   <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.94), rgba(247,246,241,.98)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover' } : {}"
@@ -154,22 +205,30 @@ const call = () => callPhone(contactPhone.value);
         ><text>意向地区 *</text
         ><input
           v-model.trim="form.location"
+          :hold-keyboard="keepFormKeyboard"
+          @keyboardheightchange="updateKeyboardInset"
           placeholder="例如：佛祖岭、金融港" /></view
       ><view v-if="!propertyID && !areaMode" class="field"
         ><text>期望户型</text
         ><input
           v-model.trim="form.layout"
+          :hold-keyboard="keepFormKeyboard"
+          @keyboardheightchange="updateKeyboardInset"
           placeholder="例如：一室一厅 / 合租主卧" /></view
       ><view v-if="!propertyID" class="field"
         ><text>月租预算</text
         ><view class="budget"
           ><input
             v-model.number="form.budgetMin"
+          :hold-keyboard="keepFormKeyboard"
+          @keyboardheightchange="updateKeyboardInset"
             type="number"
             placeholder="最低"
           /><text>至</text
           ><input
             v-model.number="form.budgetMax"
+          :hold-keyboard="keepFormKeyboard"
+          @keyboardheightchange="updateKeyboardInset"
             type="number"
             placeholder="最高"
           /><text>元</text></view
@@ -186,6 +245,8 @@ const call = () => callPhone(contactPhone.value);
         ><text>补充要求</text
         ><textarea
           v-model.trim="form.note"
+          :hold-keyboard="keepFormKeyboard"
+          @keyboardheightchange="updateKeyboardInset"
           maxlength="300"
           :placeholder="propertyID ? '例如：工作日晚上、周末上午，或想先了解的问题' : '通勤地点、整租/合租、楼层、宠物、采光等'"
         ></textarea></view></view
@@ -194,7 +255,7 @@ const call = () => callPhone(contactPhone.value);
     ><view class="button" @click="submit">{{
       submitting ? "提交中..." : propertyID ? "登记看房时间" : areaMode ? "预约该片区新房" : "提交找房需求"
     }}</view
-    ><view class="contact" @click="call">想马上确认房源？联系小皮 ›</view></view
+    ><view class="contact" @click="call">想马上确认房源？联系小皮 ›</view><view v-if="keyboardInset > 0" :style="{ height: keyboardInset + 'px' }" /></view
     ><view v-if="appointmentCreated" class="phone-bind-mask"><view class="phone-bind-sheet"><view class="phone-bind-mark">✓</view><strong>先绑定手机号</strong><text>找房需求、片区订阅和预约看房都需要绑定手机号，方便小皮确认。</text><button open-type="getPhoneNumber" :loading="bindingPhone" @getphonenumber="bindPhoneAfterAppointment">绑定手机号并继续</button></view></view
   >
 </template>

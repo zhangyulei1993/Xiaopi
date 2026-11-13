@@ -52,6 +52,7 @@ const finish = () => {
     fail: () => { saving.value = false; uni.showToast({ title: "头像处理失败", icon: "none" }); },
   }));
 };
+const cancel = () => uni.navigateBack();
 onLoad(() => {
   const cached = uni.getStorageSync("xiaopi-avatar-crop-source") as Source;
   uni.removeStorageSync("xiaopi-avatar-crop-source");
@@ -66,7 +67,7 @@ onLoad(() => {
     <view class="stage"><image v-if="source" :src="source.path" :style="imageStyle" mode="scaleToFill" /><view class="circle"></view><view class="touch" @touchstart="touchStart" @touchmove.stop.prevent="touchMove" @touchend="drag=null;pinch=null" /></view>
     <canvas canvas-id="avatar-crop-canvas" class="canvas" :width="SIZE" :height="SIZE" />
     <view class="control"><text>缩放 {{ zoom }}%</text><slider :value="zoom" min="100" max="260" activeColor="#40543f" @changing="setZoom(Number($event.detail.value))" @change="setZoom(Number($event.detail.value))" /></view>
-    <view class="actions"><button @click="uni.navigateBack()">取消</button><button class="primary" :loading="saving" @click="finish">使用此头像</button></view>
+    <view class="actions"><button @click="cancel">取消</button><button class="primary" :loading="saving" @click="finish">使用此头像</button></view>
   </view>
 </template>
 

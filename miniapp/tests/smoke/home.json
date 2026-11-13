@@ -1,0 +1,9 @@
+{
+  "name": "home-smoke",
+  "page": "/pages/home/index",
+  "readySelector": ".hero-search",
+  "assertions": [
+    { "kind": "current-page", "equals": "pages/home/index" }
+  ],
+  "steps": []
+}

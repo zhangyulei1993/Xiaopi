@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { watchPostEffect } from "vue";
+import { readPrivateCache } from "../../auth/private-cache";
+import { permissionAudit } from "../../utils/permission-audit";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import { API_ORIGIN, request, resolveAssetUrl } from "../../api/client";
+import { API_ORIGIN, safeUploadUrl, request, resolveAssetUrl } from "../../api/client";
 import {
   createProperty,
   deleteProperty,
@@ -62,6 +65,7 @@ const locationQuery = ref("");
 const locationSearching = ref(false);
 const locationResults = ref<LocationSearchItem[]>([]);
 let locationSearchTimer: ReturnType<typeof setTimeout> | undefined;
+let locationSearchVersion = 0;
 const form = reactive<Partial<Property>>({
   title: "",
   marketingPhrase: "",
@@ -346,10 +350,15 @@ const selectPointOnMap = (event: {
   form.longitude = Number(longitude.toFixed(7));
   selectNearestChannel(form.latitude, form.longitude);
 };
-const runLocationSearch = async () => {
+const runLocationSearch = async (version = ++locationSearchVersion) => {
+  if (locationSearchTimer) clearTimeout(locationSearchTimer);
+  locationSearchTimer = undefined;
   const keyword = locationQuery.value.trim();
   if (keyword.length < 2) {
-    locationResults.value = [];
+    if (version === locationSearchVersion) {
+      locationResults.value = [];
+      locationSearching.value = false;
+    }
     return;
   }
   locationSearching.value = true;
@@ -359,23 +368,36 @@ const runLocationSearch = async () => {
       channelLatitude.value,
       channelLongitude.value,
     );
+    if (version !== locationSearchVersion || keyword !== locationQuery.value.trim()) return;
     // 商户常把小区名写在括号中；录入房源时只保留可直接作为小区的地点。
     locationResults.value = results.filter((item) => !/[()（）]/.test(item.title || ""));
   } catch (error) {
+    if (version !== locationSearchVersion || keyword !== locationQuery.value.trim()) return;
     locationResults.value = [];
     uni.showToast({
       title: error instanceof Error ? error.message : "地址搜索失败",
       icon: "none",
     });
   } finally {
-    locationSearching.value = false;
+    if (version === locationSearchVersion) locationSearching.value = false;
   }
+};
+const invalidateLocationSearch = () => {
+  locationSearchVersion += 1;
+  if (locationSearchTimer) clearTimeout(locationSearchTimer);
+  locationSearchTimer = undefined;
+  locationSearching.value = false;
+  locationResults.value = [];
 };
 const scheduleLocationSearch = () => {
   if (locationSearchTimer) clearTimeout(locationSearchTimer);
-  locationSearchTimer = setTimeout(runLocationSearch, 450);
+  const version = ++locationSearchVersion;
+  locationSearching.value = false;
+  locationResults.value = [];
+  locationSearchTimer = setTimeout(() => void runLocationSearch(version), 450);
 };
 const applyLocationResult = (item: LocationSearchItem) => {
+	invalidateLocationSearch();
 	const changedCommunity = form.community !== item.title;
   form.community = item.title;
   form.location = [item.district, item.address].filter(Boolean).join(" · ");
@@ -396,17 +418,33 @@ const applyLocationResult = (item: LocationSearchItem) => {
   structureStep.value = "building";
 };
 const choosePropertyLocation = () => {
+	invalidateLocationSearch();
   uni.chooseLocation({
     latitude: mapLatitude.value,
     longitude: mapLongitude.value,
     success: (result) => {
+      const selectedCommunity = String(result.name || "").trim();
+      const changedCommunity = Boolean(
+        selectedCommunity && selectedCommunity !== String(form.community || "").trim(),
+      );
+      if (changedCommunity) {
+        form.community = selectedCommunity;
+        locationQuery.value = selectedCommunity;
+        locationResults.value = [];
+        buildingRules.value = [];
+        buildingNo.value = "";
+        unitNo.value = "";
+        roomNo.value = "";
+        selectedFloor.value = "";
+        form.floorInfo = "";
+        showStructureSetup.value = false;
+      }
       form.latitude = Number(result.latitude.toFixed(7));
       form.longitude = Number(result.longitude.toFixed(7));
       selectNearestChannel(form.latitude, form.longitude);
-      form.location = result.address || result.name || form.location;
-		if (!form.community?.trim() && result.name) form.community = result.name;
+      form.location = result.address || selectedCommunity || form.location;
       void loadBuildingRules();
-		if (form.community?.trim()) structureStep.value = "building";
+      if (form.community?.trim()) structureStep.value = "building";
     },
     fail: (error) => {
       if (!String(error.errMsg || "").includes("cancel")) {
@@ -693,6 +731,10 @@ const setListingSource = (source: "直租" | "转租") => {
 const setTransferMonths = (months: number) => {
   form.remainingLeaseMonths = Math.min(36, Math.max(1, Math.round(months || 1)));
 };
+const handleTransferMonthsInput = (event: { detail: number | string | { value?: number | string } }) => {
+  const rawValue = typeof event.detail === "object" ? event.detail.value : event.detail;
+  setTransferMonths(Number(rawValue));
+};
 const adjustTransferMonths = (delta: number) => setTransferMonths(Number(form.remainingLeaseMonths || 1) + delta);
 const setTransferDeposit = (multiplier: number) => {
   transferDepositMultiplier.value = multiplier;
@@ -810,8 +852,12 @@ const loadFacilityCatalog = async () => {
     : [];
 };
 onLoad(async (query) => {
-  if (!hasRole("admin")) {
+  permissionAudit("onLoad", "property-editor");
+  const allowed = hasRole("admin");
+  permissionAudit("guard", "property-editor", allowed);
+  if (!allowed) {
     uni.showToast({ title: "暂无运营权限", icon: "none" });
+    permissionAudit("redirect", "property-editor", "pages/me/index");
     uni.switchTab({ url: "/pages/me/index" });
     return;
   }
@@ -831,9 +877,13 @@ onLoad(async (query) => {
   });
 });
 onShow(() => {
-  const result = uni.getStorageSync("xiaopi-property-image-crop-result") as
-    | { index?: number; path?: string; width?: number; height?: number; size?: number }
-    | undefined;
+  permissionAudit("onShow", "property-editor");
+  const session = getSession();
+  permissionAudit("guard", "property-editor-crop", session?.role === "admin");
+  if (session?.role !== "admin") return;
+  const result = readPrivateCache<{ index?: number; path?: string; width?: number; height?: number; size?: number }>(
+    session, "admin", "xiaopi-property-image-crop-result", key => uni.getStorageSync(key),
+    present => permissionAudit("private-read", "property-crop-cache", present));
   if (!result?.path || typeof result.index !== "number") return;
   const image = images.value[result.index];
   if (image) {
@@ -848,6 +898,7 @@ onShow(() => {
     uni.showToast({ title: "已更新裁切图片", icon: "success" });
   }
   uni.removeStorageSync("xiaopi-property-image-crop-result");
+  uni.removeStorageSync("xiaopi-property-image-crop-result:owner");
 });
 const pick = (type: "image" | "video") => {
   const count =
@@ -1028,7 +1079,7 @@ const setExistingCover = (id: string) => {
 const upload = (path: string, type: string, propertyId: string, sort: number) =>
   new Promise<PropertyMedia>((resolve, reject) =>
     uni.uploadFile({
-      url: `${API_ORIGIN}/api/v1/media/upload`,
+      url: safeUploadUrl(`${API_ORIGIN}/api/v1/media/upload`),
       filePath: path,
       name: "file",
       header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
@@ -1214,6 +1265,9 @@ const deleteDraft = () => {
   });
 };
 const mediaUrl = resolveAssetUrl;
+if (import.meta.env.MODE === "test") {
+  watchPostEffect(() => permissionAudit("render-state", "property-editor", Boolean(form.id || existingMedia.value.length)));
+}
 </script>
 <template>
   <view class="page editor-page" :style="pageStyle"
@@ -1420,7 +1474,7 @@ const mediaUrl = resolveAssetUrl;
             ><text>中介费</text><checkbox-group @change="toggleNoAgentFee"><label><checkbox value="no-agent-fee" :checked="noAgentFee" color="#40543f" />无中介费</label></checkbox-group></view></view
         ><view class="term-block"><text>押付方式 *</text><view class="payment-options"><view class="payment-fixed">押一</view><view v-for="cycle in paymentCycles" :key="cycle" :class="{ active: paymentCycle === cycle }" @click="setPaymentCycle(cycle)">{{ cycle }}</view></view></view
         ><view v-if="rentType === '合租'" class="detail-grid shared-space-grid"><view class="field"><text>实际使用空间</text><input v-model.trim="form.layout" maxlength="32" placeholder="如：次卧 · 独卫 · 有飘窗" /></view><view class="field"><text>实际使用面积（㎡）</text><input v-model.number="form.areaSqm" type="number" placeholder="如：21" /></view></view
-        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>只记录剩余月数与押金，具体费用线下沟通</small></view><text>转租</text></view><view class="transfer-choice transfer-stepper"><text>剩余租期</text><view><button @click="adjustTransferMonths(-1)">−</button><input :value="form.remainingLeaseMonths || ''" type="number" maxlength="2" placeholder="月" @input="setTransferMonths(Number($event.detail.value))" /><text>个月</text><button @click="adjustTransferMonths(1)">＋</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><small>当前选择</small><strong>剩余 {{ form.remainingLeaseMonths || 0 }} 个月 · {{ transferDepositMultiplier ? `承接押金 ¥${transferDepositAmount}` : '无需承接押金' }}</strong></view></view
+        ><view v-if="form.listingSource === '转租'" class="transfer-settlement"><view class="transfer-heading"><view><strong>转租结算</strong><small>只记录剩余月数与押金，具体费用线下沟通</small></view><text>转租</text></view><view class="transfer-choice transfer-stepper"><text>剩余租期</text><view><button @click="adjustTransferMonths(-1)">−</button><input :value="form.remainingLeaseMonths || ''" type="number" maxlength="2" placeholder="月" @input="handleTransferMonthsInput" /><text>个月</text><button @click="adjustTransferMonths(1)">＋</button></view></view><view class="transfer-choice"><text>承接押金</text><view><button v-for="multiplier in [0, 1, 2]" :key="multiplier" :class="{ active: transferDepositMultiplier === multiplier }" @click="setTransferDeposit(multiplier)">{{ multiplier === 0 ? '无需承接' : `押${multiplier}` }}</button></view></view><view class="transfer-summary"><small>当前选择</small><strong>剩余 {{ form.remainingLeaseMonths || 0 }} 个月 · {{ transferDepositMultiplier ? `承接押金 ¥${transferDepositAmount}` : '无需承接押金' }}</strong></view></view
         ><view class="rent-row detail-row"
           ><view class="field"
             ><text>可入住日期</text

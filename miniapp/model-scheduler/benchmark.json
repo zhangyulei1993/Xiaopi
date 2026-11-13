@@ -1,0 +1,81 @@
+{
+  "version": "1",
+  "tasks": [
+    {
+      "id": "copy",
+      "description": "修改隔离样例中的按钮文案",
+      "check": "断言只有目标文案变化",
+      "input": "<button>提交</button>",
+      "assertions": [
+        "按钮文本改为保存",
+        "标签和属性保持一致"
+      ]
+    },
+    {
+      "id": "page",
+      "description": "给样例页面增加空列表状态",
+      "check": "空列表和非空列表均通过断言",
+      "input": "rows=[] 或 rows=[{id:\"r1\",label:\"样例\"}]",
+      "assertions": [
+        "空数组显示暂无记录",
+        "非空显示样例且不显示空提示"
+      ]
+    },
+    {
+      "id": "vue-ts",
+      "description": "联动修改 Vue 组件和 TypeScript 类型",
+      "check": "类型检查和组件断言通过",
+      "input": "父组件 prop 为 title:string，子组件显示 title",
+      "assertions": [
+        "两端改用 label:string",
+        "缺少 label 时类型检查失败",
+        "有 label 时正常渲染"
+      ]
+    },
+    {
+      "id": "api",
+      "description": "接入本地模拟接口并处理失败响应",
+      "check": "成功、错误和空响应均有断言",
+      "input": "模拟 GET /items。HTTP 200 返回 items 数组，503 返回错误",
+      "assertions": [
+        "200 非空渲染列表",
+        "200 空数组显示空提示",
+        "503 显示错误并退出加载状态"
+      ]
+    },
+    {
+      "id": "bug",
+      "description": "定位样例中的重复渲染问题",
+      "check": "复现断言和回归断言通过",
+      "input": "同一事件订阅在每次渲染时增加一条监听。渲染两次后触发一次事件",
+      "assertions": [
+        "解释重复订阅原因",
+        "验证渲染两次后回调只执行一次",
+        "卸载后回调执行零次"
+      ]
+    },
+    {
+      "id": "permissions",
+      "description": "分析样例中三种角色的访问控制",
+      "check": "逐项核对给定角色矩阵",
+      "input": "匿名、owner、viewer 三角色。读取允许 owner 与 viewer，编辑仅允许 owner",
+      "assertions": [
+        "输出六种读写预期",
+        "匿名两项均拒绝",
+        "viewer 编辑拒绝",
+        "owner 两项允许"
+      ]
+    },
+    {
+      "id": "test-failure",
+      "description": "分析固定自动化失败日志",
+      "check": "指出失败环节并区分环境和断言错误",
+      "input": "预检通过，核心与扩展视觉均在执行前因同一文件锁返回 EEXIST，业务先运行且通过",
+      "assertions": [
+        "定位共享锁争用",
+        "两套视觉判定未执行",
+        "业务通过记录独立保留"
+      ]
+    }
+  ]
+}

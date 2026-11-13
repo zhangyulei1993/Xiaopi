@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onLoad, onShow, onShareAppMessage } from "@dcloudio/uni-app";
-import { computed, nextTick, ref } from "vue";
+import { onLoad, onPageScroll, onShow, onShareAppMessage } from "@dcloudio/uni-app";
+import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { request, resolveAssetUrl } from "../../api/client";
 import {
   getPublicConfig,
@@ -21,7 +21,9 @@ import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
 import { listingDoorplate, listingLayout, listingTagValue, uniqueListingTags } from "../../utils/listing-title";
 import { clearPendingAction, peekPendingAction, savePendingAction } from "../../utils/pending-action";
+import propertyPlaceholderIcon from "../../static/icons/property-placeholder.svg";
 const item = ref<Property | null>(null),
+  detailPropertyID = ref(""),
   contactPhone = ref(""),
   brandName = ref("小皮租房"),
   loading = ref(true),
@@ -33,6 +35,8 @@ const item = ref<Property | null>(null),
   boundPhone = ref(""),
   appointmentName = ref(""),
   appointmentTime = ref("今天方便");
+const showScrolledTitle = ref(false);
+const statusBarHeight = ref(0);
 const activeRole = ref<"admin" | "user" | "">(getSession()?.role || "");
 const appointmentTimes = ["今天方便", "明天方便", "工作日晚上", "周末方便", "其他时间"];
 const relatedRadiusKm = ref(3);
@@ -69,6 +73,8 @@ const allProperties = ref<Property[]>([]);
 const featuredChannels = ref<Array<{ latitude?: number; longitude?: number; radiusKm?: number }>>([]);
 const activeMediaIndex = ref(0);
 const playingVideoIndex = ref(-1);
+const showMediaFullscreenHint = ref(true);
+let mediaHintTimer: ReturnType<typeof setTimeout> | undefined;
 const videoDimensions = ref<Record<number, { width: number; height: number }>>({});
 const mapExpanded = ref(false);
 const shareCardImage = ref("");
@@ -151,8 +157,14 @@ const load = async (id = "") => {
 };
 onLoad((query) => {
   uni.showShareMenu({ menus: ["shareAppMessage", "shareTimeline"] });
-  load(String(query?.id || ""));
+  statusBarHeight.value = Number(uni.getSystemInfoSync().statusBarHeight) || 0;
+  detailPropertyID.value = String(query?.id || "");
+  load(detailPropertyID.value);
 });
+onPageScroll(({ scrollTop }) => {
+  showScrolledTitle.value = scrollTop > 180;
+});
+const retryLoad = () => { if (detailPropertyID.value) void load(detailPropertyID.value); };
 onShow(() => {
   const roleBeforeRefresh = activeRole.value;
   syncAudience();
@@ -176,6 +188,21 @@ const mediaItems = computed(() => {
 });
 const mediaLabel = (media: { type: string }, index: number) =>
   media.type === "video" ? "视频" : `实拍 ${index + 1}`;
+const mediaSwitchLabel = (media: { type: string }, index: number) => {
+  if (media.type === "video") return "视频";
+  const imageNumber = mediaItems.value.slice(0, index + 1).filter((entry) => entry.type !== "video").length;
+  return `图片${imageNumber}`;
+};
+const showFullscreenHint = () => {
+  showMediaFullscreenHint.value = true;
+  if (mediaHintTimer) clearTimeout(mediaHintTimer);
+  mediaHintTimer = setTimeout(() => {
+    showMediaFullscreenHint.value = false;
+  }, 4000);
+};
+onBeforeUnmount(() => {
+  if (mediaHintTimer) clearTimeout(mediaHintTimer);
+});
 const isAdmin = computed(() => activeRole.value === "admin");
 const detailTags = computed(() => {
   const current = item.value;
@@ -286,7 +313,7 @@ const shareFieldValue = (property: Property, key: string) => shareFieldMeta[key]
 const shareTitle = computed(() => {
   const current = item.value;
   if (!current) return `${brandName.value}房源`;
-  const values = shareCardConfig.value.titleFields.filter(isPublicShareField).map((key) => shareFieldValue(current, key)).filter(Boolean);
+  const values = shareCardConfig.value.titleFields.filter((key) => isPublicShareField(key)).map((key) => shareFieldValue(current, key)).filter(Boolean);
   return [shareCardConfig.value.titlePrefix, ...values].filter(Boolean).join(" · ") || current.community || "精选房源";
 });
 const shareImageUrl = computed(() => {
@@ -393,13 +420,30 @@ const friendSharePayload = () => {
   };
 };
 onShareAppMessage(() => friendSharePayload());
+const pauseVideoAt = (index: number) => {
+  if (mediaItems.value[index]?.type === "video") {
+    uni.createVideoContext(`detail-video-${index}`).pause();
+  }
+};
 const handleMediaChange = (event: { detail: { current: number } }) => {
+  if (event.detail.current !== activeMediaIndex.value) pauseVideoAt(activeMediaIndex.value);
   activeMediaIndex.value = event.detail.current;
   playingVideoIndex.value = -1;
+  showMediaFullscreenHint.value = mediaItems.value[event.detail.current]?.type !== "video";
+  if (mediaHintTimer) clearTimeout(mediaHintTimer);
+  if (showMediaFullscreenHint.value) showFullscreenHint();
 };
 const selectMedia = (index: number) => {
+  if (index !== activeMediaIndex.value) pauseVideoAt(activeMediaIndex.value);
   activeMediaIndex.value = index;
   playingVideoIndex.value = -1;
+  showMediaFullscreenHint.value = mediaItems.value[index]?.type !== "video";
+  if (mediaHintTimer) clearTimeout(mediaHintTimer);
+  if (showMediaFullscreenHint.value) showFullscreenHint();
+};
+const onVideoPlay = (index: number) => {
+  playingVideoIndex.value = index;
+  if (index === activeMediaIndex.value) showFullscreenHint();
 };
 const readVideoMetadata = (
   index: number,
@@ -553,6 +597,11 @@ const maskedPhone = computed(() => {
   const phone = boundPhone.value;
   return phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone;
 });
+const closeAppointmentFromBackdrop = (event: { target?: { id?: string }; currentTarget?: { id?: string } }) => {
+  if (event.target?.id === "appointment-mask" && event.currentTarget?.id === "appointment-mask") {
+    appointmentOpen.value = false;
+  }
+};
 const openAppointment = async () => {
   if (!item.value || !requireUser("appointment")) return;
   if (!boundPhone.value) {
@@ -712,12 +761,16 @@ const phoneCustomerService = () => {
   <view v-if="loading" class="page detail-skeleton"
     ><view class="skeleton-media"></view><view class="skeleton-card"><view></view><view></view><view></view></view><view class="skeleton-card short"><view></view><view></view></view></view
   ><view v-else-if="loadFailed" class="page state"
-    >房源加载失败，请返回重试</view
+    ><text>房源暂时加载失败</text><small>检查网络后重试，或返回列表稍后再看。</small><button @click="retryLoad">重新加载</button></view
   ><view v-else-if="item" class="page detail-page" :style="pageStyle">
     <canvas canvas-id="share-card-canvas" class="share-card-canvas" :width="600" :height="480"></canvas>
+    <view v-if="showScrolledTitle" class="detail-scrolled-header" :style="{ paddingTop: `${statusBarHeight}px` }">
+      <view class="detail-scrolled-back" @click="goBack"><text>‹</text></view>
+      <text class="detail-scrolled-title">{{ item.title || item.community || "房源详情" }}</text>
+    </view>
     <view class="detail-media-back" @click="goBack"><text>‹</text></view>
     <view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
-      ><text class="detail-cover-icon">⌂</text><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
+      ><image class="property-placeholder-image" :src="propertyPlaceholderIcon" mode="aspectFit" /><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
     ><view v-else class="media-gallery" :class="{ 'portrait-video': activeVideoIsPortrait, 'video-active': mediaItems[activeMediaIndex]?.type === 'video', 'video-playing': playingVideoIndex === activeMediaIndex }"
       ><swiper class="media-swiper" :style="{ height: `${mediaViewportHeight}rpx` }" circular :current="activeMediaIndex" @change="handleMediaChange">
         <swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`">
@@ -730,18 +783,21 @@ const phoneCustomerService = () => {
             @click="previewImage(media.url)" />
           <view v-else-if="media.type === 'video' && shouldLoadMedia(index)" class="video-stage">
             <video
+              :id="`detail-video-${index}`"
               class="media-video"
               :src="mediaUrl(media.url)"
               :poster="videoPoster"
               controls
               show-play-btn
+              :show-center-play-btn="true"
               show-progress
               show-fullscreen-btn
               enable-progress-gesture
+              enable-play-gesture
               preload="metadata"
               object-fit="cover"
               @loadedmetadata="readVideoMetadata(index, $event)"
-              @play="playingVideoIndex = index"
+              @play="onVideoPlay(index)"
               @pause="playingVideoIndex = -1"
               @ended="playingVideoIndex = -1"
             ></video>
@@ -749,14 +805,15 @@ const phoneCustomerService = () => {
           <view v-else class="media-loading">加载媒体中</view>
         </swiper-item>
       </swiper
-      ><view v-if="mediaItems.length === 1 && mediaItems[activeMediaIndex]?.type !== 'video'" class="media-counter">1 / 1</view><scroll-view v-if="mediaItems.length > 1" class="media-strip" scroll-x show-scrollbar="false"
+      ><view v-if="showMediaFullscreenHint && (mediaItems[activeMediaIndex]?.type !== 'video' || playingVideoIndex === activeMediaIndex)" class="media-fullscreen-hint" :class="{ 'video-hint': mediaItems[activeMediaIndex]?.type === 'video', 'image-hint': mediaItems[activeMediaIndex]?.type !== 'video' }"><text>{{ mediaItems[activeMediaIndex]?.type === 'video' ? '全屏观看' : '点击图片查看大图' }}</text><text class="hint-arrow">{{ mediaItems[activeMediaIndex]?.type === 'video' ? '↘' : '↗' }}</text></view>
+      <view v-if="mediaItems.length === 1 && mediaItems[activeMediaIndex]?.type !== 'video'" class="media-counter">1 / 1</view><scroll-view v-if="mediaItems.length > 1" class="media-strip" scroll-x show-scrollbar="false"
       ><view class="media-strip-row"><view
         v-for="(media, index) in mediaItems"
         :key="`thumb-${media.url}-${index}`"
         class="media-thumb"
         :class="{ active: activeMediaIndex === index, video: media.type === 'video' }"
         @click="selectMedia(index)"
-        ><image v-if="media.type === 'image'" :src="mediaUrl(media.url)" mode="aspectFill" /><text v-else>视频</text></view></view
+        ><text class="media-thumb-label">{{ mediaSwitchLabel(media, index) }}</text></view></view
       ></scroll-view
       ></view
     ><view v-if="detailModuleEnabled('overview')" class="card overview"
@@ -846,16 +903,22 @@ const phoneCustomerService = () => {
       ><view class="detail-signature"><text class="detail-signature-mark">皮</text><strong>{{ brandName || '小皮租房' }}</strong></view
       ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom" @click="recordContact('consult_entry_click')"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
-    ><view v-if="appointmentOpen" class="appointment-mask" @click.self="appointmentOpen = false"><view class="appointment-sheet"><view class="appointment-sheet-head"><view><strong>预约看房</strong><text>{{ item.title || item.community }}</text></view><text @click="appointmentOpen = false">×</text></view><template v-if="boundPhone"><view class="appointment-field"><text>怎么称呼您</text><input v-model.trim="appointmentName" maxlength="20" placeholder="例如：张女士" /></view><view class="appointment-field"><text>联系手机号</text><strong>{{ maskedPhone }}</strong></view><view class="appointment-field"><text>什么时候方便</text><view class="appointment-times"><text v-for="time in appointmentTimes" :key="time" :class="{ active: appointmentTime === time }" @click="appointmentTime = time">{{ time }}</text></view></view><button class="appointment-submit" :loading="appointmentSubmitting" @click="submitAppointment">提交预约</button></template><template v-else><view class="appointment-bind"><strong>先绑定手机号</strong><text>用于确认看房安排，只会展示脱敏号码。</text><button open-type="getPhoneNumber" :loading="appointmentBinding" @getphonenumber="bindAppointmentPhone">绑定手机号并继续</button></view></template></view></view
+    ><view v-if="appointmentOpen" id="appointment-mask" class="appointment-mask" @click="closeAppointmentFromBackdrop"><view class="appointment-sheet"><view class="appointment-sheet-head"><view><strong>预约看房</strong><text>{{ item.title || item.community }}</text></view><text @click="appointmentOpen = false">×</text></view><template v-if="boundPhone"><view class="appointment-field"><text>怎么称呼您</text><input v-model.trim="appointmentName" maxlength="20" placeholder="例如：张女士" /></view><view class="appointment-field"><text>联系手机号</text><strong>{{ maskedPhone }}</strong></view><view class="appointment-field"><text>什么时候方便</text><view class="appointment-times"><text v-for="time in appointmentTimes" :key="time" :class="{ active: appointmentTime === time }" @click="appointmentTime = time">{{ time }}</text></view></view><button class="appointment-submit" :loading="appointmentSubmitting" @click="submitAppointment">提交预约</button></template><template v-else><view class="appointment-bind"><strong>先绑定手机号</strong><text>用于确认看房安排，只会展示脱敏号码。</text><button open-type="getPhoneNumber" :loading="appointmentBinding" @getphonenumber="bindAppointmentPhone">绑定手机号并继续</button></view></template></view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
 </template>
 <style scoped>
 .state {
-  text-align: center;
-  padding-top: 180rpx;
+  display: flex;
+  min-height: 55vh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 48rpx 36rpx;
   color: #7e887d;
 }
+.state small{color:#92998f;font-size:23rpx;line-height:1.5}.state button{margin-top:10rpx;padding:0 30rpx;border:0;border-radius:14rpx;background:#40543f;color:#fff;font-size:24rpx;line-height:72rpx}.state button::after{border:0}
 .detail-page {
   padding-bottom: 150rpx;
 }
@@ -1171,7 +1234,9 @@ const phoneCustomerService = () => {
 .state{color:#7e887d}.detail-cover,.media-image,.media-video{background:#e4e7de}.location-heading strong,.nearby-item strong{color:#29382d}.location-heading small,.nearby-heading small,.nearby-item small{color:#7e887d}.nearby-heading>text,.nearby-price strong{color:#d76440}.navigate-button{background:#edf1e8;color:#536a45}.tags{gap:10rpx}.tags text{padding:8rpx 13rpx;background:#edf0dc;color:#536a45;font-size:21rpx}.row{color:#7e887d}.row text:last-child{color:#29382d}.amenity-icon{border-color:#dfe7d8;background:#edf1e8;box-shadow:none}.amenity-name{color:#40543f}.desc{color:#64705f}.heart{color:#657162}.heart.active{color:#d76440}
 /* Delivery-level detail hierarchy. */
 .detail-page{padding:24rpx 24rpx 250rpx;background:#f6f4ee}.detail-page-head{margin:4rpx 6rpx 22rpx}.detail-page-head view{font-size:38rpx;letter-spacing:-1rpx}.detail-page-head text{margin-top:7rpx;font-size:22rpx}.media-gallery{border-radius:22rpx;box-shadow:0 10rpx 28rpx rgba(52,62,48,.08)}.media-swiper{height:460rpx}.media-strip{margin:16rpx 2rpx 6rpx}.detail-page .card{margin-bottom:20rpx;padding:26rpx;border:1rpx solid #e9e6df;border-radius:22rpx;background:#fffdf9}.overview{margin-top:20rpx}.overview .price{font-size:48rpx;letter-spacing:-1rpx}.overview .price .price-unit{margin-left:2rpx;font-size:22rpx}.overview .title{margin-top:18rpx;font-size:37rpx;line-height:1.34;letter-spacing:-.8rpx}.overview .muted{margin-top:10rpx;color:#7a8378;font-size:23rpx;line-height:1.5}.key-facts{gap:10rpx;margin-top:22rpx}.key-facts>view,.detail-info-grid>view{padding:16rpx 15rpx;border-radius:13rpx;background:#f0eee8}.key-facts small,.detail-info-grid small{font-size:19rpx}.key-facts strong,.detail-info-grid strong{margin-top:6rpx;font-size:23rpx}.detail-page .title.small{margin:0;font-size:31rpx;letter-spacing:-.4rpx}.detail-info .title{margin-bottom:18rpx}.detail-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx;margin-bottom:22rpx}.detail-section-heading small{display:block;margin-top:6rpx;color:#8a9287;font-size:20rpx;line-height:1.4}.detail-section-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}.amenity-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:20rpx 12rpx}.amenity-icon{width:64rpx;height:64rpx;border-radius:18rpx}.amenity-icon image{width:38rpx;height:38rpx}.amenity-name{font-size:21rpx}.environment-list{display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:22rpx}.environment-list>view{min-width:0;padding:15rpx 16rpx;border-radius:13rpx;background:#f0f2e9}.environment-list small,.environment-list strong{display:block}.environment-list small{color:#8a9287;font-size:18rpx}.environment-list strong{overflow:hidden;margin-top:5rpx;color:#40543f;font-size:22rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.location-heading strong{font-size:30rpx}.location-heading small{font-size:22rpx}.map-summary{padding-top:18rpx}.desc{margin-top:16rpx;font-size:25rpx;line-height:1.75}.service-card{padding:20rpx 22rpx!important}.nearby-item strong{font-size:25rpx}
-.detail-page{padding:0 24rpx 250rpx}.detail-page-head{display:none}.media-gallery{margin:0 -24rpx;border-radius:0;box-shadow:none}.media-strip{position:absolute;z-index:3;right:18rpx;bottom:16rpx;left:18rpx;width:auto;margin:0;white-space:nowrap;transition:opacity .18s ease,transform .18s ease}.media-strip-row{gap:8rpx;padding:0}.media-thumb{width:66rpx;height:48rpx;border:1rpx solid rgba(255,255,255,.72);border-radius:8rpx;box-shadow:0 3rpx 10rpx rgba(0,0,0,.2)}.media-thumb.video{width:auto;min-width:66rpx;padding:0 10rpx;background:rgba(34,50,37,.82);font-size:17rpx}.media-thumb.active{border-color:#fff;box-shadow:0 0 0 2rpx rgba(64,84,63,.72),0 3rpx 10rpx rgba(0,0,0,.2)}.media-thumb small{display:none}.media-counter{bottom:16rpx;right:18rpx;font-size:18rpx}.media-gallery.video-active .media-strip{bottom:104rpx}.media-gallery.video-playing .media-strip{pointer-events:none;opacity:0;transform:translateY(12rpx)}
+.detail-page{padding:0 24rpx 250rpx}.detail-page-head{display:none}.media-gallery{margin:0 -24rpx;border-radius:0;box-shadow:none}.media-strip{position:absolute;z-index:3;right:18rpx;bottom:calc(16px + 1px);left:18rpx;width:auto;margin:0;white-space:nowrap;transition:opacity .18s ease}.media-strip-row{gap:8rpx;padding:0}.media-thumb{position:relative;width:66rpx;height:48rpx;padding:0;overflow:hidden;border:1rpx solid rgba(255,255,255,.68);border-radius:8rpx;background:rgba(28,38,30,.24);box-shadow:0 3rpx 10rpx rgba(0,0,0,.2);box-sizing:border-box}.media-thumb image{width:100%;height:100%;opacity:.66}.media-thumb .media-thumb-label{position:absolute;right:0;bottom:0;left:0;padding:3rpx 2rpx;background:rgba(28,38,30,.66);color:#fff;font-size:14rpx;line-height:1.15;text-align:center}.media-thumb.video .media-thumb-label{top:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(34,50,37,.76);font-size:16rpx}.media-thumb.active{border-color:#fff;box-shadow:0 0 0 2rpx rgba(64,84,63,.72),0 3rpx 10rpx rgba(0,0,0,.2)}.media-thumb small{display:none}.media-counter{bottom:16rpx;right:18rpx;font-size:18rpx}.media-gallery.video-active .media-strip{bottom:calc(104rpx - 20px + 1px)}
+.media-fullscreen-hint{position:absolute;z-index:4;right:76rpx;bottom:calc(3px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:7rpx;padding:10rpx 14rpx;border:1rpx solid rgba(255,255,255,.34);border-radius:999rpx;background:rgba(18,25,19,.56);box-shadow:0 3rpx 12rpx rgba(0,0,0,.14);color:rgba(255,255,255,.94);font-size:20rpx;white-space:nowrap;pointer-events:none}.media-fullscreen-hint.video-hint{animation:video-hint-pulse 1s ease-in-out 3}.media-fullscreen-hint.image-hint{top:50%;right:auto;bottom:auto;left:50%;padding:13rpx 18rpx;transform:translate(-50%,-50%);font-size:22rpx;animation:media-image-hint-in .25s ease both}.media-fullscreen-hint .hint-arrow{font-size:22rpx}@keyframes video-hint-pulse{0%,100%{opacity:1}50%{opacity:.42}}@keyframes media-image-hint-in{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
+.media-thumb{display:flex;width:auto;min-width:66rpx;align-items:center;justify-content:center;padding:0 15rpx;border-color:rgba(255,255,255,.58);background:rgba(27,38,29,.48)}.media-thumb.video{min-width:66rpx;padding:0 15rpx;background:rgba(27,38,29,.62);font-size:inherit}.media-thumb .media-thumb-label{position:static;display:block;padding:0;background:transparent;color:rgba(255,255,255,.96);font-size:17rpx;font-weight:600;line-height:1;white-space:nowrap}.media-thumb.active{border-color:rgba(255,255,255,.96);background:rgba(55,77,56,.82);box-shadow:0 0 0 2rpx rgba(255,255,255,.35),0 3rpx 10rpx rgba(0,0,0,.2)}
 .detail-page{position:relative}.detail-media-back{position:absolute;z-index:6;top:calc(var(--status-bar-height, 0px) + 16rpx);left:22rpx;display:grid;width:58rpx;height:58rpx;place-items:center;border:1rpx solid rgba(255,255,255,.56);border-radius:50%;background:rgba(23,31,24,.38);box-shadow:0 3rpx 12rpx rgba(0,0,0,.16)}.detail-media-back text{color:#fff;font-size:54rpx;font-weight:300;line-height:48rpx;transform:translateY(-3rpx)}.detail-media-back:active{opacity:.75;transform:scale(.96)}
 .detail-module-kicker{margin-top:18rpx;color:#80907a;font-size:20rpx;font-weight:700;letter-spacing:1rpx;line-height:1.2}.detail-section-heading.compact{margin-bottom:18rpx}.location-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}
 .facility-group-label{margin:0 0 16rpx;color:#667362;font-size:21rpx;font-weight:700;letter-spacing:.5rpx}.facility-group-label.environment-label{margin-top:24rpx}.amenity-grid{padding-bottom:2rpx}.environment-list{margin-top:0}.nearby-card{padding:26rpx!important}.nearby-heading{margin-bottom:18rpx}.nearby-item{display:grid;grid-template-columns:170rpx minmax(0,1fr);gap:18rpx;min-height:0;padding:18rpx 0;border-top:1rpx solid #eeece7}.nearby-cover{display:grid;width:170rpx;height:126rpx;overflow:hidden;place-items:center;border-radius:15rpx;background:#e9ede3;color:#687563;font-size:23rpx;font-weight:700}.nearby-cover image{display:block;width:100%;height:100%}.nearby-content{display:flex;min-width:0;flex-direction:column}.nearby-content>strong{display:-webkit-box;overflow:hidden;color:#29382d;font-size:25rpx;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.nearby-content>small{overflow:hidden;margin-top:7rpx;color:#7e887d;font-size:20rpx;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.nearby-footer{display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto}.nearby-footer>text{color:#879084;font-size:19rpx}.nearby-price{text-align:left}.nearby-price strong{color:#d76440;font-size:28rpx;line-height:1}.nearby-price strong small{display:inline;margin:0 0 0 2rpx;color:#9b8d83;font-size:17rpx;font-weight:500}.nearby-more{border-radius:12rpx;background:#f2f4ed;line-height:58rpx}
@@ -1188,5 +1253,11 @@ const phoneCustomerService = () => {
 /* Operator-only doorplate is metadata, not part of the public tag stream. */
 .overview-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:8rpx;margin-top:12rpx}.detail-tag-stack{display:flex;flex-direction:column;align-items:flex-start;gap:8rpx;margin-top:14rpx}.detail-tags-inline{margin-top:0}.detail-tags{display:flex;flex-wrap:wrap;gap:10rpx;margin:0}.detail-tags text{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-detail-doorplate{display:block;box-sizing:border-box;width:max-content;max-width:100%;overflow:hidden;margin-top:13rpx;padding:7rpx 11rpx;border:1rpx solid #d8e2d2;border-radius:9rpx;background:#f3f7ee;color:#40543f;font-size:21rpx;font-weight:700;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
 .detail-tags-classic .detail-tags,.detail-tags-grouped{padding:0;border-radius:0;background:transparent;gap:8rpx}.detail-tags-classic .detail-tags text,.detail-tags-grouped text{background:#fff!important;border:1rpx solid #dce4d5}
-.floating-appointment{position:fixed;z-index:8;top:50%;right:24rpx;display:flex;width:96rpx;height:96rpx;flex-direction:column;align-items:center;justify-content:center;gap:3rpx;margin:0;padding:0;border:0;border-radius:26rpx;transform:translateY(-50%);background:#40543f;box-shadow:0 10rpx 24rpx rgba(38,57,38,.24);color:#fff;line-height:1}.floating-appointment::after{border:0}.floating-appointment text{font-size:25rpx;font-weight:800}.floating-appointment small{font-size:19rpx;line-height:1}.floating-appointment:active{opacity:.8;transform:translateY(-50%) scale(.96)}.appointment-mask{position:fixed;z-index:30;inset:0;display:flex;align-items:flex-end;background:rgba(20,30,22,.46)}.appointment-sheet{box-sizing:border-box;width:100%;padding:30rpx 30rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:30rpx 30rpx 0 0;background:#fffdf9}.appointment-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26rpx}.appointment-sheet-head view{display:flex;min-width:0;flex-direction:column;gap:8rpx}.appointment-sheet-head strong{color:#2c3b2e;font-size:36rpx;line-height:1.2}.appointment-sheet-head view text{overflow:hidden;color:#7a8378;font-size:23rpx;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.appointment-sheet-head>text{width:54rpx;height:54rpx;border-radius:50%;background:#f0f1eb;color:#667260;font-size:42rpx;line-height:49rpx;text-align:center}.appointment-field{padding:22rpx 0;border-top:1rpx solid #ecebe5}.appointment-field>text{display:block;margin-bottom:15rpx;color:#697568;font-size:22rpx}.appointment-field input{height:78rpx;padding:0 20rpx;border-radius:14rpx;background:#f4f5ef;color:#2f3d30;font-size:28rpx}.appointment-field strong{color:#334032;font-size:30rpx;font-weight:600}.appointment-times{display:flex;flex-wrap:wrap;gap:12rpx}.appointment-times text{padding:13rpx 17rpx;border:1rpx solid #dfe5d9;border-radius:12rpx;background:#fff;color:#667260;font-size:22rpx;line-height:1}.appointment-times text.active{border-color:#40543f;background:#40543f;color:#fff}.appointment-submit,.appointment-bind button{margin-top:26rpx;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx;font-weight:750}.appointment-submit::after,.appointment-bind button::after{border:0}.appointment-bind{display:flex;flex-direction:column;gap:13rpx;padding:16rpx 0}.appointment-bind strong{color:#334032;font-size:30rpx}.appointment-bind text{color:#7b8579;font-size:23rpx;line-height:1.55}.appointment-bind button{width:100%}
+.floating-appointment{position:fixed;z-index:8;top:50%;right:24rpx;display:flex;width:96rpx;height:96rpx;flex-direction:column;align-items:center;justify-content:center;gap:3rpx;margin:0;padding:0;border:0;border-radius:26rpx;transform:translateY(-50%);background:#40543f;box-shadow:0 10rpx 24rpx rgba(38,57,38,.24);color:#fff;line-height:1}.floating-appointment::after{border:0}.floating-appointment text{font-size:25rpx;font-weight:800}.floating-appointment small{font-size:19rpx;line-height:1}.floating-appointment:active{opacity:.8;transform:translateY(-50%) scale(.96)}.appointment-mask{position:fixed;z-index:30;inset:0;display:flex;align-items:flex-end;background:rgba(20,30,22,.46)}.appointment-sheet{box-sizing:border-box;width:100%;padding:30rpx 30rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:30rpx 30rpx 0 0;background:#fffdf9}.appointment-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26rpx}.appointment-sheet-head view{display:flex;min-width:0;flex-direction:column;gap:8rpx}.appointment-sheet-head strong{color:#2c3b2e;font-size:36rpx;line-height:1.2}.appointment-sheet-head view text{overflow:hidden;color:#7a8378;font-size:23rpx;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.appointment-sheet-head>text{width:54rpx;height:54rpx;border-radius:50%;background:#f0f1eb;color:#667260;font-size:42rpx;line-height:49rpx;text-align:center}.appointment-field{padding:22rpx 0;border-top:1rpx solid #ecebe5}.appointment-field>text{display:block;margin-bottom:15rpx;color:#697568;font-size:22rpx}.appointment-field input{height:78rpx;padding:0 20rpx;border-radius:14rpx;background:#f4f5ef;color:#2f3d30;font-size:28rpx}.appointment-field strong{color:#334032;font-size:30rpx;font-weight:600}.appointment-times{display:flex;flex-wrap:wrap;gap:8rpx}.appointment-times text{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-height:64rpx;padding:0 12rpx;border:1rpx solid #dfe5d9;border-radius:10rpx;background:#fff;color:#667260;font-size:22rpx;line-height:1.2;text-align:center}.appointment-times text.active{border-color:#40543f;background:#40543f;color:#fff}.appointment-submit,.appointment-bind button{margin-top:26rpx;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx;font-weight:750}.appointment-submit::after,.appointment-bind button::after{border:0}.appointment-bind{display:flex;flex-direction:column;gap:13rpx;padding:16rpx 0}.appointment-bind strong{color:#334032;font-size:30rpx}.appointment-bind text{color:#7b8579;font-size:23rpx;line-height:1.55}.appointment-bind button{width:100%}
+.detail-scrolled-header{position:fixed;z-index:24;top:0;right:0;left:0;box-sizing:content-box;height:36px;background:rgba(255,253,249,.98);box-shadow:0 1px 8px rgba(40,52,39,.08);}
+.detail-scrolled-back{position:absolute;bottom:0;left:14px;display:grid;width:36px;height:36px;place-items:center;color:#40543f;}
+.detail-scrolled-back text{font-size:34px;font-weight:300;line-height:1;}
+.detail-scrolled-title{position:absolute;right:98px;bottom:0;left:98px;overflow:hidden;height:36px;color:#29382d;font-size:15px;font-weight:700;line-height:36px;text-align:center;text-overflow:ellipsis;white-space:nowrap;}
+.detail-cover-empty .property-placeholder-image{width:132rpx;height:104rpx;opacity:.8;}
+.detail-cover-empty{gap:9rpx;}
 </style>

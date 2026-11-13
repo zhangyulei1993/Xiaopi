@@ -2,7 +2,7 @@
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { clearSession, getSession, saveSession } from '../../auth/session'
-import { API_ORIGIN, resetReauthentication } from '../../api/client'
+import { API_ORIGIN, safeUploadUrl, resetReauthentication } from '../../api/client'
 import { getWechatUserProfile, refreshAuth, temporaryLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
 import { usePagePresentation } from '../../utils/presentation'
 
@@ -16,6 +16,13 @@ const avatarUrl = ref('')
 const showProfileSetup = ref(false)
 const loginReason = ref('登录后可同步关注、足迹与找房进度')
 const brandName = ref('小皮租房')
+const testLoginEnabled = import.meta.env.VITE_TEST_LOGIN_ENABLED === 'true'
+const testAccounts = [
+  { code: 'qa-user-a', label: '普通用户 A' },
+  { code: 'qa-user-b', label: '普通用户 B' },
+  { code: 'qa-admin', label: '测试管理员' },
+  { code: 'qa-disabled', label: '禁用用户（验证拒绝）' },
+]
 const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
 
 onLoad(async (query) => {
@@ -81,6 +88,23 @@ const loginWithWechat = () => {
   })
 }
 
+const loginWithTestAccount = async (code: string) => {
+  if (!testLoginEnabled || isLoggingIn.value) return
+  isLoggingIn.value = true
+  clearSession()
+  uni.removeStorageSync('xiaopi_bound_phone')
+  uni.removeStorageSync('xiaopi_show_favorites')
+  try {
+    const result = await wechatLogin(code)
+    if (!result.testOnly) throw new Error('当前服务未启用隔离测试登录')
+    await completeLogin(result.accessToken, result.role, result.phone || '', false)
+  } catch (error) {
+    showLoginError(error instanceof Error ? error.message : undefined)
+  } finally {
+    isLoggingIn.value = false
+  }
+}
+
 const loginTemporarily = async () => {
   if (isLoggingIn.value) return
   if (!/^\+?\d{6,20}$/.test(phone.value.trim()) || !/^\d{6}$/.test(accessCode.value.trim())) {
@@ -92,7 +116,7 @@ const loginTemporarily = async () => {
     const result = await temporaryLogin(phone.value.trim(), accessCode.value.trim())
     clearSession()
     uni.removeStorageSync('xiaopi_bound_phone')
-    saveSession(result.accessToken, result.role)
+    saveSession(result.accessToken, result.role === 'admin' ? 'admin' : 'user')
     try {
       const refreshed = await refreshAuth()
       saveSession(refreshed.accessToken, refreshed.role)
@@ -118,7 +142,7 @@ const uploadAvatar = (path: string) => {
   if (!path || isUploadingAvatar.value) return
   isUploadingAvatar.value = true
   uni.uploadFile({
-    url: `${API_ORIGIN}/api/v1/auth/avatar`,
+    url: safeUploadUrl(`${API_ORIGIN}/api/v1/auth/avatar`),
     filePath: path,
     name: 'file',
     header: { Authorization: `Bearer ${getSession()?.accessToken || ''}` },
@@ -186,6 +210,7 @@ const saveProfileAndEnter = async () => {
         <view><text>访问码</text><input v-model="accessCode" type="number" maxlength="6" placeholder="6 位数字" /></view>
       </view>
       <button class="code-button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginTemporarily">使用访问码登录</button>
+      <view v-if="testLoginEnabled" class="test-login-panel"><text>隔离测试身份</text><button v-for="account in testAccounts" :key="account.code" :disabled="isLoggingIn" @click="loginWithTestAccount(account.code)">{{ account.label }}</button></view>
     </view>
     <view class="login-note">登录即表示同意小程序隐私保护说明</view>
     <view v-if="showProfileSetup" class="profile-mask">
@@ -210,4 +235,5 @@ const saveProfileAndEnter = async () => {
 .divider text{position:relative;padding:0 18rpx;background:#fff}.temporary-form{display:grid;grid-template-columns:1.15fr .85fr;gap:12rpx}.temporary-form>view{padding:16rpx 18rpx;border:1rpx solid #e5e7df;border-radius:16rpx;background:#fafbf8}.temporary-form text{display:block;color:#727d70;font-size:19rpx}.temporary-form input{height:48rpx;margin-top:5rpx;font-size:25rpx;line-height:48rpx}.code-button{width:100%;margin:18rpx 0 0;border:0;border-radius:16rpx;background:#ecefe7;color:#40543f;font-size:25rpx;line-height:78rpx}.login-note{margin-top:28rpx;color:#9ca39a;font-size:19rpx;text-align:center}
 .profile-mask{position:fixed;z-index:20;inset:0;display:flex;align-items:flex-end;padding:32rpx;background:rgba(28,39,29,.46);box-sizing:border-box}.profile-sheet{width:100%;padding:42rpx 34rpx 28rpx;border-radius:34rpx 34rpx 18rpx;background:#fff;box-sizing:border-box;text-align:center}.setup-kicker{color:#819073;font-size:18rpx;font-weight:700;letter-spacing:3rpx}.profile-sheet>strong{display:block;margin-top:12rpx;color:#304530;font-size:40rpx;letter-spacing:-2rpx}.profile-sheet>text{display:block;margin:14rpx auto 26rpx;color:#879084;font-size:23rpx;line-height:1.55}.setup-avatar{display:grid;place-items:center;width:132rpx;height:132rpx;margin:0 auto 24rpx;padding:0;overflow:hidden;border:0;border-radius:38rpx;background:#e8eedf;color:#56694e;font-size:23rpx}.setup-avatar::after,.setup-confirm::after{border:0}.setup-avatar image{width:100%;height:100%}.profile-sheet input{height:84rpx;padding:0 24rpx;border:1rpx solid #dbe5d7;border-radius:16rpx;background:#fafcf8;font-size:27rpx;text-align:left}.setup-confirm{width:100%;margin-top:18rpx;border:0;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx;line-height:88rpx}.setup-skip{margin-top:24rpx;color:#84917e;font-size:25rpx;line-height:48rpx}
 .page{padding-bottom:calc(40rpx + env(safe-area-inset-bottom))}.profile-mask{padding-bottom:calc(32rpx + env(safe-area-inset-bottom))}
+.test-login-panel{display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:24rpx;padding-top:20rpx;border-top:1rpx dashed #d8dfd1}.test-login-panel>text{grid-column:1/-1;color:#71806a;font-size:21rpx}.test-login-panel button{margin:0;padding:0 12rpx;border:1rpx solid #dce5d4;border-radius:12rpx;background:#f4f7f0;color:#40543f;font-size:21rpx;line-height:64rpx}.test-login-panel button::after{border:0}
 </style>

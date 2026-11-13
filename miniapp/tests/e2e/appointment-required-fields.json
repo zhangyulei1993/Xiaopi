@@ -1,0 +1,14 @@
+{
+  "name": "appointment-required-fields-no-submit",
+  "page": "/pages/requests/index?propertyId=TEST-NO-SUBMIT&title=%E8%87%AA%E5%8A%A8%E5%8C%96%E6%A0%A1%E9%AA%8C",
+  "readySelector": ".request-hero",
+  "assertions": [
+    { "kind": "current-page", "equals": "pages/requests/index" },
+    { "kind": "page-text", "selector": ".request-hero", "equals": "预约房源" }
+  ],
+  "steps": [
+    { "action": "tap", "selector": ".button", "waitForSelector": ".button" },
+    { "action": "assert-text", "selector": ".request-hero", "contains": "预约房源" },
+    { "action": "assert-network-absent", "contains": "/v1/rental-requests" }
+  ]
+}

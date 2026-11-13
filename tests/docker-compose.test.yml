@@ -1,0 +1,70 @@
+name: xiaopi-miniapp-test
+
+services:
+  mysql-test:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: xiaopi_miniapp_test
+      MYSQL_USER: ${TEST_MYSQL_USER:?TEST_MYSQL_USER is required}
+      MYSQL_PASSWORD: ${TEST_MYSQL_PASSWORD:?TEST_MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${TEST_MYSQL_ROOT_PASSWORD:?TEST_MYSQL_ROOT_PASSWORD is required}
+      TZ: Asia/Shanghai
+    volumes:
+      - test_mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p\"$${MYSQL_PASSWORD}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [test_internal]
+
+  api-test:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    working_dir: /workspace/backend
+    environment:
+      APP_ENV: test
+      APP_NAME: Xiaopi isolated test API
+      APP_PORT: 8080
+      MYSQL_HOST: mysql-test
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${TEST_MYSQL_USER:?TEST_MYSQL_USER is required}
+      MYSQL_PASSWORD: ${TEST_MYSQL_PASSWORD:?TEST_MYSQL_PASSWORD is required}
+      MYSQL_DATABASE: xiaopi_miniapp_test
+      AUTH_TOKEN_SECRET: ${TEST_AUTH_TOKEN_SECRET:?TEST_AUTH_TOKEN_SECRET is required}
+      AUTH_TOKEN_TTL: ${TEST_AUTH_TOKEN_TTL:-15m}
+      ADMIN_USERNAME: qa-bootstrap-admin
+      ADMIN_PASSWORD: ${TEST_BOOTSTRAP_ADMIN_PASSWORD:?TEST_BOOTSTRAP_ADMIN_PASSWORD is required}
+      WECHAT_MOCK_ENABLED: "false"
+      TEST_WECHAT_CODE_MAP: ${TEST_WECHAT_CODE_MAP:?TEST_WECHAT_CODE_MAP is required}
+      WECHAT_MINI_APP_ID: ""
+      WECHAT_MINI_APP_SECRET: ""
+      TENCENT_MAP_KEY: ""
+      TEST_FAKE_MAP_ENABLED: "true"
+      COS_BUCKET: ""
+      COS_REGION: ""
+      COS_SECRET_ID: ""
+      COS_SECRET_KEY: ""
+      COS_PUBLIC_BASE: ""
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18083:8080"
+    networks: [test_internal]
+
+volumes:
+  test_mysql_data:
+    name: xiaopi_miniapp_e2e_test_mysql_data
+
+networks:
+  test_internal:
+    name: xiaopi_miniapp_e2e_test_bridge
+    driver: bridge

@@ -1,0 +1,867 @@
+{
+  "roles": [
+    "guest",
+    "user",
+    "admin"
+  ],
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.health"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/login",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "NOT_RUN",
+      "handler": "s.adminLogin"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/wechat/login",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "NOT_RUN",
+      "handler": "s.wechatLogin"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/wechat/phone",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.bindWechatPhone, roleUser, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/profile",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.getUserProfile, roleUser, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/auth/profile",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updateUserProfile, roleUser, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/avatar",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.uploadUserAvatar, roleUser, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/temporary/login",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "NOT_RUN",
+      "handler": "s.temporaryLogin"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.refreshAuth, roleUser, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/subscription-templates",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.subscriptionTemplates"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/message-subscriptions",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.registerMessageSubscription, roleUser, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/users",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listUsers, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/admin-users",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listAdminUsers, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/admin-users",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.assignAdminUser, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/admin-users/status",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updateAdminUserStatus, roleAdmin)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/admin/admin-users/{userID}",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.deleteAdminUser, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/temporary-access",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listTemporaryAccess, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/temporary-access",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.createTemporaryAccess, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/temporary-access/status",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updateTemporaryAccessStatus, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/config/public",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.publicConfig"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/config/public",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updatePublicConfig, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/location/search",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.searchLocations, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/building-rules",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listBuildingRules, roleAdmin)"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/building-rules",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.upsertBuildingRule, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/location/static",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.staticLocationMap, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/properties",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.listProperties"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/properties",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.createProperty, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/properties/update",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updateProperty, roleAdmin)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/properties/{propertyID}",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.deleteProperty, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/properties/status",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updatePropertyStatus, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/property-leads/convert",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.convertPropertyLead, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/media/upload",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.uploadMedia, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/properties/media",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.replacePropertyMedia, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/property-leads",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listPropertyLeads, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/property-leads",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.createPropertyLead"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/property-leads/follow-up",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updatePropertyLeadFollowUp, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/rental-requests",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listRentalRequests, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/rental-requests/follow-up",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.updateRentalRequestFollowUp, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/contact-events",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listContactEvents, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/operation-logs",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listOperationLogs, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/rental-requests",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.createRentalRequest, roleUser)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/rental-requests/mine",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listMyRentalRequests, roleUser)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/contact-events",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.createContactEvent, roleUser)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/favorites",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listFavorites, roleUser)"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/favorites/{propertyID}",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.favoriteProperty, roleUser)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/favorites/{propertyID}",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.unfavoriteProperty, roleUser)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/favorite-contacts",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listFavoriteContacts, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/footprints/{propertyID}",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.recordFootprint, roleUser)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/footprints",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listFootprints, roleUser)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/footprints",
+      "expected": {
+        "guest": 401,
+        "user": "ALLOW",
+        "admin": 403
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.clearFootprints, roleUser)"
+    }
+  ],
+  "pages": [
+    {
+      "route": "pages/home/index",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    },
+    {
+      "route": "pages/properties/index",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    },
+    {
+      "route": "pages/properties/detail",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    },
+    {
+      "route": "pages/footprints/index",
+      "expected": {
+        "guest": "登录引导",
+        "user": "个人足迹",
+        "admin": "返回我的"
+      }
+    },
+    {
+      "route": "pages/requests/index",
+      "expected": {
+        "guest": "可打开，提交需登录",
+        "user": "可打开，允许提交",
+        "admin": "返回我的"
+      }
+    },
+    {
+      "route": "pages/requests/history",
+      "expected": {
+        "guest": "登录引导",
+        "user": "个人记录",
+        "admin": "返回我的"
+      }
+    },
+    {
+      "route": "pages/publish/index",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "返回我的"
+      }
+    },
+    {
+      "route": "pages/me/index",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    },
+    {
+      "route": "pages/admin/index",
+      "expected": {
+        "guest": "返回我的",
+        "user": "返回我的",
+        "admin": "运营页面"
+      }
+    },
+    {
+      "route": "pages/admin/property-edit",
+      "expected": {
+        "guest": "返回我的",
+        "user": "返回我的",
+        "admin": "运营页面"
+      }
+    },
+    {
+      "route": "pages/admin/image-crop",
+      "expected": {
+        "guest": "需要本地图片上下文",
+        "user": "需要本地图片上下文",
+        "admin": "需要本地图片上下文"
+      }
+    },
+    {
+      "route": "pages/auth/avatar-crop",
+      "expected": {
+        "guest": "需要本地图片上下文",
+        "user": "需要本地图片上下文",
+        "admin": "需要本地图片上下文"
+      }
+    },
+    {
+      "route": "pages/auth/login",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    }
+  ],
+  "routeAudit": {
+    "report": "../reports/role-permissions/2026-11-11T16-03-27.981Z/lifecycle-audit.md",
+    "cases": [
+      {
+        "role": "guest",
+        "route": "pages/admin/index",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/admin/index",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [],
+        "privateBinding": false,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 4,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          401,
+          401
+        ],
+        "screenshot": "guest-pages-admin-index-audit.png"
+      },
+      {
+        "role": "guest",
+        "route": "pages/admin/property-edit",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/admin/property-edit",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [
+          {
+            "source": "property-crop-cache"
+          }
+        ],
+        "privateBinding": false,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 2,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          401
+        ],
+        "screenshot": "guest-pages-admin-property-edit-audit.png"
+      },
+      {
+        "role": "user",
+        "route": "pages/admin/index",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/admin/index",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [],
+        "privateBinding": false,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 4,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          403,
+          403
+        ],
+        "screenshot": "user-pages-admin-index-audit.png"
+      },
+      {
+        "role": "user",
+        "route": "pages/admin/property-edit",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/admin/property-edit",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [
+          {
+            "source": "property-crop-cache"
+          }
+        ],
+        "privateBinding": false,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 2,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          403
+        ],
+        "screenshot": "user-pages-admin-property-edit-audit.png"
+      },
+      {
+        "role": "admin",
+        "route": "pages/footprints/index",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/footprints/index",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [],
+        "privateBinding": false,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 2,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          403
+        ],
+        "screenshot": "admin-pages-footprints-index-audit.png"
+      },
+      {
+        "role": "admin",
+        "route": "pages/requests/index",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/requests/index",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [
+          {
+            "source": "bound-phone-cache",
+            "present": true
+          }
+        ],
+        "privateBinding": true,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 2,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          403
+        ],
+        "screenshot": "admin-pages-requests-index-audit.png"
+      },
+      {
+        "role": "admin",
+        "route": "pages/requests/history",
+        "status": "INCOMPLETE",
+        "nativeRoute": "pages/requests/history",
+        "priorFinal": [
+          "pages/me/index"
+        ],
+        "privateReads": [],
+        "privateBinding": false,
+        "apiCalls": 0,
+        "network": {
+          "continuous": true,
+          "observedEvents": 2,
+          "privateEvents": []
+        },
+        "probeStatuses": [
+          403
+        ],
+        "screenshot": "admin-pages-requests-history-audit.png"
+      }
+    ]
+  },
+  "cacheAccessRegression": {
+    "report": "../reports/private-cache-fix/report.md",
+    "cases": [
+      {
+        "role": "admin",
+        "route": "pages/requests/index",
+        "before": "守卫前读取非空手机号并计算模板绑定",
+        "lifecycleUnit": "PASS",
+        "native": "PASS"
+      },
+      {
+        "role": "guest",
+        "route": "pages/admin/property-edit",
+        "before": "拒绝后读取裁剪缓存",
+        "lifecycleUnit": "PASS",
+        "native": "PASS"
+      },
+      {
+        "role": "user",
+        "route": "pages/admin/property-edit",
+        "before": "拒绝后读取裁剪缓存",
+        "lifecycleUnit": "PASS",
+        "native": "PASS"
+      }
+    ],
+    "sameRoleOwnerSwitch": {
+      "unit": "PASS",
+      "native": "PASS"
+    },
+    "authorizedCacheRead": {
+      "unit": "PASS",
+      "native": "PASS"
+    },
+    "nativeReport": "../reports/role-permissions/2026-11-11T16-29-52.237Z/result.json"
+  }
+}

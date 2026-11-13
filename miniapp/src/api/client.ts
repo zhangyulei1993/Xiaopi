@@ -1,7 +1,12 @@
+import { permissionAudit } from "../utils/permission-audit"
 import { clearSession, getSession } from '../auth/session'
+import { safeRequestUrl } from './request-url.mjs'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 export const API_ORIGIN = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE
+
+import { validateUploadUrl } from './upload-url.mjs'
+export const safeUploadUrl = (url: string) => validateUploadUrl(url, import.meta.env.MODE === 'test', API_ORIGIN)
 
 export const resolveAssetUrl = (path = '') => {
   const value = String(path).trim()
@@ -49,13 +54,20 @@ export function request<T>(url: string, options: RequestOptions = {}) {
     const header = { ...options.header } as Record<string, string>
     if (session?.accessToken) header.Authorization = `Bearer ${session.accessToken}`
 
+    const endpoint = url.split("?")[0]
+    const audited = import.meta.env.MODE === "test" && /^\/v1\/(?:admin\/|property-leads(?:\/|$)|properties$|footprints(?:\/|$)|rental-requests(?:\/|$)|auth\/profile$)/.test(endpoint)
+    if (audited) permissionAudit("api-call", endpoint, options.method || "GET")
     uni.request({
       ...options,
       header,
       timeout: options.timeout || 15000,
-      url: `${API_BASE}${url}`,
+      url: safeRequestUrl(url, API_BASE, import.meta.env.MODE === 'test'),
       success: (res) => {
         const body = res.data as { code?: number; data?: T; message?: string }
+        if (audited) {
+          permissionAudit("api-response", endpoint, res.statusCode)
+          permissionAudit("api-data-present", endpoint, body?.data != null)
+        }
         if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) {
           resolve(body.data as T)
           return

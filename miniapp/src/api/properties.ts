@@ -165,6 +165,8 @@ export interface WechatLoginResult {
   accessToken: string;
   role?: "user" | "admin";
   isDevMock?: boolean;
+  testOnly?: boolean;
+  phone?: string;
 }
 
 export interface PublicConfig {

@@ -16,18 +16,21 @@ import { clearPendingAction, peekPendingAction, savePendingAction } from "../../
 
 const defaultConfig: PublicConfig = { heroTitle: "小皮租房", contactPhone: "", relatedPropertyRadiusKm: 3, locations: [{ label: "金融港", keyword: "金融港" }, { label: "光谷天地", keyword: "光谷天地" }], featuredChannels: [{ icon: "▣", title: "地铁沿线", subtitle: "通勤省心", keyword: "地铁", radiusKm: 3 }, { icon: "◇", title: "高校周边", subtitle: "生活方便", keyword: "高校", radiusKm: 3 }, { icon: "□", title: "职场优选", subtitle: "离公司更近", keyword: "金融港", radiusKm: 3 }] };
 const priceRanges = [
-  { label: "¥1,500 以下", min: 0, max: 1500 },
-  { label: "¥1,500–2,500", min: 1500, max: 2500 },
-  { label: "¥2,500–4,000", min: 2500, max: 4000 },
-  { label: "¥4,000+", min: 4000, max: 0 },
+  { label: "≤1500", min: 0, max: 1500 },
+  { label: "1500–2500", min: 1500, max: 2500, minExclusive: true },
+  { label: "2500–3500", min: 2500, max: 3500, minExclusive: true, maxExclusive: true },
+  { label: "≥3500", min: 3500, max: 0 },
 ];
 const properties = ref<Property[]>([]);
 const favoriteIDs = ref<string[]>([]);
+const homeLoading = ref(true);
+const homeLoadFailed = ref(false);
 const config = ref<PublicConfig>(defaultConfig);
 const activeKind = ref("推荐");
 const selectedArea = ref("全部");
 const selectedPrice = ref<number | null>(null);
 const isAdmin = ref(false);
+const hasActiveHomeFilter = computed(() => selectedArea.value !== "全部" || selectedPrice.value !== null || activeKind.value !== "推荐");
 const quickKinds = ["整租", "合租", "一居", "两居", "三居+"];
 const roomCountOf = (item: Property) => {
   const match = `${item.layout || ""} ${item.title || ""}`.match(/(\d+)\s*室/);
@@ -79,7 +82,9 @@ const homeProperties = computed(() => properties.value.filter((item) => {
   const range = selectedPrice.value === null ? null : priceRanges[selectedPrice.value];
   const kindMatched = matchesKind(item, activeKind.value);
   const areaMatched = matchesArea(item, selectedArea.value);
-  const priceMatched = !range || (!range.min || item.rentMonthly >= range.min) && (!range.max || item.rentMonthly <= range.max);
+  const priceMatched = !range ||
+    (range.min === 0 || (range.minExclusive ? item.rentMonthly > range.min : item.rentMonthly >= range.min)) &&
+    (!range.max || (range.maxExclusive ? item.rentMonthly < range.max : item.rentMonthly <= range.max));
   return kindMatched && areaMatched && priceMatched;
 }));
 const homePresentation = computed(() => config.value.pagePresentations?.home || { title: "今天想住哪里？", subtitle: "搜索小区、地铁或商圈", backgroundImage: "" });
@@ -140,10 +145,13 @@ const channelLabel = (item: Property) => {
     .filter(({ channel, distance }) => distance <= Number(channel.radiusKm || 3))
     .sort((left, right) => left.distance - right.distance)[0]?.channel.title || "";
 };
-onShow(async () => {
+const loadHome = async () => {
+  homeLoading.value = true;
+  homeLoadFailed.value = false;
   isAdmin.value = getSession()?.role === "admin";
   const [propertyResult, configResult] = await Promise.allSettled([listProperties(), getPublicConfig()]);
   if (propertyResult.status === "fulfilled") properties.value = propertyResult.value;
+  else { properties.value = []; homeLoadFailed.value = true; }
   if (configResult.status === "fulfilled") {
     config.value = { ...defaultConfig, ...configResult.value };
     uni.setNavigationBarTitle({ title: config.value.heroTitle || "小皮租房" });
@@ -158,7 +166,9 @@ onShow(async () => {
   } else if (peekPendingAction()) {
     clearPendingAction();
   }
-});
+  homeLoading.value = false;
+};
+onShow(() => { void loadHome(); });
 const open = (id: string) => uni.navigateTo({ url: `/pages/properties/detail?id=${id}` });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
 const browseFiltered = () => {
@@ -170,6 +180,11 @@ const browseFiltered = () => {
   browse();
 };
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
+const clearHomeFilters = () => {
+  selectedArea.value = "全部";
+  selectedPrice.value = null;
+  activeKind.value = "推荐";
+};
 const toggleFavorite = async (propertyID: string) => {
   const session = getSession();
   if (!session) {
@@ -199,7 +214,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
   <view class="home-page">
     <view class="hero">
       <image class="hero-bg" :src="presentationImage(homePresentation.backgroundImage)" mode="aspectFill" />
-      <view class="city"><image :src="pinIcon" mode="aspectFit" />武汉<text>⌄</text></view>
+      <view class="city"><image :src="pinIcon" mode="aspectFit" />武汉</view>
       <view class="hero-copy">
         <view class="hero-title">{{ homePresentation.title || "今天想住哪里？" }}</view>
         <view class="hero-accent"></view>
@@ -215,8 +230,10 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
     <view v-if="!isAdmin" class="request-fab" @click="requestHome"><image :src="editIcon" mode="aspectFit" />说说找房需求</view>
 
     <view class="recommend-head"><strong>{{ activeKind === "推荐" ? (homePresentation.recommendationTitle || "推荐房源") : `${activeKind}房源` }}</strong><b @click="browseFiltered">{{ homePresentation.viewAllText || '查看房源' }}</b></view>
-    <view v-if="homeProperties.length" class="property-list"><view v-if="!isAdmin" class="home-masonry"><view v-for="(column, columnIndex) in homeMasonryColumns" :key="`home-column-${columnIndex}`" class="home-masonry-column"><view v-for="item in column" :key="item.id" class="home-masonry-card" @click="open(item.id)"><view class="home-masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play">▶</view><view v-if="channelLabel(item)" class="home-cover-location">⌖ {{ channelLabel(item) }}</view><view class="heart-button" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="home-masonry-copy" :class="{ 'without-tags': !allLabels(item).length }"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="allLabels(item).length" class="home-masonry-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></view><view v-else v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing admin-listing" @click="open(item.id)"><view class="listing-image"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play admin-video-play">▶</view><view v-if="channelLabel(item)" class="admin-cover-location">⌖ {{ channelLabel(item) }}</view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
-    <view v-else class="empty">新房源正在整理中</view>
+    <view v-if="homeLoading" class="home-state">正在加载房源…</view>
+    <view v-else-if="homeLoadFailed" class="home-state"><strong>房源暂时加载失败</strong><text>检查网络后重新加载。</text><button @click="loadHome">重新加载</button></view>
+    <view v-else-if="homeProperties.length" class="property-list"><view v-if="!isAdmin" class="home-masonry"><view v-for="(column, columnIndex) in homeMasonryColumns" :key="`home-column-${columnIndex}`" class="home-masonry-column"><view v-for="item in column" :key="item.id" class="home-masonry-card" @click="open(item.id)"><view class="home-masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play">▶</view><view v-if="channelLabel(item)" class="home-cover-location">⌖ {{ channelLabel(item) }}</view><view class="heart-button" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="home-masonry-copy" :class="{ 'without-tags': !allLabels(item).length }"><view class="home-listing-title">{{ listingTitle(item) }}</view><view v-if="allLabels(item).length" class="home-masonry-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></view><view v-else v-for="item in homeProperties.slice(0, 4)" :key="item.id" class="listing admin-listing" @click="open(item.id)"><view class="listing-image"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover"/><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"/><view v-else class="listing-placeholder"><span>{{ item.community?.slice(0, 2) || "小皮" }}</span></view><view class="listing-status">{{ statusLabel(item.status) }}</view><view v-if="masonryMedia(item)?.type === 'video'" class="home-video-play admin-video-play">▶</view><view v-if="channelLabel(item)" class="admin-cover-location">⌖ {{ channelLabel(item) }}</view></view><view class="listing-info"><view class="home-listing-title">{{ listingTitle(item) }}</view><view class="home-admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view><view class="tag-stack" :class="`tag-layout-${config.listingTitle?.listTagLayout || 'grouped'}`"><template v-if="(config.listingTitle?.listTagLayout || 'grouped') === 'grouped'"><view class="tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="tags all-tags"><text v-for="label in allLabels(item)" :key="label">{{ label }}</text></view></view><view class="listing-price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view>
+    <view v-else class="empty"><view class="empty-title">{{ hasActiveHomeFilter ? "没有找到符合条件的房源" : "暂时没有可租房源" }}</view><view class="empty-description">{{ hasActiveHomeFilter ? "试试放宽筛选条件，看看更多房源" : "新房源正在整理中，稍后再来看看" }}</view><text v-if="hasActiveHomeFilter" class="empty-reset" @click="clearHomeFilters">清除筛选</text></view>
   </view>
 </template>
 
@@ -231,7 +248,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .hero-title{display:-webkit-box;overflow:hidden;max-width:570rpx;color:#334025;font-size:56rpx;font-weight:900;line-height:1.22;letter-spacing:-3rpx;text-shadow:0 2rpx 0 rgba(255,255,255,.18);-webkit-line-clamp:2;-webkit-box-orient:vertical}.hero-accent{width:116rpx;height:8rpx;margin:18rpx 0 0 178rpx;border-radius:999rpx;background:#d66d50;transform:rotate(-3deg)}.hero-search{margin-top:38rpx}
 .hero-search{min-height:92rpx;box-sizing:border-box}.hero-search span{font-size:26rpx;line-height:1.35}.hero-search b{line-height:1.2}.section-head{margin-top:58rpx;margin-bottom:26rpx}.section-head strong{font-size:40rpx;line-height:1.2}.recommend-head{margin-top:62rpx;margin-bottom:26rpx}.listing-info strong{font-size:30rpx}.listing-info>b{font-size:36rpx}.request-fab{bottom:calc(116rpx + env(safe-area-inset-bottom))}
 .channel-glyph{display:block;width:22rpx;height:22rpx;border:3rpx solid rgba(255,255,255,.92);border-radius:50%;box-sizing:border-box}.channel-glyph:after{display:block;width:8rpx;height:8rpx;margin:4rpx;border-radius:50%;background:rgba(255,255,255,.92);content:""}.mark-campus .channel-glyph{border-radius:4rpx}.mark-campus .channel-glyph:after{width:12rpx;height:3rpx;margin:7rpx 2rpx;border-radius:3rpx}.mark-work .channel-glyph{border:0;border-radius:0;background:linear-gradient(90deg,rgba(255,255,255,.92) 0 28%,transparent 28% 37%,rgba(255,255,255,.92) 37% 63%,transparent 63% 72%,rgba(255,255,255,.92) 72%)}.mark-work .channel-glyph:after{display:none}.mark-life .channel-glyph{border-radius:50% 50% 6rpx 6rpx;transform:rotate(45deg)}.mark-life .channel-glyph:after{margin:4rpx}.channel-title{display:block;overflow:hidden;margin-top:15rpx;color:#fff;font-size:28rpx;font-weight:700;line-height:1.2;letter-spacing:-1rpx;text-overflow:ellipsis;white-space:nowrap}.channel-subtitle{display:block;overflow:hidden;margin-top:7rpx;color:rgba(255,255,255,.82);font-size:21rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
-.listing-status{position:absolute;top:12rpx;left:12rpx;padding:7rpx 11rpx;border-radius:10rpx;background:#167b70;color:#fff;font-size:20rpx;font-weight:700;line-height:1.1}.listing-info .tags text{background:#edf0dc;color:#536a45}.listing-info .tags text:nth-child(2){background:#f8eadf;color:#b7644b}.listing-price{display:inline-flex;align-items:baseline;gap:3rpx;margin-top:11rpx;color:#d66d50;font-size:36rpx;font-weight:800;line-height:1.1;white-space:nowrap}.listing-price .price-unit{color:#8b8a7f;font-size:19rpx;font-weight:400}
+.listing-status{position:absolute;top:12rpx;left:12rpx;padding:7rpx 11rpx;border-radius:10rpx;background:#40543f;color:#fff;font-size:20rpx;font-weight:700;line-height:1.1}.listing-info .tags text{background:#edf0dc;color:#536a45}.listing-info .tags text:nth-child(2){background:#f8eadf;color:#b7644b}.listing-price{display:inline-flex;align-items:baseline;gap:3rpx;margin-top:11rpx;color:#d66d50;font-size:36rpx;font-weight:800;line-height:1.1;white-space:nowrap}.listing-price .price-unit{color:#8b8a7f;font-size:19rpx;font-weight:400}
 
 /* Keep the primary CTA in the document flow: it should never cover a channel or heading. */
 .home-page{padding-bottom:42rpx}.request-fab{position:static;display:flex;align-items:center;justify-content:center;gap:8rpx;width:max-content;margin:28rpx 32rpx 0;padding:18rpx 22rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:999rpx;background:#5e6d2e;color:#fff;box-shadow:0 10rpx 22rpx rgba(58,65,26,.18);font-size:25rpx;font-weight:700;line-height:1.2}.request-fab image{width:30rpx;height:30rpx}.recommend-head{margin-top:46rpx}.channel{flex:none}.channel-title,.channel-subtitle{max-width:100%}
@@ -240,29 +257,33 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .home-masonry{display:flex;align-items:flex-start;gap:16rpx}.home-masonry-column{min-width:0;flex:1}.home-masonry-card{overflow:hidden;margin-bottom:16rpx;border:1rpx solid #e9e2d8;border-radius:20rpx;background:#fffdf9;box-shadow:0 7rpx 18rpx rgba(55,65,50,.05)}.home-masonry-cover{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;background:#dfd4be}.home-masonry-cover image{width:100%;height:100%}.home-masonry-cover .heart-button{top:10rpx;right:10rpx;width:42rpx;height:42rpx}.home-masonry-cover .heart-button image{width:26rpx;height:26rpx}.home-video-play{position:absolute;top:50%;left:50%;display:grid;width:62rpx;height:62rpx;place-items:center;border:2rpx solid rgba(255,255,255,.88);border-radius:50%;background:rgba(28,38,30,.5);color:#fff;font-size:28rpx;line-height:1;transform:translate(-50%,-50%);padding-left:4rpx;box-sizing:border-box}.home-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:28rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:17rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.home-masonry-copy{padding:15rpx 14rpx 16rpx}.home-masonry-copy .home-listing-title{display:-webkit-box;overflow:hidden;font-size:26rpx;line-height:1.35;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.home-masonry-copy .home-listing-address{display:-webkit-box;max-height:none;margin-top:8rpx;font-size:19rpx;line-height:1.45;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.home-masonry-tags{display:flex;flex-wrap:wrap;gap:6rpx;margin-top:10rpx}.home-masonry-tags text{padding:5rpx 7rpx;border-radius:6rpx;background:#edf0dc;color:#536a45;font-size:17rpx;line-height:1.15}.home-masonry-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}.home-masonry-copy .listing-price{display:inline-flex;margin-top:14rpx;color:#d76440;font-size:30rpx;font-weight:800;line-height:1}.home-masonry-copy .listing-price .price-unit{margin-left:3rpx;color:#8a8f85;font-size:18rpx;font-weight:400}
 .home-masonry-copy.without-tags .listing-price{margin-top:10rpx}
 
-/* Final visual baseline: keep the first screen on a single 32rpx grid and
-   neutralise the legacy selector rules above while old data remains compatible. */
+/* First-screen pass: retain all discovery controls while bringing listings above the fold. */
 .home-page{padding-bottom:48rpx}
-.hero{height:564rpx;padding:40rpx 32rpx 0}
+.hero{height:468rpx;padding:32rpx 32rpx 0}
 .city{margin-top:0}
-.hero-copy{margin-top:48rpx}
-.hero-title{font-size:52rpx;line-height:1.24;letter-spacing:-2rpx}
-.hero-accent{margin:16rpx 0 0 150rpx}
-.hero-search{min-height:94rpx;margin-top:42rpx;padding:14rpx 14rpx 14rpx 22rpx}
+.hero-copy{margin-top:28rpx}
+.hero-title{font-size:48rpx;line-height:1.2;letter-spacing:-2rpx}
+.hero-accent{margin:12rpx 0 0 138rpx}
+.hero-search{min-height:82rpx;margin-top:24rpx;padding:10rpx 12rpx 10rpx 20rpx;gap:16rpx}
 .hero-search span{font-size:26rpx}
-.hero-search b{padding:16rpx 23rpx;font-size:24rpx}
-.area-row{padding:24rpx 32rpx 16rpx}
-.price-row{margin:0 32rpx;padding:16rpx 8rpx}
+.hero-search b{flex:none;margin-left:10rpx;padding:13rpx 22rpx;border-radius:16rpx;background:#d66d50;color:#fff;font-size:24rpx;line-height:1.2;text-align:center}
+.city{width:max-content;box-sizing:border-box}
+.area-row{padding:14rpx 32rpx 10rpx}
+.area-row text{padding:11rpx 19rpx}
+.price-row{margin:0 32rpx;padding:12rpx 8rpx}
 .price-row b,.price-row text{padding:0 13rpx;font-size:21rpx}
-.quick-kind-row{padding:18rpx 32rpx 4rpx}
-.section-head{margin:54rpx 32rpx 24rpx}
+.quick-kind-row{padding:10rpx 32rpx 0}
+.quick-kind-row text{padding:9rpx 16rpx}
+.section-head{margin:28rpx 32rpx 16rpx}
 .section-head strong{font-size:38rpx;letter-spacing:-1rpx}
 .channels{gap:14rpx;padding:0 32rpx}
-.channel{width:220rpx;height:170rpx;padding:18rpx}
-.channel-title{margin-top:14rpx;font-size:27rpx}
-.channel-subtitle{margin-top:7rpx;font-size:20rpx}
-.request-fab{margin:28rpx 32rpx 0}
-.recommend-head{margin:50rpx 32rpx 24rpx}
+.channel{width:208rpx;height:148rpx;padding:14rpx 16rpx}
+.channel-mark{width:38rpx;height:38rpx}
+.channel-title{margin-top:10rpx;font-size:26rpx}
+.channel-subtitle{margin-top:5rpx;font-size:19rpx}
+.request-fab{position:fixed;z-index:8;right:28rpx;bottom:calc(116rpx + env(safe-area-inset-bottom));margin:0;padding:15rpx 19rpx;border:1rpx solid rgba(255,255,255,.48);border-radius:999rpx;background:rgba(94,109,46,.78);color:#fff;box-shadow:0 5rpx 14rpx rgba(58,65,26,.14);font-size:23rpx}
+.request-fab image{width:27rpx;height:27rpx}
+.recommend-head{margin:28rpx 32rpx 18rpx}
 .recommend-head strong{font-size:38rpx}
 .property-list{padding:0 32rpx}
 .listing{gap:18rpx;margin-bottom:18rpx;padding:12rpx;border:1rpx solid #eee6dc;border-radius:20rpx;background:#fffdf9}
@@ -296,4 +317,7 @@ const openChannel = (channel: PublicConfig["featuredChannels"][number]) => {
 .home-masonry-cover video{width:100%;height:100%}
 .admin-listing .listing-image video{display:block;width:100%;height:100%}.admin-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:24rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:18rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.admin-video-play{width:54rpx;height:54rpx;font-size:24rpx}.admin-listing .home-admin-doorplate{margin-top:8rpx}.admin-listing .tag-stack{margin-top:10rpx}
 .home-masonry-cover .heart-button.active{background:#d76440}.home-masonry-cover .heart-button:active{transform:scale(.9);opacity:.86}
+.home-cover-location{font-size:19rpx}.home-masonry-tags text{padding:6rpx 8rpx;font-size:19rpx}
+.empty-title{color:#43513c;font-size:28rpx;font-weight:750;line-height:1.4}.empty-description{margin-top:8rpx;color:#858b7f;font-size:21rpx;line-height:1.5}.empty-reset{display:inline-flex;margin-top:20rpx;padding:11rpx 18rpx;border:1rpx solid #dce4d5;border-radius:12rpx;background:#fffdf9;color:#536a45;font-size:21rpx;font-weight:650;line-height:1.2}
+.home-state{display:flex;min-height:230rpx;align-items:center;justify-content:center;flex-direction:column;gap:12rpx;margin:0 30rpx;padding:32rpx;border-radius:22rpx;background:#fffaf4;color:#737b6b;font-size:24rpx;text-align:center}.home-state strong{color:#40543f;font-size:28rpx}.home-state text{font-size:22rpx}.home-state button{margin-top:4rpx;padding:0 28rpx;border:0;border-radius:14rpx;background:#5e6d2e;color:#fff;font-size:22rpx;line-height:68rpx}.home-state button::after{border:0}
 </style>

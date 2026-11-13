@@ -1,0 +1,10 @@
+{
+  "name": "properties-list-smoke",
+  "page": "/pages/properties/index",
+  "readySelector": ".grid",
+  "assertions": [
+    { "kind": "current-page", "equals": "pages/properties/index" },
+    { "kind": "exists", "selector": ".property-listing-title" }
+  ],
+  "steps": []
+}

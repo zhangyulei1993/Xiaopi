@@ -1,0 +1,17 @@
+{
+  "environment": "isolated-local-test",
+  "rolesActuallyImplementedByBackend": ["user", "admin"],
+  "syntheticAccounts": [
+    { "account": "qa-user-a", "role": "user", "login": "verified", "adminApi": "403 verified", "dataIsolation": "UI/API read verified; no appointment data created" },
+    { "account": "qa-user-b", "role": "user", "login": "verified", "adminApi": "not individually checked", "dataIsolation": "both users returned empty appointment lists" },
+    { "account": "qa-admin", "role": "admin", "login": "verified", "adminApi": "GET /v1/admin/users 200 verified" },
+    { "account": "qa-disabled", "role": "none", "login": "403 verified" },
+    { "account": "guest", "role": "none", "login": "unknown test code 401 verified" }
+  ],
+  "unsupportedRoles": [
+    { "role": "landlord", "status": "not-present-in-current-backend-model" },
+    { "role": "super-admin", "status": "not-present-in-current-backend-model" }
+  ],
+  "clientRoleEscalation": "caller-supplied role rejected; server role derived from database admin mapping",
+  "realWechatAuth": "not-verified; synthetic APP_ENV=test login is not a real wx.login/code exchange/phone authorization"
+}

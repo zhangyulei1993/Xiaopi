@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { API_ORIGIN, request, resolveAssetUrl } from "../../api/client";
+import { API_ORIGIN, safeUploadUrl, request, resolveAssetUrl } from "../../api/client";
 import {
   clearSession,
   getSession,
@@ -58,10 +58,10 @@ onShow(async () => {
     }
     if (refreshed.role === "admin") {
       const [properties, leads, requests, interests] = await Promise.all([
-        request<Property[]>("/v1/properties").catch(() => []),
-        request<PropertyLead[]>("/v1/property-leads").catch(() => []),
-        request<RentalRequest[]>("/v1/admin/rental-requests").catch(() => []),
-        request<FavoriteContact[]>("/v1/admin/favorite-contacts").catch(() => []),
+        request<Property[]>("/v1/properties"),
+        request<PropertyLead[]>("/v1/property-leads"),
+        request<RentalRequest[]>("/v1/admin/rental-requests"),
+        request<FavoriteContact[]>("/v1/admin/favorite-contacts"),
       ]);
       adminOverview.value = {
         draft: properties.filter((item) => item.status === "draft").length,
@@ -90,10 +90,11 @@ const login = (afterLogin?: () => void) => {
     success: async (result) => {
       try {
         const session = await wechatLogin(result.code);
-        saveSession(session.accessToken, session.role);
-        role.value = session.role;
+        const sessionRole = session.role === "admin" ? "admin" : "user";
+        saveSession(session.accessToken, sessionRole);
+        role.value = sessionRole;
         uni.showToast({ title: "登录成功" });
-        if (session.role === "user" && afterLogin) afterLogin();
+        if (sessionRole === "user" && afterLogin) afterLogin();
         else setTimeout(() => uni.reLaunch({ url: "/pages/me/index" }), 250);
       } catch (error) {
         uni.showToast({ title: error instanceof Error ? error.message : "登录失败，请重试", icon: "none" });
@@ -149,6 +150,10 @@ const openAdminTab = (tab: "properties" | "leads" | "requests" | "interests") =>
   uni.setStorageSync("xiaopi_admin_tab", tab);
   workbench();
 };
+const openPropertyManagement = (filter = "") => {
+  uni.setStorageSync("xiaopi_admin_property_status", filter || "all");
+  uni.switchTab({ url: "/pages/properties/index" });
+};
 const editProperty = () =>
   uni.navigateTo({ url: "/pages/admin/property-edit" });
 
@@ -156,7 +161,7 @@ const uploadAvatar = (path: string) => {
   if (!path || isUploadingAvatar.value) return;
   isUploadingAvatar.value = true;
   uni.uploadFile({
-    url: `${API_ORIGIN}/api/v1/auth/avatar`,
+    url: safeUploadUrl(`${API_ORIGIN}/api/v1/auth/avatar`),
     filePath: path,
     name: "file",
     header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
@@ -257,7 +262,7 @@ const logout = () => {
       <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : (isLoggingIn ? "正在登录…" : "点击直接微信登录") }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
-    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><strong>全部房源</strong><text>无需登录</text></view><view @click="favorites"><i class="shortcut-icon favorite"></i><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : "登录后查看" }}</text></view><view @click="footprints"><i class="shortcut-icon footprint"></i><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : "登录后查看" }}</text></view><view @click="requestHome"><i class="shortcut-icon request"></i><strong>找房需求</strong><text>提交时登录</text></view></view>
+    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><view class="shortcut-copy"><strong>全部房源</strong><text>无需登录</text></view></view><view @click="favorites"><i class="shortcut-icon favorite"></i><view class="shortcut-copy"><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : "登录后查看" }}</text></view></view><view @click="footprints"><i class="shortcut-icon footprint"></i><view class="shortcut-copy"><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : "登录后查看" }}</text></view></view><view @click="requestHome"><i class="shortcut-icon request"></i><view class="shortcut-copy"><strong>找房需求</strong><text>提交时登录</text></view></view></view>
     </view>
     <view v-if="!isAdmin" class="card secondary-entry request-history-entry" @click="openRequestHistory"><view><strong>我的预约与找房记录</strong><text>{{ isLoggedIn ? "查看预约、订阅和跟进进度" : "登录后可查看" }}</text></view><text>›</text></view>
     <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>有房源想推荐？</strong><text>无需登录，提交后电话核验</text></view><text>›</text></view>
@@ -269,11 +274,11 @@ const logout = () => {
     </view>
     <view v-if="isAdmin" class="admin-overview">
       <view class="section-heading"><strong>运营工作台</strong><text @click="workbench">查看全部 ›</text></view>
-      <view class="admin-summary"><view @click="openAdminTab('properties')"><strong>{{ adminOverview.draft }}</strong><text>房源草稿</text></view><view @click="openAdminTab('requests')"><strong>{{ adminOverview.pending }}</strong><text>待联系</text></view><view @click="openAdminTab('properties')"><strong>{{ adminOverview.incomplete }}</strong><text>待补资料</text></view></view>
+      <view class="admin-summary"><view @click="openPropertyManagement('draft')"><strong>{{ adminOverview.draft }}</strong><text>房源草稿</text></view><view @click="openAdminTab('requests')"><strong>{{ adminOverview.pending }}</strong><text>待联系</text></view><view @click="openPropertyManagement('incomplete')"><strong>{{ adminOverview.incomplete }}</strong><text>待补资料</text></view></view>
     </view>
     <view v-if="isAdmin" class="admin-actions">
       <view @click="editProperty"><view class="action-icon publish-icon">＋</view><strong>录入房源</strong><text>发布可租房源</text></view>
-      <view @click="openAdminTab('properties')"><view class="action-icon workspace-icon">▦</view><strong>房源管理</strong><text>查看和编辑房源</text></view>
+      <view @click="openPropertyManagement()"><view class="action-icon workspace-icon">▦</view><strong>房源管理</strong><text>查看和编辑房源</text></view>
       <view @click="openAdminTab('requests')"><view class="action-icon request-icon">◌</view><strong>客户需求</strong><text>预约与找房需求</text></view>
       <view @click="openAdminTab('interests')"><view class="action-icon interest-icon">♡</view><strong>用户意向</strong><text>{{ adminOverview.interests }} 条关注记录</text></view>
     </view>
@@ -314,7 +319,7 @@ const logout = () => {
   color: #9bbab4;
   font-size: 54rpx;
 }
-.shortcut-section{margin:34rpx 0 24rpx}.section-heading{display:flex;align-items:baseline;justify-content:space-between;margin:0 4rpx 18rpx}.section-heading strong{font-size:32rpx}.section-heading text{color:#929b91;font-size:21rpx}.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.shortcut-grid>view{display:grid;grid-template-columns:64rpx 1fr;grid-template-rows:auto auto;column-gap:18rpx;padding:24rpx;border-radius:22rpx;background:#fff}.shortcut-grid>view:active{transform:scale(.98);background:#f0f2e9}.shortcut-grid i{grid-row:1/3;position:relative;display:grid;place-items:center;width:64rpx;height:64rpx;border-radius:18rpx 18rpx 8rpx;background:#e9eedc;color:#4d623e;font-style:normal}.shortcut-icon::before{font-size:30rpx;font-weight:500;line-height:1}.shortcut-icon.home::before{content:"⌂"}.shortcut-icon.favorite::before{content:"♡";font-size:38rpx}.shortcut-icon.footprint::before{content:"◴"}.shortcut-icon.request::before{content:"✦"}.shortcut-grid strong{font-size:27rpx;line-height:1.25}.shortcut-grid text{margin-top:6rpx;color:#899287;font-size:21rpx;line-height:1.35}.secondary-entry{display:flex;align-items:center;justify-content:space-between;border:0;background:#efeee7}.secondary-entry view{display:flex;flex-direction:column;gap:7rpx}.secondary-entry strong{font-size:27rpx}.secondary-entry view text{color:#899287;font-size:21rpx}.secondary-entry>text{color:#74806f;font-size:40rpx}
+.shortcut-section{margin:34rpx 0 24rpx}.section-heading{display:flex;align-items:baseline;justify-content:space-between;margin:0 4rpx 18rpx}.section-heading strong{font-size:32rpx}.section-heading text{color:#929b91;font-size:21rpx}.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.shortcut-grid>view{display:grid;min-width:0;grid-template-columns:64rpx minmax(0,1fr);align-items:center;column-gap:18rpx;padding:24rpx;border-radius:22rpx;background:#fff}.shortcut-grid>view:active{transform:scale(.98);background:#f0f2e9}.shortcut-grid i{position:relative;display:grid;place-items:center;width:64rpx;height:64rpx;border-radius:18rpx 18rpx 8rpx;background:#e9eedc;color:#4d623e;font-style:normal}.shortcut-copy{display:flex;min-width:0;flex-direction:column;gap:6rpx}.shortcut-icon::before{font-size:30rpx;font-weight:500;line-height:1}.shortcut-icon.home::before{content:"⌂"}.shortcut-icon.favorite::before{content:"♡";font-size:38rpx}.shortcut-icon.footprint::before{content:"◴"}.shortcut-icon.request::before{content:"✦"}.shortcut-grid strong{overflow:hidden;font-size:27rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.shortcut-grid text{overflow:hidden;color:#899287;font-size:21rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.secondary-entry{display:flex;align-items:center;justify-content:space-between;border:0;background:#efeee7}.secondary-entry view{display:flex;flex-direction:column;gap:7rpx}.secondary-entry strong{font-size:27rpx}.secondary-entry view text{color:#899287;font-size:21rpx}.secondary-entry>text{color:#74806f;font-size:40rpx}
 .menu view:last-child {
   border-bottom: 0;
 }

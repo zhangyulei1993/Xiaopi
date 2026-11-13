@@ -793,6 +793,173 @@ func TestWechatUserIDFitsDatabaseColumnAndIsStable(t *testing.T) {
 	}
 }
 
+func TestTestEnvironmentLoginUsesAllowlistedCodeAndDatabaseRole(t *testing.T) {
+	t.Setenv("APP_ENV", "test")
+	t.Setenv("TEST_WECHAT_CODE_MAP", "qa-user-a=qa-user-a,qa-admin=qa-admin,qa-disabled=qa-disabled")
+	dataStore := &fakeStore{
+		users: []domain.User{
+			{ID: "qa-user-a", Status: domain.UserActive},
+			{ID: "qa-admin", Status: domain.UserActive},
+			{ID: "qa-disabled", Status: domain.UserBlocked},
+		},
+		admins: []domain.AdminUser{{UserID: "qa-admin", Role: roleAdmin, Status: "active"}},
+	}
+	server := testServer(dataStore)
+
+	forgedRole := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "qa-user-a", "role": "admin"}, "")
+	if forgedRole.Code != http.StatusBadRequest {
+		t.Fatalf("client-supplied roles must be rejected, got %d: %s", forgedRole.Code, forgedRole.Body.String())
+	}
+	userLogin := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "qa-user-a"}, "")
+	userData := responseData[struct {
+		Role     string `json:"role"`
+		TestOnly bool   `json:"testOnly"`
+	}](t, userLogin)
+	if userLogin.Code != http.StatusOK || userData.Role != roleUser || !userData.TestOnly {
+		t.Fatalf("test role must be derived from the seeded user, got %d: %s", userLogin.Code, userLogin.Body.String())
+	}
+
+	adminLogin := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "qa-admin"}, "")
+	adminData := responseData[struct {
+		Role string `json:"role"`
+	}](t, adminLogin)
+	if adminLogin.Code != http.StatusOK || adminData.Role != roleAdmin {
+		t.Fatalf("expected DB-assigned admin role, got %d: %s", adminLogin.Code, adminLogin.Body.String())
+	}
+
+	unknown := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "qa-unknown"}, "")
+	if unknown.Code != http.StatusUnauthorized {
+		t.Fatalf("unknown test code must be rejected, got %d: %s", unknown.Code, unknown.Body.String())
+	}
+	disabled := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "qa-disabled"}, "")
+	if disabled.Code != http.StatusForbidden {
+		t.Fatalf("disabled test user must be rejected, got %d: %s", disabled.Code, disabled.Body.String())
+	}
+}
+
+func TestTestAccountCodesAreIgnoredOutsideTestEnvironment(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("TEST_WECHAT_CODE_MAP", "qa-admin=qa-admin")
+	t.Setenv("WECHAT_MINI_APP_ID", "")
+	t.Setenv("WECHAT_MINI_APP_SECRET", "")
+	response := performRequest(t, testServer(&fakeStore{}).Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "qa-admin"}, "")
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("test account codes must not authenticate outside test environment, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestTestModeRejectsRealWechatCredentialsWithoutHTTP(t *testing.T) {
+	t.Setenv("APP_ENV", "test")
+	t.Setenv("TEST_WECHAT_CODE_MAP", "qa-user-a=qa-user-a")
+	t.Setenv("WECHAT_MINI_APP_ID", "wx-configured-to-detect-fallback")
+	t.Setenv("WECHAT_MINI_APP_SECRET", "not-a-real-secret")
+	server := testServer(&fakeStore{users: []domain.User{{ID: "qa-user-a", Status: domain.UserActive}}})
+	calls := 0
+	server.httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("unexpected external HTTP request")
+	})}
+	for _, test := range []struct {
+		name string
+		body map[string]string
+		want int
+	}{
+		{name: "synthetic code succeeds", body: map[string]string{"code": "qa-user-a"}, want: http.StatusOK},
+		{name: "real looking code rejected", body: map[string]string{"code": "wx-real-code"}, want: http.StatusUnauthorized},
+		{name: "empty code rejected", body: map[string]string{"code": " "}, want: http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", test.body, "")
+			if response.Code != test.want {
+				t.Fatalf("got HTTP %d, want %d: %s", response.Code, test.want, response.Body.String())
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("test mode issued %d external HTTP requests", calls)
+	}
+}
+
+func TestFakeMapIsAvailableOnlyWhenExplicitlyEnabledInTestMode(t *testing.T) {
+	t.Setenv("APP_ENV", "test")
+	t.Setenv("TEST_FAKE_MAP_ENABLED", "true")
+	config := ConfigFromEnv()
+	config.AdminUsername = "operator"
+	config.TokenSecret = "test-secret-with-enough-entropy"
+	config.TokenTTL = time.Hour
+	if !config.TestFakeMapEnabled {
+		t.Fatal("expected explicit test fake map setting to be enabled")
+	}
+	server := NewServerWithConfig(&fakeStore{}, config)
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	server.httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("fake map must not make HTTP requests")
+	})}
+	response := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/admin/location/search?keyword=QA", nil, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected fake location result, got HTTP %d: %s", response.Code, response.Body.String())
+	}
+	items := responseData[[]locationSearchItem](t, response)
+	if len(items) != 1 || items[0].ID != "qa-map-wuhan-community" || items[0].Latitude == 0 || items[0].Longitude == 0 {
+		t.Fatalf("unexpected fake location response: %#v", items)
+	}
+	if calls != 0 {
+		t.Fatalf("fake map issued %d HTTP requests", calls)
+	}
+
+	t.Setenv("APP_ENV", "production")
+	if ConfigFromEnv().TestFakeMapEnabled {
+		t.Fatal("fake map must stay disabled outside test mode")
+	}
+}
+
+func TestTestModeRejectsWechatPhoneAuthorizationBeforeHTTP(t *testing.T) {
+	t.Setenv("APP_ENV", "test")
+	server := testServer(&fakeStore{users: []domain.User{{ID: "qa-user-a", Status: domain.UserActive}}})
+	calls := 0
+	server.httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("unexpected external HTTP request")
+	})}
+	token, err := server.tokens.issue("qa-user-a", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/phone", map[string]string{"code": "real-phone-grant"}, token)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "test mode") {
+		t.Fatalf("expected explicit test-mode denial, got HTTP %d: %s", response.Code, response.Body.String())
+	}
+	if calls != 0 {
+		t.Fatalf("test mode issued %d external HTTP requests", calls)
+	}
+}
+
+func TestProductionWechatLoginStillUsesConfiguredClient(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("WECHAT_MOCK_ENABLED", "false")
+	t.Setenv("WECHAT_MINI_APP_ID", "wx-prod-path-test")
+	t.Setenv("WECHAT_MINI_APP_SECRET", "test-only-placeholder")
+	server := testServer(&fakeStore{})
+	calls := 0
+	server.httpClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.URL.Host != "api.weixin.qq.com" {
+			t.Fatalf("unexpected production auth destination: %s", request.URL.Host)
+		}
+		body := `{"openid":"production-path-openid","session_key":"fixture"}`
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	response := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/wechat/login", map[string]string{"code": "production-path-fixture"}, "")
+	if response.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("production auth path changed: HTTP %d, client calls %d, body %s", response.Code, calls, response.Body.String())
+	}
+}
+
 func TestRefreshAuthReflectsCurrentAdminAssignment(t *testing.T) {
 	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", OpenID: "openid-1", Status: domain.UserActive}}, admins: []domain.AdminUser{{UserID: "wx-user-1", Status: "active"}}}
 	server := testServer(dataStore)

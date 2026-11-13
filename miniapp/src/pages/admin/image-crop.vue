@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { getSession } from "../../auth/session";
+import { writePrivateCache } from "../../auth/private-cache";
 import { onLoad } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 
@@ -66,8 +68,12 @@ const onTouchMove = (event: any) => {
 };
 const onTouchEnd = () => { drag = null; pinch = null; };
 const updateSlider = (event: { detail: { value: number } }) => setZoom(Number(event.detail.value) || 100);
+const cropSession = getSession();
 const complete = (path: string, size: number) => {
-  uni.setStorageSync("xiaopi-property-image-crop-result", { index: source.value?.index, path, width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT, size });
+  if (!cropSession || getSession()?.accessToken !== cropSession.accessToken || getSession()?.role !== "admin") return;
+  writePrivateCache(cropSession, "admin", "xiaopi-property-image-crop-result",
+    { index: source.value?.index, path, width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT, size },
+    (key, value) => uni.setStorageSync(key, value));
   uni.navigateBack();
 };
 const finish = () => {

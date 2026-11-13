@@ -1,0 +1,271 @@
+{
+  "version": "daily-2026-11-12T06:13:34.606758+00:00",
+  "default_model": null,
+  "models": [
+    {
+      "model_id": "gpt-6.1-sol",
+      "model_name": "GPT-6.1-Sol",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED",
+        "last_attempt": "NOT_RUN"
+      }
+    },
+    {
+      "model_id": "gpt-6-astra",
+      "model_name": "GPT-6-Astra",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED"
+      }
+    },
+    {
+      "model_id": "gpt-6.1-terra",
+      "model_name": "GPT-6.1 Terra",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED"
+      }
+    },
+    {
+      "model_id": "gpt-6-sol",
+      "model_name": "GPT-6-Sol",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED"
+      }
+    },
+    {
+      "model_id": "gpt-6-luna",
+      "model_name": "GPT-6-Luna",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED",
+        "last_attempt": "FAILED",
+        "evidence": "../reports/pilot-live/1-result.json"
+      }
+    },
+    {
+      "model_id": "gpt-5.6-sol",
+      "model_name": "GPT-5.6-Sol",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED"
+      }
+    },
+    {
+      "model_id": "gpt-5.6-terra",
+      "model_name": "GPT-5.6-Terra",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED"
+      }
+    },
+    {
+      "model_id": "gpt-5.6-luna",
+      "model_name": "GPT-5.6-Luna",
+      "provider": "OpenAI",
+      "availability": "active",
+      "picker_visibility": "VERIFIED",
+      "capability_level": "UNVERIFIED",
+      "coding_score": "UNVERIFIED",
+      "reasoning_score": "UNVERIFIED",
+      "speed_score": "UNVERIFIED",
+      "cost_score": "UNVERIFIED",
+      "actual_price": "UNVERIFIED",
+      "quota_multiplier": "UNVERIFIED",
+      "supported_reasoning_efforts": [
+        "Low",
+        "Medium",
+        "High",
+        "Extra High"
+      ],
+      "observed_efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "last_verified_at": "2026-11-12T06:13:34.606758+00:00",
+      "source": "local Codex App Server model/list",
+      "call_qualification": {
+        "status": "UNVERIFIED"
+      }
+    }
+  ]
+}
