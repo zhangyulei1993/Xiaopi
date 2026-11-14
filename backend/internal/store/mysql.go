@@ -522,8 +522,16 @@ func (s *MySQL) ConvertLeadToProperty(ctx context.Context, leadID string, p doma
 	if _, err := tx.ExecContext(ctx, `INSERT INTO properties (id,title,community,location,layout,rent_monthly,fee_text,description,status,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Title, p.Community, p.Location, p.Layout, p.RentMonthly, p.FeeText, p.Description, p.Status, p.OwnerID, p.CreatedAt, p.UpdatedAt); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE property_leads SET status='converted',converted_property_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, p.ID, leadID); err != nil {
+	result, err := tx.ExecContext(ctx, `UPDATE property_leads SET status='converted',converted_property_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, p.ID, leadID)
+	if err != nil {
 		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated == 0 {
+		return sql.ErrNoRows
 	}
 	return tx.Commit()
 }

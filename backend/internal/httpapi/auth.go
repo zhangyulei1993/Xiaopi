@@ -139,6 +139,13 @@ func bearerToken(r *http.Request) string {
 
 func (s *Server) optionalClaims(r *http.Request) (tokenClaims, bool) {
 	claims, err := s.tokens.verify(bearerToken(r))
+	if err == nil && strings.HasPrefix(claims.Subject, webAdminPrefix) {
+		_, ok := s.webAdminSession(r, claims)
+		return claims, ok
+	}
+	if s.webAdminDB() != nil && claims.Role == roleAdmin && claims.Subject == s.config.AdminUsername {
+		return claims, false
+	}
 	return claims, err == nil
 }
 
@@ -147,7 +154,7 @@ func (s *Server) optionalClaims(r *http.Request) (tokenClaims, bool) {
 // password-based bootstrap administrator remains valid from configuration;
 // WeChat administrators are checked against the current admin assignment.
 func (s *Server) effectiveRole(ctx context.Context, claims tokenClaims) string {
-	if claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin {
+	if strings.HasPrefix(claims.Subject, webAdminPrefix) || (claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin) {
 		return roleAdmin
 	}
 	if s.wechatUserRole(ctx, claims.Subject) == roleAdmin {

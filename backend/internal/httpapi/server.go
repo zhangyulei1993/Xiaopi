@@ -94,6 +94,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/uploads/", staticMediaCache(http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads")))))
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
+	mux.HandleFunc("GET /api/v1/admin/web-accounts", s.manageWebAdmins)
+	mux.HandleFunc("POST /api/v1/admin/web-accounts", s.manageWebAdmins)
+	mux.HandleFunc("PATCH /api/v1/admin/web-accounts/{username}", s.manageWebAdmins)
+	mux.HandleFunc("DELETE /api/v1/admin/web-accounts/{username}", s.manageWebAdmins)
+	mux.HandleFunc("POST /api/v1/admin/web-password", s.manageWebAdmins)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/phone", s.requireRoles(s.bindWechatPhone, roleUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/auth/profile", s.requireRoles(s.getUserProfile, roleUser, roleAdmin))
@@ -480,13 +485,17 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid request"})
 		return
 	}
-	if !s.config.authConfigured() {
+	if s.webAdminDB() == nil && !s.config.authConfigured() {
 		writeError(w, http.StatusServiceUnavailable, "admin authentication is not configured")
 		return
 	}
 	key := s.loginAttemptKey(r, input.Username)
 	if wait, blocked := s.loginBlocked(key); blocked {
 		blockedLoginResponse(w, wait)
+		return
+	}
+	if db := s.webAdminDB(); db != nil {
+		s.loginWebAdmin(w, r, db, input.Username, input.Password, key)
 		return
 	}
 	if !secureEqual(input.Username, s.config.AdminUsername) || !secureEqual(input.Password, s.config.AdminPassword) {
@@ -624,7 +633,7 @@ func (s *Server) boundUserPhone(ctx context.Context, userID string) (string, boo
 func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromContext(r.Context())
 	role := roleUser
-	if claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin {
+	if strings.HasPrefix(claims.Subject, webAdminPrefix) || (claims.Subject == s.config.AdminUsername && claims.Role == roleAdmin) {
 		role = roleAdmin
 	} else {
 		store, ok := s.userAdminStore()
