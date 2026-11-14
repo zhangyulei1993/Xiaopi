@@ -24,9 +24,13 @@ const groups = [
     ],
   },
   {
-    label: '平台设置',
+    label: '后台账号',
+    items: [{ key: '后台管理员', label: '后台管理员', icon: UserFilled }],
+  },
+  {
+    label: '小程序权限',
     items: [
-      { key: '管理员列表', label: '管理员列表', icon: UserFilled },
+      { key: '小程序管理员', label: '小程序管理员', icon: UserFilled },
       { key: '临时访问码', label: '临时访问码', icon: Key },
     ],
   },

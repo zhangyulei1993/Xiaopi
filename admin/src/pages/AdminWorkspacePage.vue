@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown, ArrowUp, Delete, House, Plus, RefreshLeft } from '@element-plus/icons-vue'
 
+import homeHeroFallback from '../../../miniapp/src/static/home-lifestyle-hero.jpg'
+import propertyPlaceholderIcon from '../../../miniapp/src/static/icons/property-placeholder.svg'
+import homeTabIcon from '../../../miniapp/src/static/tabbar/home.png'
+import homeTabActiveIcon from '../../../miniapp/src/static/tabbar/home-active.png'
+import propertyTabIcon from '../../../miniapp/src/static/tabbar/house.png'
+import propertyTabActiveIcon from '../../../miniapp/src/static/tabbar/house-active.png'
+import meTabIcon from '../../../miniapp/src/static/tabbar/me.png'
+import meTabActiveIcon from '../../../miniapp/src/static/tabbar/me-active.png'
 import AdminLayout from '../layouts/AdminLayout.vue'
+import { isPendingLead, isNewRentalRequest } from '../config/operationalMetrics'
 import DashboardPage from './DashboardPage.vue'
 import WechatUsersPage from './WechatUsersPage.vue'
 import IntentionsPage from './IntentionsPage.vue'
@@ -14,13 +23,34 @@ import { pathForTab, tabFromRoute } from '../router'
 import type { AdminUser, ChannelConfig, FavoriteContact, Lead, LocationSearchItem, PagePresentation, Property, PublicConfig, RentalRequest, TemporaryAccess, WechatUser } from '../types/domain'
 import { channelStyleOptions, defaultPagePresentations, normalizeChannelStyle, pagePresentationOptions } from '../config/navigation'
 import { createAdminApi } from '../services/api'
-type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序基础配置' | '小程序页面配置' | '管理员列表' | '临时访问码'
+type TabKey = '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序基础配置' | '小程序页面配置' | '后台管理员' | '小程序管理员' | '临时访问码'
 
 const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
 const loggedIn = ref(Boolean(localStorage.getItem('xiaopi_admin_token')))
 const route = useRoute()
 const router = useRouter()
 const tab = ref<TabKey>(tabFromRoute(route.params.tab) as TabKey)
+type WebAccount = { username: string; enabled: boolean; super: boolean; mustChangePassword: boolean }
+const webAccounts = ref<WebAccount[]>([])
+const webAdminSuper = ref(sessionStorage.getItem('xiaopi_web_admin_super') === 'true')
+const mustChangePassword = ref(false)
+const newWebPassword = ref('')
+const webAccountName = ref('')
+const webAccountPassword = ref('')
+const webAccountMessage = ref('')
+const webAccountDialog = ref<'create' | 'reset' | 'self' | ''>('')
+const webAccountTarget = ref<WebAccount | null>(null)
+
+function openWebAccountDialog(mode: 'create' | 'reset' | 'self', account?: WebAccount) {
+  webAccountName.value = ''
+  webAccountPassword.value = ''
+  newWebPassword.value = ''
+  webAccountMessage.value = ''
+  webAccountTarget.value = account ?? null
+  webAccountDialog.value = mode
+}
+
+const webAccountBusy = ref(false)
 const username = ref('admin')
 const password = ref('')
 const loginError = ref('')
@@ -45,6 +75,34 @@ const detailModuleOptions: { key: DetailSectionTab; label: string; helper: strin
   { key: 'nearby', label: '附近推荐', helper: '同区域可租房源' },
 ]
 const configAudience = ref<ConfigAudience>('customer')
+type CanvasDataState = 'normal' | 'loading' | 'error' | 'empty'
+const canvasIdentityState = ref<'guest' | 'user' | 'admin'>('user')
+const canvasEditStep = ref(0)
+const canvasPageHistory = ref<string[]>([])
+const canvasSearchQuery = ref('')
+const canvasAreaFilter = ref('全部')
+const canvasChannelFilter = ref('')
+const canvasRentTypeFilter = ref('全部')
+const canvasBudgetFilter = ref('不限')
+const canvasStatusFilter = ref('all')
+const canvasFavoriteOnly = ref(false)
+const canvasPropertyFiltersOpen = ref(false)
+const canvasPreviewFavorites = ref<string[]>([])
+const canvasMediaIndex = ref(0)
+const canvasPreviewStage = ref<HTMLElement | null>(null)
+const canvasPreviewPhone = ref<HTMLElement | null>(null)
+const canvasFitScale = ref(1)
+let canvasFitObserver: ResizeObserver | undefined
+const canvasAdminWorkbenchTab = ref<'properties' | 'leads' | 'requests' | 'interests'>('properties')
+const canvasNotice = ref('')
+const canvasForm = reactive({ contactName: '', phone: '', location: '', layout: '', budgetMin: '', budgetMax: '', moveInDate: '', preferredTime: '', note: '', sourceName: '', sourcePhone: '', community: '', expectedRent: '' })
+const canvasDetailModal = ref<'appointment' | 'map' | ''>('')
+const canvasPropertyDraft = reactive<Record<string, string>>({})
+const canvasLoginMode = ref<'wechat' | 'accessCode'>('wechat')
+const canvasLoginPhone = ref('')
+const canvasLoginAccessCode = ref('')
+const canvasPropertyFacilities = ref<string[]>([])
+const canvasEditingExistingProperty = ref(false)
 const detailConfigTab = ref<DetailConfigTab>('detail')
 const detailSectionTab = ref<DetailSectionTab>('overview')
 type BasicConfigTab = 'brand' | 'coverage' | 'tags' | 'facilities'
@@ -73,6 +131,12 @@ const basicTagPreviewTab = ref<BasicTagPreviewTab>('list')
 const basicPhonePreviewOpen = ref(false)
 const editingFacilityKey = ref('')
 const configPageMeta = computed(() => pagePresentationOptions.find(page => page.key === configPage.value))
+const miniappNativeTitles: Record<string, string> = {
+  home: '小皮租房', properties: '房源', requests: '找房需求', publish: '发布房源', me: '我的',
+  footprints: '浏览足迹', requestHistory: '我的找房记录', authLogin: '微信登录',
+  adminWorkbench: '小皮工作台', adminPropertyEdit: '编辑房源',
+}
+const canvasNativeTitle = computed(() => miniappNativeTitles[configPage.value] || '房源详情')
 function selectDetailConfigTab(value: DetailConfigTab) {
   detailConfigTab.value = value
   previewOverlay.value = value === 'detail' ? 'page' : value
@@ -123,16 +187,22 @@ function selectCanvasNodeForPage(page: string) {
 const selectConfigPage = (key: string) => {
   const target = pagePresentationOptions.find(page => page.key === key)
   if (!target) return
+  canvasPageHistory.value = []
   if (target.audience !== 'both' && target.audience !== configAudience.value) configAudience.value = target.audience as ConfigAudience
   configPage.value = target.key
+  if (target.key === 'adminPropertyEdit') canvasEditStep.value = 0
   selectCanvasNodeForPage(target.key)
   detailConfigTab.value = 'detail'
   detailSectionTab.value = 'overview'
   previewOverlay.value = 'page'
+  canvasDetailModal.value = ''
   tagMagnifierOpen.value = false
 }
 function switchConfigAudience(value: ConfigAudience) {
   configAudience.value = value
+  canvasIdentityState.value = value === 'operator' ? 'admin' : 'user'
+  canvasPageHistory.value = []
+  canvasPageFilterReset()
   configPage.value = value === 'operator' ? 'adminWorkbench' : 'home'
   selectCanvasNodeForPage(configPage.value)
   previewSelectedPropertyID.value = ''
@@ -202,8 +272,11 @@ const generatingTemporaryCode = ref(false)
 const generatedTemporaryCode = ref('')
 const temporaryMessage = ref('')
 const temporaryFailed = ref(false)
-const requestUpdatingID = ref('')
 const propertyFilter = ref('all')
+const leadFilter = computed(() => route.query.filter === 'pending' && tab.value === '线索管理' ? 'pending' : 'all')
+const requestFilter = computed(() => route.query.filter === 'new' && tab.value === '租客需求' ? 'new' : 'all')
+const overviewState = ref<'loading' | 'ready' | 'error'>('loading')
+const overviewError = ref('')
 const channelLocationResults = ref<Record<number, LocationSearchItem[]>>({})
 const channelLocationLoading = ref<Record<number, boolean>>({})
 const channelMapPreview = ref<Record<number, string>>({})
@@ -330,22 +403,203 @@ const previewPropertyOptions = computed(() => {
     ? properties.value.filter((item) => item.status === 'available')
     : properties.value
 })
-const previewProperties = computed(() => previewPropertyOptions.value.slice(0, 2))
+function previewMatchesArea(item: Property, label: string) {
+  if (label === '全部') return true
+  const areaLabel = String((item as Property & { areaLabel?: string }).areaLabel || '')
+  if (areaLabel) return areaLabel === label
+  const candidates = publicConfig.featuredChannels.filter((channel) => channel.latitude && channel.longitude)
+  if (!item.latitude || !item.longitude || !candidates.length) return false
+  const nearest = candidates.reduce((current, candidate) => previewDistanceKm(Number(candidate.latitude), Number(candidate.longitude), Number(item.latitude), Number(item.longitude)) < previewDistanceKm(Number(current.latitude), Number(current.longitude), Number(item.latitude), Number(item.longitude)) ? candidate : current)
+  return nearest.title === label
+}
+function previewMatchesKind(item: Property, kind: string) {
+  if (!kind || kind === '全部' || kind === '不限' || kind === '推荐') return true
+  const text = `${item.title || ''} ${item.layout || ''} ${item.rentType || ''}`
+  if (kind === '整租' && !item.rentType) return true
+  const roomMatch = `${item.layout || ''} ${item.title || ''}`.match(/(\d+)\s*室/) || `${item.layout || ''} ${item.title || ''}`.match(/([一二两三四五六七八九])\s*居/)
+  const roomCount = roomMatch ? (/^\d+$/.test(roomMatch[1]) ? Number(roomMatch[1]) : ({ 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 } as Record<string, number>)[roomMatch[1]] || 0) : 0
+  if (kind === '一居') return roomCount === 1
+  if (kind === '两居') return roomCount === 2
+  if (kind === '三居+') return roomCount >= 3
+  return text.includes(kind)
+}
+function previewPropertyNeedsDetails(item: Property) {
+  return !item.community || !item.location || !item.latitude || !item.longitude || !item.media?.length
+}
+const previewProperties = computed(() => {
+  const query = canvasSearchQuery.value.trim().toLowerCase()
+  const budget = canvasBudgetFilter.value
+  return previewPropertyOptions.value.filter((item) => {
+    if (canvasStatusFilter.value !== 'all') {
+      if (configAudience.value === 'customer' && item.status !== 'available') return false
+      if (configAudience.value === 'operator') {
+        const status = canvasStatusFilter.value
+        const matched = status === 'draft' ? item.status === 'draft'
+          : status === 'todo' ? ['draft', 'pending_review'].includes(item.status)
+            : status === 'online' ? ['published', 'available'].includes(item.status)
+              : status === 'incomplete' ? previewPropertyNeedsDetails(item)
+                : item.status === status
+        if (!matched) return false
+      } else if (normalizedPropertyStatus(item.status) !== canvasStatusFilter.value) return false
+    }
+    if (!previewMatchesArea(item, canvasAreaFilter.value)) return false
+    if (canvasChannelFilter.value && !previewMatchesArea(item, canvasChannelFilter.value)) return false
+    if (!previewMatchesKind(item, canvasRentTypeFilter.value)) return false
+    if (canvasFavoriteOnly.value && configAudience.value === 'customer' && !canvasPreviewFavorites.value.includes(item.id)) return false
+    if (query && !`${item.title} ${item.community} ${item.location} ${item.layout}`.toLowerCase().includes(query)) return false
+    if (budget === '≤1500' && item.rentMonthly > 1500) return false
+    if (budget === '1500–2500' && (item.rentMonthly <= 1500 || item.rentMonthly > 2500)) return false
+    if (budget === '2500–3500' && (item.rentMonthly <= 2500 || item.rentMonthly >= 3500)) return false
+    if (budget === '≥3500' && item.rentMonthly < 3500) return false
+    return true
+  })
+})
+const canvasHasPropertyFilters = computed(() => Boolean(
+  canvasSearchQuery.value.trim()
+  || canvasAreaFilter.value !== '全部'
+  || canvasChannelFilter.value
+  || canvasRentTypeFilter.value !== '全部'
+  || canvasBudgetFilter.value !== '不限'
+))
+const canvasPropertyEmptyTitle = computed(() => canvasFavoriteOnly.value
+  ? '还没有找到关注的房源'
+  : canvasAreaFilter.value !== '全部'
+    ? `${canvasAreaFilter.value} 暂时没有合适的房源`
+    : canvasSearchQuery.value.trim()
+      ? `没有找到“${canvasSearchQuery.value.trim()}”相关房源`
+      : '暂时没有符合条件的房源')
+const canvasPropertyEmptyAction = computed(() => canvasFavoriteOnly.value
+  ? '浏览全部房源'
+  : canvasAreaFilter.value !== '全部'
+    ? '关注该片区新房'
+    : '提交找房需求')
+function handleCanvasPropertyEmptyAction() {
+  if (canvasFavoriteOnly.value) {
+    canvasPageFilterReset()
+  } else if (canvasAreaFilter.value !== '全部' && canvasIdentityState.value === 'guest') {
+    navigateCanvasPage('authLogin')
+  } else {
+    navigateCanvasPage('requests')
+  }
+}
+const previewCustomerMasonryColumns = computed(() => {
+  const columns: Property[][] = [[], []]
+  const heights = [0, 0]
+  previewProperties.value.forEach((item) => {
+    const copyLength = `${previewListingTitle(item)} ${previewTagGroups(item).all.join(' ')}`.length
+    const estimate = 360 + Math.ceil(copyLength / 12) * 38
+    const index = heights[0] <= heights[1] ? 0 : 1
+    columns[index].push(item)
+    heights[index] += estimate
+  })
+  return columns
+})
 const previewSelectedPropertyID = ref('')
-const previewPrimaryProperty = computed(() => previewPropertyOptions.value.find((item) => item.id === previewSelectedPropertyID.value) || previewPropertyOptions.value[0])
+const previewPrimaryProperty = computed(() => previewPropertyOptions.value.find((item) => item.id === previewSelectedPropertyID.value) || previewProperties.value[0] || previewPropertyOptions.value[0])
+const canvasDataState = computed<CanvasDataState>(() => {
+  if (loading.value || overviewState.value === 'loading') return 'loading'
+  if (overviewState.value === 'error') return 'error'
+  if (['home', 'properties'].includes(configPage.value)) return previewPropertyOptions.value.length ? 'normal' : 'empty'
+  if (configPage.value === 'propertyDetail') return previewPrimaryProperty.value ? 'normal' : 'empty'
+  return 'normal'
+})
+function setCanvasNotice(message = '此画布只读，未提交任何业务数据。') {
+  canvasNotice.value = message
+  window.setTimeout(() => { if (canvasNotice.value === message) canvasNotice.value = '' }, 2800)
+}
+function updateCanvasFit() {
+  const stage = canvasPreviewStage.value
+  const phone = canvasPreviewPhone.value
+  if (!stage || !phone) return
+  const width = phone.offsetWidth || 203
+  const height = phone.offsetHeight || 441
+  // The 203×441 design frame is scaled to the measured iPhone 17 simulator
+  // viewport: 604×1312 physical pixels at deviceScaleFactor 2 (302×656 CSS px).
+  // Preserve the 0.460 aspect ratio and center the device in the available rail.
+  const simulatorScale = 302 / width
+  canvasFitScale.value = Math.max(0.35, Math.min(simulatorScale, stage.clientWidth / width, stage.clientHeight / height))
+}
+function navigateCanvasPage(key: string) {
+  if (key === configPage.value) return
+  const current = configPage.value
+  selectConfigPage(key)
+  canvasPageHistory.value.push(current)
+}
+function switchCanvasTab(key: string) {
+  canvasPageHistory.value = []
+  selectConfigPage(key)
+}
+function backCanvasPage() {
+  const previous = canvasPageHistory.value.pop()
+  if (previous) { selectConfigPage(previous); return }
+  selectConfigPage(configAudience.value === 'customer' ? 'properties' : 'adminWorkbench')
+}
+function switchCanvasIdentity(value: 'guest' | 'user' | 'admin') {
+  canvasIdentityState.value = value
+  const audience: ConfigAudience = value === 'admin' ? 'operator' : 'customer'
+  configAudience.value = audience
+  canvasPageHistory.value = []
+  canvasPageFilterReset()
+  selectConfigPage(audience === 'customer' ? 'home' : 'adminWorkbench')
+}
+function canvasPageFilterReset() {
+  canvasSearchQuery.value = ''
+  canvasAreaFilter.value = '全部'
+  canvasChannelFilter.value = ''
+  canvasRentTypeFilter.value = '全部'
+  canvasBudgetFilter.value = '不限'
+  canvasStatusFilter.value = 'all'
+  canvasFavoriteOnly.value = false
+  canvasPropertyFiltersOpen.value = false
+}
+function toggleCanvasFavorite(propertyId: string) {
+  if (canvasIdentityState.value === 'guest') { navigateCanvasPage('authLogin'); return }
+  canvasPreviewFavorites.value = canvasPreviewFavorites.value.includes(propertyId)
+    ? canvasPreviewFavorites.value.filter((id) => id !== propertyId)
+    : [...canvasPreviewFavorites.value, propertyId]
+  setCanvasNotice('关注状态仅在本次画布预览中显示，不会写入业务数据。')
+}
+function submitCanvasPreview() {
+  if (configAudience.value === 'customer' && canvasIdentityState.value === 'guest' && ['requests', 'requestHistory', 'footprints'].includes(configPage.value)) {
+    navigateCanvasPage('authLogin')
+    return
+  }
+  canvasDetailModal.value = ''
+  setCanvasNotice('预览模式不会提交、修改或创建业务数据。')
+}
+function startCanvasPropertyEdit(item?: Property) {
+  previewSelectedPropertyID.value = item?.id || ''
+  canvasEditingExistingProperty.value = Boolean(item)
+  Object.assign(canvasPropertyDraft, {
+    community: item?.community || '', location: item?.location || '', buildingNo: item?.buildingNo || '', unitNo: item?.unitNo || '', roomNo: item?.roomNo || '', rentType: item?.rentType || '整租', listingSource: item?.listingSource || '直租', layout: item?.layout || '', areaSqm: item?.areaSqm ? String(item.areaSqm) : '', floorInfo: item?.floorInfo || '', orientation: item?.orientation || '', elevator: item?.elevator || '', rentMonthly: item?.rentMonthly ? String(item.rentMonthly) : '', feeText: item?.feeText || '', depositPayment: item?.depositPayment || '', availableDate: item?.availableDate || '', utilitiesText: item?.utilitiesText || '', description: item?.description || '', rulesText: item?.rulesText || '', marketingPhrase: item?.marketingPhrase || '',
+  })
+  canvasPropertyFacilities.value = []
+  canvasEditStep.value = 0
+  navigateCanvasPage('adminPropertyEdit')
+}
+function toggleCanvasPropertyFacility(label: string) {
+  canvasPropertyFacilities.value = canvasPropertyFacilities.value.includes(label)
+    ? canvasPropertyFacilities.value.filter(item => item !== label)
+    : [...canvasPropertyFacilities.value, label]
+}
+const canvasDraftTitle = computed(() => [canvasPropertyDraft.community || '房源小区', canvasPropertyDraft.marketingPhrase].filter(Boolean).join(' · '))
 function openPreviewProperty(item?: Property) {
   if (!item) return
   previewSelectedPropertyID.value = item.id
-  selectConfigPage('propertyDetail')
+  canvasMediaIndex.value = 0
+  navigateCanvasPage('propertyDetail')
 }
 const previewIdentity = computed(() => {
+  if (configAudience.value === 'customer' && canvasIdentityState.value === 'guest') return { name: '登录后开始找房', caption: '同步收藏、足迹和找房需求', mark: '小' }
   if (configAudience.value === 'operator') {
     const account = admins.value.find((item) => item.status === 'active') || admins.value[0]
     return { name: account?.nickname || '管理员', caption: account?.phone ? `管理员已登录 · ${account.phone}` : '管理员已登录', mark: '管' }
   }
-  const adminIDs = new Set(admins.value.map((item) => item.userId))
-  const account = users.value.find((item) => !adminIDs.has(item.id) && item.status !== 'disabled') || users.value[0]
-  return { name: account?.nickname || '微信用户', caption: account?.phone ? `已登录 · ${account.phone}` : '普通用户已登录', mark: account?.nickname?.slice(0, 1) || '小' }
+  if (canvasIdentityState.value === 'admin') {
+    const account = admins.value.find((item) => item.status === 'active') || admins.value[0]
+    return { name: account?.nickname || '管理员', caption: account?.phone ? `管理员 · ${account.phone}` : '管理员身份已启用', mark: '管' }
+  }
+  return { name: '微信用户', caption: '客户页面预览 · 未绑定具体微信账号', mark: '小' }
 })
 function previewPropertyTags(item?: Property, configuredFields?: string[]) {
   if (!item) return previewListingTags.value
@@ -472,11 +726,15 @@ const previewNearbyProperties = computed(() => {
     .sort((left, right) => publicConfig.propertyDetail.nearby.sort === 'newest' ? String(right.id).localeCompare(String(left.id)) : left.distance - right.distance)
     .slice(0, Number(publicConfig.propertyDetail.nearby.limit) || 4)
 })
-function previewCoverStyle(item?: Property) {
-  // The canvas uses the first image as a poster, then overlays the same play
-  // marker as the miniapp. A CSS background cannot render a video URL itself.
-  const cover = item?.media?.find((media) => media.type === 'image')?.url
-  return cover ? { backgroundImage: `url(${cover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}
+function previewCoverStyle(item?: Property, mediaIndex = 0) {
+  // Use actual media where available. For records without a photo, mirror the
+  // Mini Program's explicit community-name placeholder instead of a blank block.
+  const media = item?.media?.[mediaIndex]
+  const cover = media?.type === 'image' ? media.url : item?.media?.find((entry) => entry.type === 'image')?.url
+  if (cover) return { backgroundImage: `url(${cover})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  const label = (item?.community || '小皮').slice(0, 2).replace(/[&<>]/g, value => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[value] || value))
+  const placeholder = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#e4cdaa"/><stop offset="1" stop-color="#b9a58c"/></linearGradient></defs><rect width="320" height="240" fill="url(#g)"/><rect x="103" y="96" width="114" height="48" rx="8" fill="none" stroke="#ffffffaa"/><text x="160" y="127" fill="white" font-size="22" text-anchor="middle" font-family="sans-serif">${label}</text></svg>`
+  return { backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(placeholder)}")`, backgroundSize: 'cover', backgroundPosition: 'center' }
 }
 const shareFieldOptions = [
   { key: 'community', label: '小区名称' }, { key: 'layout', label: '户型 / 房间' }, { key: 'roomNo', label: '门牌信息' },
@@ -526,6 +784,8 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
 }
 
 async function load() {
+  overviewState.value = 'loading'
+  overviewError.value = ''
   loading.value = true
   pageError.value = ''
   try {
@@ -547,8 +807,11 @@ async function load() {
     admins.value = adminData || []
     temporaryAccess.value = temporaryData || []
     applyConfig(configData, true)
+    overviewState.value = 'ready'
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '数据加载失败'
+    overviewState.value = 'error'
+    overviewError.value = error instanceof Error ? error.message : '数据加载失败'
+    pageError.value = overviewError.value
     throw error
   } finally {
     loading.value = false
@@ -560,8 +823,11 @@ async function login() {
   loginError.value = ''
   loading.value = true
   try {
-    const auth = await api<{ accessToken: string }>('/v1/admin/login', { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) })
+    const auth = await api<{ accessToken: string; username: string; super?: boolean; mustChangePassword?: boolean }>('/v1/admin/login', { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) })
     localStorage.setItem('xiaopi_admin_token', auth.accessToken)
+    webAdminSuper.value = auth.super === true
+    sessionStorage.setItem('xiaopi_web_admin_super', String(webAdminSuper.value))
+    mustChangePassword.value = auth.mustChangePassword === true
     loggedIn.value = true
     selectTab('运营总览')
     await load()
@@ -575,28 +841,82 @@ async function login() {
 }
 
 function logout() {
+  sessionStorage.removeItem('xiaopi_web_admin_super')
+  webAdminSuper.value = false
+  mustChangePassword.value = false
+  webAccounts.value = []
   localStorage.removeItem('xiaopi_admin_token')
   loggedIn.value = false
   password.value = ''
 }
 
-async function updateRentalRequest(item: RentalRequest, status: string) {
-  requestUpdatingID.value = item.id
+async function webAccountAction(action: () => Promise<void>) {
+  if (webAccountBusy.value) return
+  webAccountBusy.value = true
+  webAccountMessage.value = ''
   try {
-    await api('/v1/admin/rental-requests/follow-up', { method: 'PATCH', body: JSON.stringify({ id: item.id, status, followUpNote: item.followUpNote || '' }) })
-    item.status = status
+    await action()
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '更新需求失败'
+    webAccountMessage.value = error instanceof Error ? error.message : '操作失败'
   } finally {
-    requestUpdatingID.value = ''
+    webAccountBusy.value = false
   }
 }
 
-function selectTab(value: string) {
+async function readWebAccounts() {
+  webAccounts.value = await api<WebAccount[]>('/v1/admin/web-accounts')
+}
+
+function refreshWebAccounts() {
+  return webAccountAction(readWebAccounts)
+}
+
+function changeWebPassword() {
+  return webAccountAction(async () => {
+    await api('/v1/admin/web-password', { method: 'POST', body: JSON.stringify({ password: newWebPassword.value }) })
+    newWebPassword.value = ''
+    webAccountDialog.value = ''
+    logout()
+    loginError.value = '密码已更新，请使用新密码登录'
+  })
+}
+
+function createWebAccount() {
+  return webAccountAction(async () => {
+    await api('/v1/admin/web-accounts', { method: 'POST', body: JSON.stringify({ username: webAccountName.value, password: webAccountPassword.value }) })
+    webAccountName.value = ''
+    webAccountPassword.value = ''
+    webAccountDialog.value = ''
+    await readWebAccounts()
+  })
+}
+
+function updateWebAccount(account: WebAccount, method: 'PATCH' | 'DELETE', fields?: { enabled?: boolean; password?: string }) {
+  return webAccountAction(async () => {
+    await api('/v1/admin/web-accounts/' + encodeURIComponent(account.username), { method, body: fields ? JSON.stringify(fields) : undefined })
+    webAccountPassword.value = ''
+    webAccountDialog.value = ''
+    await readWebAccounts()
+  })
+}
+
+function openOverviewMetric(target: string) {
+  const filter = target === '线索管理' ? 'pending' : target === '租客需求' ? 'new' : undefined
+  selectTab(target, filter)
+}
+
+function refreshOverview() {
+  if (!loading.value) void load().catch(() => undefined)
+}
+
+function selectTab(value: string, filter?: string) {
+  if (value === '后台管理员' && webAdminSuper.value) void refreshWebAccounts()
   const next = value as TabKey
   tab.value = next
-  void router.push({ name: 'admin', params: { tab: pathForTab(next) } })
+  void router.push({ name: 'admin', params: { tab: pathForTab(next) }, query: filter ? { filter } : {} })
 }
+
+watch(() => route.params.tab, value => { tab.value = tabFromRoute(value) as TabKey })
 
 router.afterEach((to) => {
   tab.value = tabFromRoute(to.params.tab) as TabKey
@@ -608,7 +928,31 @@ const propertyStatuses = [
   { key: 'rented', label: '已租', icon: '住' }, { key: 'offline', label: '已下架', icon: '下' },
   { key: 'draft', label: '未发布（草稿）', icon: '稿' },
 ]
+const canvasAdminPropertyFilters = [
+  { key: 'all', label: '全部' }, { key: 'draft', label: '草稿' }, { key: 'todo', label: '待处理' },
+  { key: 'online', label: '在租' }, { key: 'rented', label: '已租' }, { key: 'offline', label: '已下架' }, { key: 'incomplete', label: '待补资料' },
+]
+const previewIncompletePropertyCount = computed(() => properties.value.filter(previewPropertyNeedsDetails).length)
+const previewAdminPendingCount = computed(() => leads.value.filter(item => !['converted', 'closed'].includes(item.status)).length + rentalRequests.value.filter(item => !item.status || item.status === 'new').length)
 const normalizedPropertyStatus = (status: string) => status === 'pending_review' ? 'draft' : status
+const previewAdminStatusLabel = computed(() => {
+  const status = previewPrimaryProperty.value?.status
+  if (!status || status === 'published' || status === 'available') return ''
+  if (status === 'offline') return '已下架预览'
+  if (status === 'pending_review') return '待发布预览'
+  return '草稿预览'
+})
+const previewAdminStatusActions = computed(() => {
+  switch (previewPrimaryProperty.value?.status) {
+    case 'draft':
+    case 'pending_review': return ['发布房源']
+    case 'published': return ['设为可租', '标记已租', '下架']
+    case 'available': return ['标记已租', '下架']
+    case 'rented': return ['设为可租']
+    case 'offline': return ['上架可租', '设为已租']
+    default: return []
+  }
+})
 const filteredProperties = computed(() => propertyFilter.value === 'all' ? properties.value : properties.value.filter(item => normalizedPropertyStatus(item.status) === propertyFilter.value))
 const statusLabel = (status: string) => propertyStatuses.find(item => item.key === normalizedPropertyStatus(status))?.label || status
 async function setPropertyStatus(item: Property, status: string) {
@@ -1108,7 +1452,27 @@ async function revokeTemporaryAccess(item: TemporaryAccess) {
   }
 }
 
-onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
+onMounted(() => {
+  if (loggedIn.value) load().catch(() => undefined)
+  if (loggedIn.value && webAdminSuper.value && tab.value === '后台管理员') void refreshWebAccounts()
+  void nextTick(() => {
+    if (canvasPreviewStage.value) {
+      canvasFitObserver = new ResizeObserver(updateCanvasFit)
+      canvasFitObserver.observe(canvasPreviewStage.value)
+    }
+    window.addEventListener('resize', updateCanvasFit)
+    updateCanvasFit()
+  })
+})
+watch([tab, configPage], async () => {
+  await nextTick()
+  if (canvasFitObserver && canvasPreviewStage.value) canvasFitObserver.observe(canvasPreviewStage.value)
+  updateCanvasFit()
+}, { flush: 'post' })
+onBeforeUnmount(() => {
+  canvasFitObserver?.disconnect()
+  window.removeEventListener('resize', updateCanvasFit)
+})
 </script>
 
 <template>
@@ -1130,19 +1494,61 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
   </main>
 
   <AdminLayout v-else :active="tab" :title="tab" @select="selectTab" @logout="logout">
+        <el-alert v-if="mustChangePassword" class="page-error" title="当前账号仍在使用初始密码，建议在「后台管理员」中修改密码。" type="warning" show-icon @close="mustChangePassword = false" />
         <el-alert v-if="pageError" class="page-error" :title="pageError" type="error" show-icon :closable="false" />
 
-        <DashboardPage v-if="tab === '运营总览'" :loading="loading" :property-count="properties.length" :lead-count="leads.length" :user-count="users.length" :location-count="publicConfig.locations.length" @navigate="selectTab" />
+        <DashboardPage v-if="tab === '运营总览'" :state="overviewState" :error-message="overviewError" :property-count="properties.length" :pending-lead-count="leads.filter(isPendingLead).length" :new-request-count="rentalRequests.filter(isNewRentalRequest).length" :favorite-count="favoriteContacts.length" :user-count="users.length" @navigate="openOverviewMetric" @refresh="refreshOverview" />
 
         <WechatUsersPage v-else-if="tab === '微信用户'" :users="users" :loading="loading" @refresh="load" />
 
-        <RentalRequestsPage v-else-if="tab === '租客需求'" :requests="rentalRequests" :loading="loading" :updating-id="requestUpdatingID" @refresh="load" @update="updateRentalRequest" />
+        <RentalRequestsPage v-else-if="tab === '租客需求'" :requests="rentalRequests" :loading="loading" :filter="requestFilter" @refresh="load" @filter="value => router.replace({ query: value === 'new' ? { filter: value } : {} })" />
 
         <IntentionsPage v-else-if="tab === '用户意向'" :contacts="favoriteContacts" :loading="loading" @refresh="load" />
 
-        <template v-else-if="tab === '管理员列表'">
+        <template v-else-if="tab === '后台管理员'">
           <section class="page-header">
-            <div><span>平台设置</span><h1>管理员列表</h1></div>
+            <div><span>后台账号</span><h1>后台管理员</h1><p>用于登录 Web 运营后台。</p></div>
+          </section>
+          <el-alert v-if="webAccountMessage && !webAccountDialog" class="config-alert" :title="webAccountMessage" type="error" show-icon />
+          <section class="surface table-panel">
+            <div class="table-heading">
+              <div><h2>后台账号列表</h2><p>{{ webAdminSuper ? '管理可登录 Web 运营后台的账号' : '账号列表由超级管理员管理' }}</p></div>
+              <div>
+                <el-button @click="openWebAccountDialog('self')">修改我的密码</el-button>
+                <el-button v-if="webAdminSuper" @click="refreshWebAccounts">刷新</el-button>
+                <el-button v-if="webAdminSuper" type="primary" @click="openWebAccountDialog('create')">新增账号</el-button>
+              </div>
+            </div>
+            <template v-if="webAdminSuper">
+              <el-table :data="webAccounts" v-loading="webAccountBusy" :empty-text="webAccountMessage ? '账号加载失败，请刷新重试' : '暂无后台账号'">
+                <el-table-column prop="username" label="账号" />
+                <el-table-column label="角色"><template #default="{ row }">{{ row.super ? '超级管理员' : '后台管理员' }}</template></el-table-column>
+                <el-table-column label="状态"><template #default="{ row }">{{ !row.enabled ? '已停用' : row.mustChangePassword ? '待修改密码' : '已启用' }}</template></el-table-column>
+                <el-table-column label="操作" min-width="240"><template #default="{ row }">
+                  <template v-if="!row.super">
+                    <el-button link @click="updateWebAccount(row, 'PATCH', { enabled: !row.enabled })">{{ row.enabled ? '停用' : '启用' }}</el-button>
+                    <el-button link type="primary" @click="openWebAccountDialog('reset', row)">重置密码</el-button>
+                    <el-popconfirm title="确认删除该后台账号？" @confirm="updateWebAccount(row, 'DELETE')"><template #reference><el-button link type="danger">删除</el-button></template></el-popconfirm>
+                  </template>
+                </template></el-table-column>
+              </el-table>
+            </template>
+          </section>
+          <el-dialog :model-value="!!webAccountDialog" :title="webAccountDialog === 'create' ? '新增后台账号' : webAccountDialog === 'reset' ? '重置密码 · ' + webAccountTarget?.username : '修改我的密码'" width="min(440px, 92vw)" @update:model-value="webAccountDialog = ''">
+            <el-form label-position="top" @submit.prevent="webAccountDialog === 'create' ? createWebAccount() : webAccountDialog === 'self' ? changeWebPassword() : webAccountTarget && updateWebAccount(webAccountTarget, 'PATCH', { password: webAccountPassword })">
+              <el-form-item v-if="webAccountDialog === 'create'" label="账号"><el-input v-model.trim="webAccountName" /></el-form-item>
+              <el-form-item v-if="webAccountDialog === 'self'" label="新密码"><el-input v-model="newWebPassword" type="password" autocomplete="new-password" /></el-form-item>
+              <el-form-item v-else :label="webAccountDialog === 'create' ? '初始密码' : '新密码'"><el-input v-model="webAccountPassword" type="password" autocomplete="new-password" /></el-form-item>
+              <el-alert v-if="webAccountMessage" class="config-alert" :title="webAccountMessage" type="error" show-icon />
+              <el-button @click="webAccountDialog = ''">取消</el-button>
+              <el-button native-type="submit" type="primary" :loading="webAccountBusy" :disabled="webAccountDialog === 'self' ? !newWebPassword : !webAccountPassword || (webAccountDialog === 'create' && !webAccountName)">确认</el-button>
+            </el-form>
+          </el-dialog>
+        </template>
+
+        <template v-else-if="tab === '小程序管理员'">
+          <section class="page-header">
+            <div><span>小程序权限</span><h1>小程序管理员</h1></div>
           </section>
           <section class="surface admin-search-panel">
             <div class="admin-search-heading"><h2>搜索微信用户</h2><p>只有已经出现在“微信用户”列表并绑定手机号的用户可以成为管理员。</p></div>
@@ -1171,14 +1577,14 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
               <el-table-column label="角色" width="120"><template #default><el-tag>运营管理员</el-tag></template></el-table-column>
               <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'info'">{{ scope.row.status === 'active' ? '已启用' : '已停用' }}</el-tag></template></el-table-column>
               <el-table-column label="指定时间" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
-              <el-table-column label="操作" width="170" align="center"><template #default="scope"><div class="admin-actions"><el-button v-if="scope.row.status !== 'active'" link type="primary" @click="setAdminStatus(scope.row, 'active')">启用</el-button><el-popconfirm v-else title="停用后，该用户重新登录将失去管理员权限，确认停用？" width="260" @confirm="setAdminStatus(scope.row, 'disabled')"><template #reference><el-button link type="warning">停用</el-button></template></el-popconfirm><el-popconfirm title="删除后该用户将移出管理员列表，但微信用户账号保留。确认删除？" width="280" @confirm="deleteAdmin(scope.row)"><template #reference><el-button link type="danger">删除</el-button></template></el-popconfirm></div></template></el-table-column>
+              <el-table-column label="操作" width="170" align="center"><template #default="scope"><div class="admin-actions"><el-button v-if="scope.row.status !== 'active'" link type="primary" @click="setAdminStatus(scope.row, 'active')">启用</el-button><el-popconfirm v-else title="停用后，该用户重新登录将失去管理员权限，确认停用？" width="260" @confirm="setAdminStatus(scope.row, 'disabled')"><template #reference><el-button link type="warning">停用</el-button></template></el-popconfirm><el-popconfirm title="删除后该用户将移出小程序管理员列表，但微信用户账号保留。确认删除？" width="280" @confirm="deleteAdmin(scope.row)"><template #reference><el-button link type="danger">删除</el-button></template></el-popconfirm></div></template></el-table-column>
             </el-table>
           </section>
         </template>
 
         <template v-else-if="tab === '临时访问码'">
           <section class="page-header">
-            <div><span>平台设置</span><h1>临时访问码</h1></div>
+            <div><span>小程序权限</span><h1>临时访问码</h1></div>
           </section>
           <section class="surface temporary-access-panel">
             <div class="temporary-form">
@@ -1370,6 +1776,31 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
             <div class="config-toolbar-meta"><span>{{ publicConfig.locations.length }} 个地区</span><span>{{ publicConfig.featuredChannels.length }} 个频道</span></div>
             <div class="config-toolbar-actions"><el-button :icon="RefreshLeft" :disabled="!configDirty || savingConfig" @click="resetConfig">恢复</el-button><el-button type="primary" :loading="savingConfig" :disabled="!configDirty || configErrors.length > 0" @click="saveConfig">保存并发布</el-button></div>
           </section>
+          <div class="canvas-editor-controls">
+              <section class="canvas-control-deck" aria-label="小程序画布控制">
+                <div class="canvas-control-heading"><span>实时画布</span><small>当前环境数据镜像</small></div>
+                <div class="canvas-preview-toolbar"><label class="canvas-preview-control">预览角色<select v-model="canvasIdentityState" @change="switchCanvasIdentity(canvasIdentityState)"><option value="guest">游客</option><option value="user">微信用户</option><option value="admin">小程序管理员</option></select></label><div class="canvas-data-source"><i :class="{ live: overviewState === 'ready', failed: overviewState === 'error' }"></i><span>{{ overviewState === 'loading' ? '正在载入数据…' : overviewState === 'error' ? `加载失败：${overviewError}` : `${properties.length} 套房源 · 当前 Admin 环境` }}</span><button type="button" :disabled="loading" @click="load().catch(() => undefined)">刷新</button></div></div>
+              </section>
+              <details class="canvas-context-drawer">
+                <summary>页面说明、数据边界与状态标签</summary><p class="canvas-data-note">使用当前 Admin API 环境的业务数据。表单提交、删除、状态变更均不写入；微信用户私有数据需由对应用户身份访问。</p>
+                <section v-if="selectedCanvasNode" class="canvas-node-inspector" aria-live="polite"><header><span>{{ selectedCanvasNode.kind }}</span><strong>{{ selectedCanvasNode.label }}</strong><button type="button" @click="openCanvasNode(selectedCanvasNodeID)">编辑此处</button></header><p>{{ selectedCanvasNode.impacts }}</p><dl><div><dt>可改</dt><dd>{{ selectedCanvasNode.editable }}</dd></div><div><dt>不可改</dt><dd>{{ selectedCanvasNode.locked }}</dd></div></dl></section>
+                <section v-if="configPage === 'properties'" class="canvas-status-legend canvas-editable-copy" title="点击编辑状态标签" @click="openCanvasNode('status')"><small>{{ configAudience === 'customer' ? '客户列表' : '管理员列表' }}</small><span v-if="configAudience === 'customer'"><i class="available">{{ previewStatusLabel('available') }}</i>客户只会看到可租房源</span><span v-else><i>{{ previewStatusLabel('draft') }}</i><i>{{ previewStatusLabel('available') }}</i><i>{{ previewStatusLabel('rented') }}</i><i>{{ previewStatusLabel('offline') }}</i></span></section>
+                <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="tag-magnifier" :class="{ open: tagMagnifierOpen }">
+                <header><span>标签局部预览</span><button type="button" @click="tagMagnifierOpen = !tagMagnifierOpen">{{ tagMagnifierOpen ? '收起' : '放大标签' }}</button></header>
+                <article v-if="tagMagnifierOpen && previewPrimaryProperty">
+                  <b>{{ configPage === 'properties' ? '列表卡片标签' : '详情页标签' }}</b>
+                  <strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong>
+                  <small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit')">门牌定位 · {{ previewOperatorDoorplate || '待补充' }}</small>
+                  <div v-if="configPage === 'properties'" class="tag-magnifier-list" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`">
+                    <template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><span v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="`primary-${tag}`" class="primary">{{ tag }}</span><span v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="`secondary-${tag}`">{{ tag }}</span></template>
+                    <span v-else v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</span>
+                  </div>
+                  <div v-else class="tag-magnifier-detail"><span v-for="tag in previewDetailTagGroups(previewPrimaryProperty).top" :key="`top-${tag}`">{{ tag }}</span></div>
+                </article>
+                </section>
+              </details>
+              <nav class="canvas-page-dock" aria-label="预览页面切换"><span>页面</span><div class="canvas-page-rail"><button v-for="item in pagePresentationOptions.filter(page => page.audience === 'both' || page.audience === configAudience)" :key="`canvas-page-${item.key}`" type="button" :class="{ active: configPage === item.key }" @click="selectConfigPage(item.key)">{{ item.label }}</button></div></nav>
+          </div>
           <section v-if="tab === '小程序页面配置'" class="surface page-config-nav">
             <div class="config-audience-heading"><strong>选择使用视角</strong><span>先按角色筛选，再以真实小程序页面进行配置</span></div>
             <div class="config-audience-switch"><button type="button" :class="{ active: configAudience === 'customer' }" @click="switchConfigAudience('customer')"><b>客户视角</b><small>找房、关注与联系</small></button><button type="button" :class="{ active: configAudience === 'operator' }" @click="switchConfigAudience('operator')"><b>非客户视角</b><small>运营、录入与管理</small></button></div>
@@ -1517,94 +1948,140 @@ onMounted(() => { if (loggedIn.value) load().catch(() => undefined) })
           </div>
 
             <aside v-if="tab === '小程序页面配置'" class="config-preview-column">
-              <section class="canvas-control-deck" aria-label="小程序画布控制">
-                <div class="canvas-control-heading"><span>实时画布</span><small>点击带虚线的文字可直达编辑</small></div>
-                <div class="canvas-audience-indicator" aria-live="polite"><span>画布预览</span><strong>{{ configAudience === 'customer' ? '客户视角' : '管理员视角' }}</strong><small>请在左侧“选择使用视角”切换</small></div>
-                <div class="canvas-page-rail" aria-label="预览页面"><button v-for="item in pagePresentationOptions.filter(page => page.audience === 'both' || page.audience === configAudience)" :key="`canvas-page-${item.key}`" type="button" :class="{ active: configPage === item.key }" @click="selectConfigPage(item.key)">{{ item.label }}</button></div>
-                <p v-if="configAudience === 'customer'">仅预览可租房源和客户可见信息。</p><p v-else>显示运营专属状态、门牌和管理入口。</p>
-              </section>
-              <section v-if="selectedCanvasNode" class="canvas-node-inspector" aria-live="polite"><header><span>{{ selectedCanvasNode.kind }}</span><strong>{{ selectedCanvasNode.label }}</strong><button type="button" @click="openCanvasNode(selectedCanvasNodeID)">编辑此处</button></header><p>{{ selectedCanvasNode.impacts }}</p><dl><div><dt>可改</dt><dd>{{ selectedCanvasNode.editable }}</dd></div><div><dt>不可改</dt><dd>{{ selectedCanvasNode.locked }}</dd></div></dl></section>
-              <section v-if="configPage === 'properties'" class="canvas-status-legend canvas-editable-copy" title="点击编辑状态标签" @click="openCanvasNode('status')"><small>{{ configAudience === 'customer' ? '客户列表' : '管理员列表' }}</small><span v-if="configAudience === 'customer'"><i class="available">{{ previewStatusLabel('available') }}</i>客户只会看到可租房源</span><span v-else><i>{{ previewStatusLabel('draft') }}</i><i>{{ previewStatusLabel('available') }}</i><i>{{ previewStatusLabel('rented') }}</i><i>{{ previewStatusLabel('offline') }}</i></span></section>
-              <section v-if="configPage === 'properties' || configPage === 'propertyDetail'" class="tag-magnifier" :class="{ open: tagMagnifierOpen }">
-                <header><span>标签局部预览</span><button type="button" @click="tagMagnifierOpen = !tagMagnifierOpen">{{ tagMagnifierOpen ? '收起' : '放大标签' }}</button></header>
-                <article v-if="tagMagnifierOpen && previewPrimaryProperty">
-                  <b>{{ configPage === 'properties' ? '列表卡片标签' : '详情页标签' }}</b>
-                  <strong>{{ previewListingTitle(previewPrimaryProperty) }}</strong>
-                  <small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit')">门牌定位 · {{ previewOperatorDoorplate || '待补充' }}</small>
-                  <div v-if="configPage === 'properties'" class="tag-magnifier-list" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`">
-                    <template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><span v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="`primary-${tag}`" class="primary">{{ tag }}</span><span v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="`secondary-${tag}`">{{ tag }}</span></template>
-                    <span v-else v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</span>
-                  </div>
-                  <div v-else class="tag-magnifier-detail"><span v-for="tag in previewDetailTagGroups(previewPrimaryProperty).top" :key="`top-${tag}`">{{ tag }}</span></div>
-                </article>
-              </section>
-              <div v-if="configPage === 'home'" class="phone-preview">
-                <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+              <div ref="canvasPreviewStage" class="canvas-preview-stage">
+              <div v-if="configPage === 'home'" ref="canvasPreviewPhone" class="phone-preview canvas-home-phone" :style="{ transform: `scale(${canvasFitScale})` }">
+                <div class="phone-status"><span>22:18</span><span>4G ▰</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content" :style="publicConfig.pagePresentations.home.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.88),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations.home.backgroundImage})` } : {}">
-                  <section class="mini-hero"><span class="mini-city">武汉⌄</span><strong class="canvas-editable-copy" title="点击编辑首页主标题" @click="openCanvasNode('home.title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search canvas-editable-copy" title="点击编辑搜索提示" @click="openCanvasNode('home.search')">{{ publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈' }} <b>搜索</b></div></section>
-                  <div class="mini-locations"><span class="active canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')">{{ publicConfig.pagePresentations.home.nearbyLabel || '附近' }}</span><span v-for="(item, index) in publicConfig.locations.slice(0, 3)" :key="`preview-location-${index}`">{{ item.label || '未命名' }}</span><em v-if="!publicConfig.locations.length">尚未配置</em></div>
-                  <div class="mini-budget"><b>租金预算</b><span>¥1,500 以下</span><span>¥1,500–2,500</span></div>
-                  <div class="mini-section-title canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')"><strong>{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</strong><b>{{ publicConfig.pagePresentations.home.allChannelsText || '全部频道' }}</b></div>
-                  <div class="mini-channels"><article v-for="(item, index) in publicConfig.featuredChannels.slice(0, 3)" :key="`preview-channel-${index}`" :class="`preview-tone-${item.icon || index}`"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></article><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
-                <div class="mini-recommend"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')">{{ publicConfig.pagePresentations.home.recommendationTitle || '推荐房源' }}</strong><span>整租</span><span>合租</span><b @click="selectConfigPage('properties')">{{ publicConfig.pagePresentations.home.viewAllText || '查看房源' }}</b></div>
-                  <div v-if="configAudience === 'customer' && previewProperties.length" class="preview-home-masonry">
-                    <article v-for="item in previewProperties.slice(0, 2)" :key="item.id" class="preview-property-card preview-masonry-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small></div><section><b>{{ previewListingTitle(item) }}</b><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article>
+                  <div v-if="canvasNotice" class="canvas-preview-notice" role="status">{{ canvasNotice }}</div>
+                  <section class="mini-hero" :style="{ backgroundImage: `linear-gradient(90deg, #f9e9d7 0%, #f9e9d7a3 57%, #f9e9d729 100%), url(${publicConfig.pagePresentations.home.backgroundImage || homeHeroFallback}), url(${homeHeroFallback})` }"><span class="mini-city" @click="canvasAreaFilter = canvasAreaFilter === '全部' ? (publicConfig.locations[0]?.label || '全部') : '全部'"><i class="canvas-city-pin" aria-hidden="true">⌖</i><span>武汉</span><small>⌄</small></span><strong class="canvas-editable-copy" title="点击编辑首页主标题" @click="openCanvasNode('home.title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search"><span class="canvas-search-icon" aria-hidden="true">⌕</span><input v-model="canvasSearchQuery" class="canvas-search-input" :placeholder="publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈'" @keyup.enter="switchCanvasTab('properties')"><button type="button" @click="switchCanvasTab('properties')">搜索</button></div></section>
+                  <div class="mini-locations"><button type="button" :class="{ active: canvasAreaFilter === '全部' }" @click="canvasAreaFilter = '全部'; switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.nearbyLabel || '附近' }}</button><button v-for="(item, index) in publicConfig.locations" :key="`preview-location-${index}`" type="button" :class="{ active: canvasAreaFilter === item.label }" @click="canvasAreaFilter = item.label; switchCanvasTab('properties')">{{ item.label || '未命名' }}</button><em v-if="!publicConfig.locations.length">尚未配置</em></div>
+                  <div class="mini-budget"><b>租金预算</b><button v-for="budget in ['≤1500', '1500–2500', '2500–3500', '≥3500']" :key="budget" type="button" :class="{ selected: canvasBudgetFilter === budget }" @click="canvasBudgetFilter = canvasBudgetFilter === budget ? '不限' : budget">{{ budget === '不限' ? '不限价格' : budget === '≤1500' ? '≤1500' : budget }}</button></div>
+                  <div class="mini-budget mini-kind"><b>住法</b><button v-for="kind in ['整租', '合租', '一居', '两居', '三居+']" :key="kind" type="button" :class="{ selected: canvasRentTypeFilter === kind || (kind === '推荐' && canvasRentTypeFilter === '全部') }" @click="canvasRentTypeFilter = canvasRentTypeFilter === kind ? '推荐' : kind">{{ kind }}</button></div>
+                  <div class="mini-section-title"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')">{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</strong><b role="button" tabindex="0" @click="canvasPageFilterReset(); switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.allChannelsText || '全部频道' }}</b></div>
+                  <div class="mini-channels"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`preview-channel-${index}`" type="button" :class="`preview-tone-${item.icon || index}`" @click="canvasChannelFilter = item.title; switchCanvasTab('properties')"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></button><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
+                <div class="mini-recommend"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="openCanvasNode('home.sections')">{{ publicConfig.pagePresentations.home.recommendationTitle || '推荐房源' }}</strong><b @click="canvasPageFilterReset(); switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.viewAllText || '查看房源' }}</b></div>
+                  <div v-if="canvasDataState !== 'normal'" class="preview-empty">{{ canvasDataState === 'loading' ? '正在加载房源…' : canvasDataState === 'error' ? '房源暂时加载失败 · 检查网络后重新加载' : '暂时没有可租房源 · 新房源正在整理中' }}</div>
+                  <div v-if="canvasDataState === 'normal' && configAudience === 'customer' && previewProperties.length" class="preview-home-masonry">
+                    <article v-for="item in previewProperties.slice(0, 6)" :key="item.id" class="preview-property-card preview-masonry-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small><button type="button" class="canvas-favorite-toggle" :class="{ active: canvasPreviewFavorites.includes(item.id) }" @click.stop="toggleCanvasFavorite(item.id)">{{ canvasPreviewFavorites.includes(item.id) ? '♥' : '♡' }}</button></div><section><b>{{ previewListingTitle(item) }}</b><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article>
                   </div>
-                  <article v-else-if="previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div class="preview-card-cover" :style="previewCoverStyle(previewPrimaryProperty)"><em>{{ previewStatusLabel(previewPrimaryProperty.status) }}</em><i v-if="previewPrimaryProperty.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(previewPrimaryProperty)" class="preview-cover-location">⌖ {{ previewChannelLabel(previewPrimaryProperty) }}</small></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌 · {{ previewOperatorDoorplate }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(previewPrimaryProperty).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(previewPrimaryProperty).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(previewPrimaryProperty).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
-                  <div v-else class="preview-empty">暂无可展示房源</div>
+                  <article v-else-if="canvasDataState === 'normal' && previewPrimaryProperty" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(previewPrimaryProperty)"><div class="preview-card-cover" :style="previewCoverStyle(previewPrimaryProperty)"><em>{{ previewStatusLabel(previewPrimaryProperty.status) }}</em><i v-if="previewPrimaryProperty.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(previewPrimaryProperty)" class="preview-cover-location">⌖ {{ previewChannelLabel(previewPrimaryProperty) }}</small></div><section><b>{{ previewListingTitle(previewPrimaryProperty) }}</b><small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌 · {{ previewOperatorDoorplate }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(previewPrimaryProperty).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(previewPrimaryProperty).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(previewPrimaryProperty).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(previewPrimaryProperty).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(previewPrimaryProperty).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ previewPrimaryProperty.rentMonthly }}<em>/月</em></strong></section></article>
+                  <div v-else-if="canvasDataState === 'normal'" class="preview-empty">暂无可展示房源</div>
                 </div>
-                <div class="mini-tabbar"><button class="active" @click="selectConfigPage('home')">⌂<small>首页</small></button><button @click="selectConfigPage('properties')">▤<small>房源</small></button><button @click="selectConfigPage('me')">○<small>我的</small></button></div>
+                <button v-if="configPage === 'home' && configAudience === 'customer'" type="button" class="canvas-request-fab" @click="navigateCanvasPage('requests')">✎ <span>说说找房需求</span></button>
+                <div class="mini-tabbar"><button :class="{ active: configPage === 'home' }" @click="switchCanvasTab('home')"><img :src="configPage === 'home' ? homeTabActiveIcon : homeTabIcon" alt=""><small>首页</small></button><button :class="{ active: configPage === 'properties' }" @click="switchCanvasTab('properties')"><img :src="configPage === 'properties' ? propertyTabActiveIcon : propertyTabIcon" alt=""><small>房源</small></button><button :class="{ active: configPage === 'me' }" @click="switchCanvasTab('me')"><img :src="configPage === 'me' ? meTabActiveIcon : meTabIcon" alt=""><small>我的</small></button></div>
               </div>
-              <div v-else class="phone-preview page-phone-preview" :class="`preview-${configPage}`">
-                <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
-                <div v-if="configPage !== 'propertyDetail'" class="mini-navigation">{{ publicConfig.pagePresentations[configPage].title || pagePresentationOptions.find(page => page.key === configPage)?.label }}</div>
+              <div v-else ref="canvasPreviewPhone" class="phone-preview page-phone-preview" :class="`preview-${configPage}`" :style="{ transform: `scale(${canvasFitScale})` }">
+                <div class="phone-status"><span>22:18</span><span>4G ▰</span></div>
+                <div v-if="configPage !== 'propertyDetail'" class="mini-navigation"><button v-if="!['home', 'properties', 'me', 'adminWorkbench'].includes(configPage)" type="button" :aria-label="configAudience === 'customer' ? '返回首页' : '返回'" @click="configAudience === 'customer' ? switchCanvasTab('home') : backCanvasPage()">{{ configAudience === 'customer' ? '⌂' : '‹' }}</button><span>{{ canvasNativeTitle }}</span></div>
                 <div class="page-mini-content" :style="publicConfig.pagePresentations[configPage].backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.9),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations[configPage].backgroundImage})` } : {}">
-                  <header class="canvas-editable-copy" title="点击编辑本页标题与辅助文本" @click="openCanvasNode('page.heading')"><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></header>
-                  <template v-if="configPage === 'properties'">
-                    <div class="preview-search">⌕ 搜索小区、位置或户型</div><div class="preview-filter"><i>地区</i><i>预算</i><i>整租</i><i>合租</i></div>
-                    <div class="preview-property-flow" :class="{ 'preview-masonry-flow': configAudience === 'customer' }">
-                      <article v-for="item in previewProperties" :key="item.id" class="preview-property-card" :class="{ 'preview-masonry-card': configAudience === 'customer' }" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item)"><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit')" class="preview-operator-doorplate">门牌 · {{ [item.buildingNo, item.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('') || '待补充' }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article>
+                  <div v-if="canvasNotice" class="canvas-preview-notice" role="status">{{ canvasNotice }}</div>
+                  <header v-if="!['requests', 'authLogin'].includes(configPage)" class="canvas-editable-copy" :class="{ 'canvas-me-heading': configPage === 'me', 'canvas-listing-heading': configPage === 'properties', 'canvas-history-heading': configPage === 'requestHistory' }" title="点击编辑本页标题与辅助文本" @click="openCanvasNode('page.heading')"><template v-if="configPage === 'properties'"><div class="canvas-listing-title-row"><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span class="canvas-listing-count">{{ previewProperties.length }} 套可租</span></div><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></template><template v-else-if="configPage === 'me'"><div class="canvas-me-heading-row"><div><small>个人中心</small><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong></div><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></div></template><template v-else-if="configPage === 'requestHistory'"><div><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></div><div class="canvas-history-count"><strong>{{ canvasIdentityState === 'guest' ? 0 : '—' }}</strong><small>{{ canvasIdentityState === 'guest' ? '进行中' : '需授权' }}</small></div></template><template v-else><strong>{{ publicConfig.pagePresentations[configPage].title }}</strong><span>{{ publicConfig.pagePresentations[configPage].subtitle }}</span></template></header>
+                  <div v-if="canvasDataState === 'loading'" class="preview-empty"><b>正在加载…</b><small>这是小程序列表页的加载状态。</small></div>
+                  <div v-else-if="canvasDataState === 'error'" class="preview-empty"><b>数据加载失败</b><small>检查网络后重新加载。</small><button type="button" @click="load().catch(() => undefined)">重新加载</button></div>
+                  <div v-else-if="canvasDataState === 'empty' && configPage === 'properties' && configAudience === 'customer'" class="canvas-properties-empty"><span class="canvas-properties-empty-icon">⌕</span><strong>{{ canvasPropertyEmptyTitle }}</strong><small>可以调整筛选条件，或告诉小皮你的预算和入住要求。</small><button type="button" @click="handleCanvasPropertyEmptyAction">{{ canvasPropertyEmptyAction }}</button><a v-if="canvasHasPropertyFilters && !canvasFavoriteOnly" href="#" @click.prevent="canvasPageFilterReset">清除筛选条件</a></div>
+                  <div v-else-if="canvasDataState === 'empty'" class="preview-empty"><b>当前没有可展示记录</b><small>清除筛选条件或稍后再试。</small></div>
+                  <template v-else-if="configPage === 'properties'">
+                    <div class="preview-search canvas-list-search"><span class="canvas-search-icon" aria-hidden="true">⌕</span><input v-model="canvasSearchQuery" placeholder="搜索小区、位置或户型"><button v-if="canvasSearchQuery" type="button" @click="canvasSearchQuery = ''">×</button></div>
+                    <template v-if="configAudience === 'operator'"><div class="preview-filter canvas-filter-row"><button v-for="status in canvasAdminPropertyFilters" :key="status.key" type="button" :class="{ active: canvasStatusFilter === status.key }" @click="canvasStatusFilter = status.key">{{ status.label }}</button></div><div class="canvas-filter-selects"><select v-model="canvasAreaFilter"><option>全部</option><option v-for="area in publicConfig.locations" :key="area.id || area.label">{{ area.label }}</option></select><select v-model="canvasRentTypeFilter"><option>全部</option><option>整租</option><option>合租</option></select><select v-model="canvasBudgetFilter"><option>不限</option><option>≤1500</option><option>1500–2500</option><option>2500–3500</option><option>≥3500</option></select></div></template>
+                    <template v-else><button type="button" class="canvas-favorite-filter" :class="{ active: canvasFavoriteOnly }" @click="canvasFavoriteOnly = !canvasFavoriteOnly"><span aria-hidden="true">♡</span>{{ canvasFavoriteOnly ? '只看已关注' : '只看关注' }}</button><div class="canvas-area-filter"><strong>地区</strong><div class="preview-filter canvas-filter-row"><button type="button" :class="{ active: canvasAreaFilter === '全部' }" @click="canvasAreaFilter = '全部'">全部</button><button v-for="area in publicConfig.locations" :key="area.id || area.label" type="button" :class="{ active: canvasAreaFilter === area.label }" @click="canvasAreaFilter = area.label">{{ area.label }}</button></div></div><button type="button" class="canvas-property-filter-toggle" :aria-expanded="canvasPropertyFiltersOpen" @click="canvasPropertyFiltersOpen = !canvasPropertyFiltersOpen"><span><i aria-hidden="true">☷</i> 更多筛选</span><small>{{ canvasBudgetFilter === '不限' ? '预算不限' : canvasBudgetFilter }} · {{ canvasRentTypeFilter === '全部' ? '住法不限' : canvasRentTypeFilter }}</small><b :class="{ expanded: canvasPropertyFiltersOpen }">⌄</b></button><div v-if="canvasPropertyFiltersOpen" class="canvas-property-extra-filters"><div><strong>月租预算</strong><div class="preview-filter canvas-filter-row"><button v-for="budget in ['不限', '≤1500', '1500–2500', '2500–3500', '≥3500']" :key="budget" type="button" :class="{ active: canvasBudgetFilter === budget }" @click="canvasBudgetFilter = budget">{{ budget }}</button></div></div><div><strong>住法</strong><div class="preview-filter canvas-filter-row"><button v-for="kind in ['全部', '整租', '合租']" :key="kind" type="button" :class="{ active: canvasRentTypeFilter === kind }" @click="canvasRentTypeFilter = kind">{{ kind === '全部' ? '不限' : kind }}</button></div></div></div></template>
+                    <div v-if="configAudience === 'customer'" class="preview-masonry-flow">
+                      <div v-for="(column, columnIndex) in previewCustomerMasonryColumns" :key="`property-column-${columnIndex}`" class="preview-masonry-column">
+                        <article v-for="item in column" :key="item.id" class="preview-property-card preview-masonry-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :class="{ 'preview-cover-placeholder': !item.media?.length }" :style="previewCoverStyle(item)"><template v-if="!item.media?.length"><img class="canvas-property-placeholder" :src="propertyPlaceholderIcon" alt=""><small class="preview-placeholder-label">暂无实拍图</small></template><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small><button type="button" class="canvas-favorite-toggle" :class="{ active: canvasPreviewFavorites.includes(item.id) }" @click.stop="toggleCanvasFavorite(item.id)">{{ canvasPreviewFavorites.includes(item.id) ? '♥' : '♡' }}</button></div><section><b>{{ previewListingTitle(item) }}</b><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article>
+                      </div>
                     </div>
-                    <div v-if="!previewProperties.length" class="preview-empty">暂无可展示房源</div>
+                    <div v-else class="preview-property-flow">
+                      <article v-for="item in previewProperties" :key="item.id" class="preview-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :class="{ 'preview-cover-placeholder': !item.media?.length }" :style="previewCoverStyle(item)"><template v-if="!item.media?.length"><img class="canvas-property-placeholder" :src="propertyPlaceholderIcon" alt=""><small class="preview-placeholder-label">暂无实拍图</small></template><em>{{ previewStatusLabel(item.status) }}</em></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit')" class="preview-operator-doorplate">门牌 · {{ [item.buildingNo, item.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('') || '待补充' }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article>
+                    </div>
+                    <div v-if="!previewProperties.length" class="canvas-properties-empty"><span class="canvas-properties-empty-icon">⌕</span><strong>{{ canvasPropertyEmptyTitle }}</strong><small>可以调整筛选条件，或告诉小皮你的预算和入住要求。</small><button type="button" @click="handleCanvasPropertyEmptyAction">{{ canvasPropertyEmptyAction }}</button><a v-if="canvasHasPropertyFilters && !canvasFavoriteOnly" href="#" @click.prevent="canvasPageFilterReset">清除筛选条件</a></div>
                   </template>
-                  <template v-if="configPage === 'propertyDetail'">
+                  <template v-if="canvasDataState === 'normal' && configPage === 'propertyDetail'">
                     <div class="detail-canvas" :class="{ operator: configAudience === 'operator' }">
                       <div class="detail-canvas-scroll">
-                        <div class="detail-canvas-cover" :style="previewCoverStyle(previewPrimaryProperty)"><div class="detail-canvas-media-nav"><span>‹</span><i>•••</i></div><small>实拍 {{ previewPrimaryProperty?.media?.length || 0 }} 张</small><div v-if="previewPrimaryProperty?.media?.length && previewPrimaryProperty.media.length > 1" class="detail-canvas-media-tabs"><i v-for="(media, index) in previewPrimaryProperty.media" :key="`${media.url}-${index}`" :class="{ video: media.type === 'video' }">{{ media.type === 'video' ? '视频' : `${index + 1}` }}</i></div></div>
+                        <div class="detail-canvas-cover" :class="{ 'is-placeholder': !previewPrimaryProperty?.media?.length }" :style="previewCoverStyle(previewPrimaryProperty, canvasMediaIndex)"><div class="detail-canvas-media-nav"><button type="button" @click="backCanvasPage">‹</button><i>•••　⊙</i></div><div v-if="!previewPrimaryProperty?.media?.length" class="detail-canvas-empty-media"><img :src="propertyPlaceholderIcon" alt=""><b>暂无实拍图</b><small>联系小皮了解房源详情</small></div><small v-else>实拍 {{ previewPrimaryProperty.media.length }} 张</small><div v-if="previewPrimaryProperty?.media?.length && previewPrimaryProperty.media.length > 1" class="detail-canvas-media-tabs"><button v-for="(media, index) in previewPrimaryProperty.media" :key="`${media.url}-${index}`" type="button" :class="{ video: media.type === 'video', active: index === canvasMediaIndex }" @click="canvasMediaIndex = index; media.type === 'video' && setCanvasNotice('预览显示视频封面，无法播放原视频。')">{{ media.type === 'video' ? '视频' : `${index + 1}` }}</button></div></div>
                         <section v-if="detailModuleEnabled('overview')" data-canvas-area="overview" class="detail-canvas-card overview-card" @click="focusCanvasArea('overview')">
-                          <div class="detail-canvas-price">¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small><i v-if="configAudience === 'customer'">♡</i></div>
-                          <strong class="detail-canvas-title">{{ previewListingTitle(previewPrimaryProperty) }}</strong>
+                          <em v-if="configAudience === 'operator' && previewAdminStatusLabel" class="detail-canvas-status-preview">{{ previewAdminStatusLabel }}</em>
+                          <div class="detail-canvas-price">¥{{ previewPrimaryProperty?.rentMonthly || 0 }}<small>/月</small><button v-if="configAudience === 'customer'" type="button" :class="{ active: canvasPreviewFavorites.includes(previewPrimaryProperty?.id || '') }" @click="previewPrimaryProperty && toggleCanvasFavorite(previewPrimaryProperty.id)">{{ canvasPreviewFavorites.includes(previewPrimaryProperty?.id || '') ? '♥' : '♡' }}</button></div>
+                          <strong class="detail-canvas-title">{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community || '房源详情' }}</strong>
                           <span v-if="configAudience === 'operator'" class="detail-canvas-address">{{ previewPrimaryProperty?.location || '位置待补充' }}</span>
                           <small v-if="previewOperatorDoorplate" class="preview-operator-doorplate">门牌定位 · {{ previewOperatorDoorplate }}</small>
                           <div v-if="previewPrimaryProperty?.listingSource === '转租'" class="detail-canvas-meta"><em>转租 · 剩余 {{ previewPrimaryProperty?.remainingLeaseMonths || 0 }} 个月</em></div>
                           <span v-if="configAudience !== 'operator'" class="detail-canvas-address">{{ previewPrimaryProperty?.location || '位置待补充' }}</span>
                           <div class="detail-canvas-facts"><i><small>{{ previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.wholeAreaSqm ? '整套面积' : '面积' }}</small>{{ previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.wholeAreaSqm ? `${previewPrimaryProperty.wholeAreaSqm}㎡` : previewPrimaryProperty?.areaSqm ? `${previewPrimaryProperty.areaSqm}㎡` : '待补充' }}</i><i><small>{{ previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.wholeLayout ? '整套户型' : '户型' }}</small>{{ previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.wholeLayout ? previewPrimaryProperty.wholeLayout : previewPrimaryProperty?.layout || '待补充' }}</i><i><small>楼层</small>{{ previewPrimaryProperty?.floorInfo || '待补充' }}</i><i v-if="previewPrimaryProperty?.orientation"><small>朝向</small>{{ previewPrimaryProperty.orientation }}</i><i v-if="previewPrimaryProperty?.elevator"><small>电梯</small>{{ previewPrimaryProperty.elevator }}</i><i><small>租赁方式</small>{{ previewPrimaryProperty?.rentType || '待补充' }}</i></div>
                         </section>
-                        <section v-if="previewPrimaryProperty?.depositPayment || previewPrimaryProperty?.feeText || previewPrimaryProperty?.utilitiesText || previewPrimaryProperty?.listingSource === '转租' || (previewPrimaryProperty?.rentType === '合租' && (previewPrimaryProperty?.layout || previewPrimaryProperty?.areaSqm))" class="detail-canvas-card detail-canvas-info"><b>租赁信息</b><small class="detail-canvas-section-copy">费用与租期说明</small><div><i v-if="previewPrimaryProperty?.depositPayment"><small>押付方式</small>{{ previewPrimaryProperty.depositPayment }}</i><i v-if="previewPrimaryProperty?.feeText"><small>中介费</small>{{ previewPrimaryProperty.feeText }}</i><i v-if="previewPrimaryProperty?.utilitiesText"><small>水电杂费</small>{{ previewPrimaryProperty.utilitiesText }}</i><i v-if="previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.layout"><small>实际使用空间</small>{{ previewPrimaryProperty.layout }}</i><i v-if="previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.areaSqm"><small>实际使用面积</small>{{ previewPrimaryProperty.areaSqm }}㎡</i><i v-if="previewPrimaryProperty?.listingSource === '转租'"><small>剩余租期</small>{{ previewPrimaryProperty.remainingLeaseMonths || 0 }} 个月</i></div></section>
-                        <section v-if="detailModuleEnabled('location') && previewHasLocation" data-canvas-area="location" class="detail-canvas-card detail-canvas-location" @click="focusCanvasArea('location')"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small><div><span><strong>查看地图位置</strong><small>已保存房源定位</small></span><i>›</i></div></section>
+                        <section v-if="previewPrimaryProperty?.depositPayment || previewPrimaryProperty?.feeText || previewPrimaryProperty?.utilitiesText || previewPrimaryProperty?.listingSource === '转租' || (previewPrimaryProperty?.rentType === '合租' && (previewPrimaryProperty?.layout || previewPrimaryProperty?.areaSqm))" class="detail-canvas-card detail-canvas-info"><b>租赁信息</b><small class="detail-canvas-section-copy">费用与租期说明</small><div><i v-if="previewPrimaryProperty?.depositPayment"><small>押付方式</small>{{ previewPrimaryProperty.depositPayment }}</i><i v-if="previewPrimaryProperty?.feeText"><small>中介费</small>{{ previewPrimaryProperty.feeText }}</i><i v-if="previewPrimaryProperty?.utilitiesText" class="wide"><small>水电杂费</small>{{ previewPrimaryProperty.utilitiesText }}</i><i v-if="previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.layout"><small>实际使用空间</small>{{ previewPrimaryProperty.layout }}</i><i v-if="previewPrimaryProperty?.rentType === '合租' && previewPrimaryProperty?.areaSqm"><small>实际使用面积</small>{{ previewPrimaryProperty.areaSqm }}㎡</i><i v-if="previewPrimaryProperty?.listingSource === '转租'"><small>剩余租期</small>{{ previewPrimaryProperty.remainingLeaseMonths || 0 }} 个月</i></div></section>
+                        <section v-if="detailModuleEnabled('location') && previewHasLocation" data-canvas-area="location" class="detail-canvas-card detail-canvas-location" @click="canvasDetailModal = 'map'"><b>{{ detailModuleTitle('location', '位置与周边') }}</b><small>{{ previewPrimaryProperty?.location || '已保存房源定位' }}</small><div><span><strong>查看地图位置</strong><small>已保存房源定位</small></span><i>›</i></div></section>
                         <section v-if="detailModuleEnabled('facilities')" data-canvas-area="facilities" class="detail-canvas-card detail-canvas-facilities" @click="focusCanvasArea('facilities')"><header><span><b>{{ detailModuleTitle('facilities', '房屋设施') }}</b><small>家具家电等可勾选配置</small></span><i>{{ previewDetailAmenities.length }} 项设施</i></header><template v-if="previewDetailFacilityGroups.length"><div v-for="group in previewDetailFacilityGroups" :key="group.title" class="detail-canvas-facility-group"><small>{{ group.title }}</small><div><i v-for="facility in group.items" :key="facility.key"><b>{{ detailFacilityIcon(facility.key) }}</b>{{ facility.label }}</i></div></div></template><p v-else>家具家电信息待补充，可联系小皮确认</p></section>
                         <section v-if="detailModuleEnabled('description')" data-canvas-area="description" class="detail-canvas-card detail-canvas-description" @click="focusCanvasArea('description')"><b>{{ detailModuleTitle('description', '房源描述') }}</b><p>{{ previewDescription(previewPrimaryProperty) || '暂无描述' }}</p></section>
-                        <section v-if="detailModuleEnabled('nearby')" data-canvas-area="nearby" class="detail-canvas-card detail-canvas-nearby" @click="focusCanvasArea('nearby')"><header><span><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内</small></span><i>{{ previewNearbyProperties.length ? `${previewNearbyProperties.length} 套` : '继续找房' }}</i></header><article v-for="property in previewNearbyProperties" :key="property.id"><div :style="previewCoverStyle(property)"></div><span><b>{{ previewListingTitle(property) }}</b><small>{{ property.layout || property.community }}</small><strong>¥{{ property.rentMonthly }}<i>/月</i></strong></span></article><p v-if="!previewNearbyProperties.length">附近暂时没有其他可租房源</p></section>
+                        <section v-if="detailModuleEnabled('nearby')" data-canvas-area="nearby" class="detail-canvas-card detail-canvas-nearby"><header><span><b>{{ detailModuleTitle('nearby', '附近房源') }}</b><small>距此房源 {{ publicConfig.propertyDetail.nearby.radiusKm }} 公里内</small></span><i>{{ previewNearbyProperties.length ? `${previewNearbyProperties.length} 套` : '继续找房' }}</i></header><article v-for="property in previewNearbyProperties" :key="property.id" @click="openPreviewProperty(property)"><div :style="previewCoverStyle(property)"></div><span><b>{{ previewListingTitle(property) }}</b><small>{{ property.layout || property.community }}</small><strong>¥{{ property.rentMonthly }}<i>/月</i></strong></span></article><button v-if="!previewNearbyProperties.length" class="nearby-canvas-empty" type="button" @click="navigateCanvasPage('properties')">附近暂时没有其他可租房源 · 查看全部</button></section>
                       </div>
-                      <button v-if="configAudience === 'customer'" class="detail-canvas-floating-share">分享</button><div v-if="configAudience === 'customer'" class="detail-canvas-actions"><button>在线咨询</button><button>打电话</button></div>
-                      <div v-else class="detail-canvas-actions operator-actions"><button>分享房源</button><button>编辑房源</button></div>
+                      <template v-if="configAudience === 'customer'"><button class="detail-canvas-floating-appointment" type="button" @click="canvasIdentityState === 'guest' ? navigateCanvasPage('authLogin') : (canvasDetailModal = 'appointment')"><b>预约</b><small>看房</small></button><button class="detail-canvas-floating-share" type="button" @click="previewOverlay = 'share'">分享</button><div class="detail-canvas-actions customer-actions"><span class="detail-canvas-signature"><i>皮</i><b>{{ publicConfig.heroTitle || '小皮租房' }}</b></span><button type="button" @click="setCanvasNotice('预览不会发起客服会话。')">在线咨询</button><button type="button" @click="setCanvasNotice(`客服电话：${publicConfig.contactPhone || '暂未配置'}`)">打电话</button></div></template>
+                      <div v-else class="detail-canvas-actions operator-actions"><div class="detail-canvas-admin-lead"><button type="button" v-if="previewPrimaryProperty?.status !== 'offline'" @click="previewOverlay = 'share'">分享好友</button><button type="button" @click="startCanvasPropertyEdit(previewPrimaryProperty)">编辑房源</button></div><div class="detail-canvas-admin-status"><button v-for="(action, index) in previewAdminStatusActions" :key="action" type="button" :class="{ primary: index === 0 }" @click="submitCanvasPreview">{{ action }}</button></div><button class="detail-canvas-delete" type="button" @click="setCanvasNotice('预览不会删除房源。')">删除房源</button></div>
                     </div>
                   </template>
-                  <template v-else-if="configPage === 'requests' || configPage === 'publish'"><div class="preview-form-card"><label>意向地区</label><span>选择地区与商圈　›</span><label>预算范围</label><span>¥1500 – ¥2500</span><label>入住需求</label><span>填写补充说明</span><button>提交{{ configPage === 'requests' ? '找房需求' : '房源线索' }}</button></div></template>
-                  <template v-else-if="configPage === 'me'"><div class="preview-profile" @click="selectConfigPage('authLogin')"><i>{{ previewIdentity.mark }}</i><div><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div></div><div class="preview-tool-grid"><article @click="selectConfigPage('properties')">全部房源<small>继续看房</small></article><article @click="selectConfigPage('footprints')">浏览足迹<small>最近查看</small></article><article @click="selectConfigPage('requests')">找房需求<small>查看进度</small></article><article @click="selectConfigPage('publish')">推荐房源<small>提交房源线索</small></article></div></template>
-                  <template v-else-if="configPage === 'footprints'"><article v-for="name in ['拿铁公寓', '凤凰花园三期', '中建大公馆']" :key="name" class="preview-footprint"><div></div><section><b>{{ name }}</b><span>今天浏览 · ¥2300/月</span></section></article></template>
-                  <template v-else-if="configPage === 'adminWorkbench'"><div class="preview-admin-card"><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div><div class="preview-stats"><i>{{ properties.filter(item => item.status === 'draft').length }}<small>房源草稿</small></i><i>{{ rentalRequests.filter(item => item.status !== 'done').length }}<small>待联系</small></i><i>{{ favoriteContacts.length }}<small>用户意向</small></i></div><div class="preview-tool-grid"><article @click="selectConfigPage('adminPropertyEdit')">＋ 录入房源<small>发布可租房源</small></article><article @click="selectConfigPage('properties')">▦ 房源管理<small>编辑与上下架</small></article><article>○ 客户需求<small>预约与找房</small></article><article>♡ 用户意向<small>关注记录</small></article></div></template>
-                  <template v-else-if="configPage === 'adminPropertyEdit'"><div class="preview-steps"><i class="active">位置门牌</i><i>户型出租</i><i>环境配套</i><i>租金入住</i></div><div class="preview-edit-card"><b>发布前 · 标签展示规则</b><span>客户与管理员的标签均由后台统一配置；录入房源时无需选择。</span><div class="preview-checks"><i v-for="key in publicConfig.listingTitle.enabledFields" :key="key">✓ {{ listingTitleFieldOptions.find(field => field.key === key)?.label }}</i></div><strong>拿铁公寓 · 精装朝南</strong></div><button class="preview-primary-button">保存并查看</button></template>
-                  <template v-else-if="configPage === 'authLogin'"><div class="preview-login-mark">皮</div><div class="preview-login-card"><b>登录后开始找房</b><span>同步关注、足迹和找房需求</span><button>微信一键登录</button><small>稍后完善头像与昵称</small></div></template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'requests'"><section class="request-canvas-hero canvas-editable-copy" title="点击编辑页面文案" @click="openCanvasNode('page.heading')"><strong>{{ publicConfig.pagePresentations.requests.title || '小皮帮你找房' }}</strong><b>说清需求，比反复筛选更高效</b><small>{{ publicConfig.pagePresentations.requests.subtitle || '告诉我们你的找房需求' }}</small></section><form class="preview-form-card canvas-form request-canvas-form" @submit.prevent="submitCanvasPreview"><div class="request-canvas-field"><label>联系手机号 *</label><span class="request-canvas-phone">{{ canvasForm.phone ? `已绑定 ${canvasForm.phone.slice(0, 3)}****${canvasForm.phone.slice(-4)}` : '提交时需绑定微信手机号' }}</span></div><div class="request-canvas-field"><label>意向地区 *</label><input v-model="canvasForm.location" placeholder="例如：佛祖岭、金融港"></div><div class="request-canvas-field"><label>期望户型</label><input v-model="canvasForm.layout" placeholder="例如：一室一厅 / 合租主卧"></div><div class="request-canvas-field"><label>月租预算</label><div class="canvas-budget-inputs"><input v-model="canvasForm.budgetMin" inputmode="numeric" placeholder="最低"><span>至</span><input v-model="canvasForm.budgetMax" inputmode="numeric" placeholder="最高"><span>元</span></div></div><div class="request-canvas-field"><label>预计入住</label><button class="canvas-picker-field" type="button" @click="setCanvasNotice('日期选择仅作画布交互预览。')">{{ canvasForm.moveInDate || '选择日期' }} <i>›</i></button></div><div class="request-canvas-field request-canvas-textarea"><label>补充要求</label><textarea v-model="canvasForm.note" maxlength="300" placeholder="通勤地点、整租/合租、楼层、宠物、采光等"></textarea></div><small class="request-canvas-privacy">提交即表示同意小皮使用已绑定手机号联系你，仅用于本次找房服务。</small><button type="submit">提交找房需求</button><button class="request-canvas-contact" type="button" @click="setCanvasNotice('联系入口只用于预览，不会拨打电话。')">想马上确认房源？联系小皮 ›</button></form></template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'publish'"><div class="publish-canvas-tip"><strong>提供房源线索</strong><span>提交基础信息后，小皮会电话联系并实地核验。正式房源由运营人员审核发布。</span></div><form class="preview-form-card canvas-form publish-canvas-form" @submit.prevent="submitCanvasPreview"><label>联系人</label><input v-model="canvasForm.sourceName" placeholder="怎么称呼你"><label>联系电话</label><input v-model="canvasForm.sourcePhone" inputmode="tel" maxlength="11" placeholder="方便小皮联系"><label>小区</label><input v-model="canvasForm.community" placeholder="请输入小区名称"><label>位置</label><input v-model="canvasForm.location" placeholder="区域 / 地铁 / 商圈"><label>户型</label><input v-model="canvasForm.layout" placeholder="例如：一室一厅"><label>预期租金</label><input v-model="canvasForm.expectedRent" inputmode="numeric" placeholder="请输入租金"><label>补充说明</label><textarea v-model="canvasForm.note" maxlength="500" placeholder="入住时间、房屋情况等"></textarea></form><button type="button" class="publish-submit-button" @click="submitCanvasPreview">提交房源线索</button></template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'me'">
+                    <div v-if="canvasNotice" class="canvas-preview-notice" role="status">{{ canvasNotice }}</div>
+                    <div class="preview-profile" :class="{ guest: canvasIdentityState === 'guest' }" @click="canvasIdentityState === 'guest' && navigateCanvasPage('authLogin')"><div class="preview-profile-main"><i>{{ previewIdentity.mark }}</i><div><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div><small>{{ canvasIdentityState === 'guest' ? '›' : '预览' }}</small></div><div class="preview-profile-bottom"><span>{{ canvasIdentityState === 'guest' ? '点击直接微信登录' : '绑定手机号，方便联系与身份识别' }}</span><b>{{ canvasIdentityState === 'guest' ? '进入' : '已登录' }}</b></div></div>
+                    <template v-if="configAudience === 'customer'">
+                      <h4><strong>我的找房</strong><span>常用服务</span></h4>
+                      <div class="preview-tool-grid">
+                        <article @click="navigateCanvasPage('properties')"><div class="preview-tool-copy"><b>全部房源</b><small>无需登录</small></div></article>
+                        <article @click="canvasFavoriteOnly = true; navigateCanvasPage('properties')"><div class="preview-tool-copy"><b>我的关注</b><small>{{ canvasIdentityState === 'guest' ? '登录后查看' : '收藏的房源' }}</small></div></article>
+                        <article @click="navigateCanvasPage('footprints')"><div class="preview-tool-copy"><b>浏览足迹</b><small>{{ canvasIdentityState === 'guest' ? '登录后查看' : '最近看过' }}</small></div></article>
+                        <article @click="navigateCanvasPage('requests')"><div class="preview-tool-copy"><b>找房需求</b><small>提交时登录</small></div></article>
+                      </div>
+                      <article class="preview-menu-row" @click="navigateCanvasPage('requestHistory')">我的预约与找房记录　›<small>{{ canvasIdentityState === 'guest' ? '登录后可查看' : '查看预约、订阅和跟进进度' }}</small></article>
+                      <article class="preview-menu-row" @click="navigateCanvasPage('publish')">有房源想推荐？　›<small>无需登录，提交后电话核验</small></article>
+                      <p v-if="canvasIdentityState === 'user'" class="canvas-private-data-note">此处未绑定具体微信账号。个人收藏、足迹和找房记录仍由小程序用户身份读取，画布不会代取或伪造。</p>
+                    </template>
+                    <template v-else>
+                      <h4>运营工作台</h4>
+                      <div class="preview-stats"><button type="button" @click="canvasStatusFilter = 'draft'; navigateCanvasPage('properties')">{{ properties.filter(item => item.status === 'draft').length }}<small>房源草稿</small></button><button type="button" @click="canvasAdminWorkbenchTab = 'leads'">{{ leads.filter(isPendingLead).length }}<small>待跟进线索</small></button><button type="button" @click="canvasAdminWorkbenchTab = 'requests'">{{ rentalRequests.filter(isNewRentalRequest).length }}<small>待联系需求</small></button></div>
+                      <div class="preview-tool-grid"><article @click="startCanvasPropertyEdit()">＋ 录入房源<small>进入房源录入流程</small></article><article @click="navigateCanvasPage('properties')">▦ 房源管理<small>查看当前环境房源</small></article><article @click="canvasAdminWorkbenchTab = 'leads'; navigateCanvasPage('adminWorkbench')">房源线索<small>{{ leads.length }} 条记录</small></article><article @click="canvasAdminWorkbenchTab = 'interests'; navigateCanvasPage('adminWorkbench')">♡ 用户意向<small>{{ favoriteContacts.length }} 条关注记录</small></article></div>
+                      <article class="preview-menu-row" @click="startCanvasPropertyEdit()">＋ 录入新房源<small>保存和发布在画布中为空操作</small></article>
+                    </template>
+                  </template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'footprints'"><section class="canvas-private-page"><template v-if="canvasIdentityState === 'guest'"><strong>登录后查看浏览足迹</strong><small>最近看过的房源会保存在微信账号中。</small><button type="button" @click="navigateCanvasPage('authLogin')">微信登录</button></template><template v-else><strong>浏览足迹属于微信用户个人数据</strong><small>当前 Admin 页面没有指定微信用户会话，不能代取或用房源列表伪造足迹。</small><button type="button" @click="navigateCanvasPage('properties')">继续找房</button></template></section></template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'requestHistory'"><section class="canvas-private-page"><template v-if="canvasIdentityState === 'guest'"><strong>登录后查看找房记录</strong><small>预约、片区订阅和找房需求会关联到微信账号。</small><button type="button" @click="navigateCanvasPage('authLogin')">微信登录</button></template><template v-else><strong>当前 Admin 未绑定微信用户身份</strong><small>个人预约和找房记录需要对应微信用户身份读取；画布不冒充用户，也不生成示例记录。</small><button type="button" @click="navigateCanvasPage('requests')">填写找房需求</button></template></section></template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'adminWorkbench'">
+                    <div v-if="canvasNotice" class="canvas-preview-notice" role="status">{{ canvasNotice }}</div>
+                    <div class="preview-admin-card"><b>{{ previewIdentity.name }}</b><span>{{ previewIdentity.caption }}</span></div>
+                    <div class="preview-stats"><button type="button" @click="canvasAdminWorkbenchTab = 'properties'; canvasStatusFilter = 'draft'">{{ properties.filter(item => item.status === 'draft').length }}<small>房源草稿</small></button><button type="button" @click="canvasAdminWorkbenchTab = 'leads'">{{ previewAdminPendingCount }}<small>待联系</small></button><button type="button" @click="canvasAdminWorkbenchTab = 'properties'; canvasStatusFilter = 'incomplete'">{{ previewIncompletePropertyCount }}<small>待补资料</small></button></div>
+                    <nav class="preview-admin-tabs"><button type="button" :class="{ active: canvasAdminWorkbenchTab === 'properties' }" @click="canvasAdminWorkbenchTab = 'properties'">房源管理 {{ properties.length }}</button><button type="button" :class="{ active: canvasAdminWorkbenchTab === 'leads' }" @click="canvasAdminWorkbenchTab = 'leads'">房源线索 {{ leads.length }}</button><button type="button" :class="{ active: canvasAdminWorkbenchTab === 'requests' }" @click="canvasAdminWorkbenchTab = 'requests'">客户需求 {{ rentalRequests.length }}</button><button type="button" :class="{ active: canvasAdminWorkbenchTab === 'interests' }" @click="canvasAdminWorkbenchTab = 'interests'">用户意向 {{ favoriteContacts.length }}</button></nav>
+                    <section v-if="canvasAdminWorkbenchTab === 'properties'" class="canvas-workbench-list"><article v-for="item in properties.slice(0, 6)" :key="item.id" class="preview-menu-row canvas-workbench-row" @click="openPreviewProperty(item)"><span><b>{{ previewListingTitle(item) }}</b><small>{{ item.location || item.community }} · ¥{{ item.rentMonthly }}/月</small></span><em>{{ previewStatusLabel(item.status) }}</em><button type="button" @click.stop="startCanvasPropertyEdit(item)">编辑</button></article><button type="button" class="canvas-workbench-more" @click="navigateCanvasPage('properties')">打开房源列表</button><button type="button" class="canvas-workbench-more" @click="startCanvasPropertyEdit()">＋ 录入房源</button></section>
+                    <section v-else-if="canvasAdminWorkbenchTab === 'leads'" class="canvas-workbench-list"><article v-for="item in leads.slice(0, 6)" :key="item.id" class="preview-menu-row canvas-workbench-row"><span><b>{{ item.community || item.sourceName || '房源线索' }}</b><small>{{ item.sourceName }} · {{ item.sourcePhone }} · {{ item.location || '位置待补充' }}</small></span><em>{{ item.status }}</em><button type="button" @click="setCanvasNotice('画布不会转换线索或写入房源数据。')">转房源</button></article><div v-if="!leads.length" class="preview-empty">暂无房源线索</div></section>
+                    <section v-else-if="canvasAdminWorkbenchTab === 'requests'" class="canvas-workbench-list"><article v-for="item in rentalRequests.slice(0, 6)" :key="item.id" class="preview-menu-row canvas-workbench-row"><span><b>{{ item.location || '找房需求' }}</b><small>{{ item.phone }} · {{ item.layout || '户型待补充' }} · {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} 元/月</small></span><em>{{ item.status || 'new' }}</em><button type="button" @click="setCanvasNotice('画布不会更新需求跟进状态。')">跟进</button></article><div v-if="!rentalRequests.length" class="preview-empty">暂无客户需求</div></section>
+                    <section v-else class="canvas-workbench-list"><article v-for="item in favoriteContacts.slice(0, 6)" :key="`${item.userId}-${item.propertyId}`" class="preview-menu-row canvas-workbench-row"><span><b>{{ item.propertyName }}</b><small>{{ item.nickname || '微信用户' }} · {{ item.phone || '手机号待绑定' }} · {{ formatTime(item.createdAt) }}</small></span><button type="button" :disabled="!item.phone" @click="setCanvasNotice(`联系人号码：${item.phone || '手机号待绑定'}`)">{{ item.phone ? '查看联系信息' : '手机号待绑定' }}</button></article><div v-if="!favoriteContacts.length" class="preview-empty">暂无用户意向</div></section>
+                    <article class="preview-menu-row" @click="startCanvasPropertyEdit()">＋ 录入新房源<small>页面操作可走通，保存与状态变更不会写入</small></article>
+                  </template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'adminPropertyEdit'">
+                    <div class="canvas-editor-hero"><div><b>{{ canvasEditingExistingProperty ? '完善房源信息' : '开始录入房源' }}</b><small>位置、户型、配套、租金和素材分步填写</small></div><strong>{{ canvasEditStep + 1 }}/5<small>当前步骤</small></strong></div>
+                    <nav class="preview-steps" aria-label="房源编辑步骤">
+                      <button v-for="(step, index) in ['位置门牌', '户型出租', '配套与描述', '租金与入住', '图片与视频']" :key="step" type="button" :class="{ active: canvasEditStep === index }" @click="canvasEditStep = index">{{ String(index + 1).padStart(2, '0') }} {{ step }}</button>
+                    </nav>
+                    <div class="preview-edit-card">
+                      <template v-if="canvasEditStep === 0"><b>01 · 小区与门牌</b><label>小区名称 *</label><input v-model="canvasPropertyDraft.community" placeholder="搜索并选择小区"><label>地图位置</label><input v-model="canvasPropertyDraft.location" placeholder="选择小区后确认地图位置"><button type="button" @click="setCanvasNotice('地图定位只展示选择流程，不会保存坐标。')">地图选点</button><label>门牌信息</label><div class="canvas-budget-inputs"><input v-model="canvasPropertyDraft.buildingNo" placeholder="楼栋"><input v-model="canvasPropertyDraft.unitNo" placeholder="单元"><input v-model="canvasPropertyDraft.roomNo" placeholder="房间号"></div><label>客户广告词</label><input v-model="canvasPropertyDraft.marketingPhrase" placeholder="不使用广告词 · 仅用于客户标题"><label>归属地区</label><select v-model="canvasPropertyDraft.location"><option value="">选择地区</option><option v-for="area in publicConfig.locations" :key="area.id || area.label">{{ area.label }}</option></select><div class="preview-map-placeholder">地图定位与坐标确认 · {{ canvasPropertyDraft.location || '未设置' }}</div></template>
+                      <template v-else-if="canvasEditStep === 1"><b>02 · 户型与出租方式</b><label>出租方式</label><select v-model="canvasPropertyDraft.rentType"><option>整租</option><option>合租</option></select><label>出租来源</label><select v-model="canvasPropertyDraft.listingSource"><option>直租</option><option>转租</option></select><label>房间 / 客厅 / 厨房 / 卫生间 / 阳台</label><input v-model="canvasPropertyDraft.layout" placeholder="例如：两室一厅"><label>面积、楼层、朝向与电梯</label><div class="canvas-budget-inputs"><input v-model="canvasPropertyDraft.areaSqm" inputmode="numeric" placeholder="面积（㎡）"><input v-model="canvasPropertyDraft.floorInfo" placeholder="楼层"><input v-model="canvasPropertyDraft.orientation" placeholder="朝向"><select v-model="canvasPropertyDraft.elevator"><option value="">电梯</option><option>有电梯</option><option>无电梯</option></select></div><div class="preview-form-card"><label>房源摘要</label><strong>{{ canvasPropertyDraft.layout || '户型待补充' }}　·　{{ canvasPropertyDraft.areaSqm || '面积待补充' }}㎡</strong></div></template>
+                      <template v-else-if="canvasEditStep === 2"><b>03 · 配套与描述</b><label>房屋设施</label><div class="preview-checks"><button v-for="facility in publicConfig.propertyDetail.facilities.filter(item => item.enabled)" :key="facility.key" type="button" :class="{ selected: canvasPropertyFacilities.includes(facility.label) }" @click="toggleCanvasPropertyFacility(facility.label)">{{ canvasPropertyFacilities.includes(facility.label) ? '✓ ' : '+ ' }}{{ facility.label }}</button></div><label>房源描述</label><textarea v-model="canvasPropertyDraft.description" placeholder="填写采光、楼层、朝向、入住要求、周边交通等信息"></textarea><label>入住规则</label><textarea v-model="canvasPropertyDraft.rulesText" placeholder="如：可做饭，宠物需沟通，女生优先"></textarea></template>
+                      <template v-else-if="canvasEditStep === 3"><b>04 · 租金与入住</b><label>月租 *</label><input v-model="canvasPropertyDraft.rentMonthly" inputmode="numeric" placeholder="输入月租（元）"><label>中介费</label><select v-model="canvasPropertyDraft.feeText"><option value="">请选择</option><option>无中介费</option><option>有中介费</option></select><label>押付方式 *</label><select v-model="canvasPropertyDraft.depositPayment"><option value="">请选择押付方式</option><option>押一付一</option><option>押一付三</option><option>押二付一</option></select><label>可入住日期</label><input v-model="canvasPropertyDraft.availableDate" type="date"><label>水电与杂费</label><input v-model="canvasPropertyDraft.utilitiesText" placeholder="填写水电、物业等费用说明"></template>
+                      <template v-else><b>05 · 图片与视频</b><label>封面素材</label><span>图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</span><button type="button" @click="setCanvasNotice('画布不上传或保存任何媒体文件。')">＋ 图片　　＋ 视频</button><label>客户标题预览</label><strong>{{ canvasDraftTitle }}</strong><label>列表效果核对</label><span>客户瀑布流与管理员列表使用不同布局，标签规则由后台统一配置。</span></template>
+                    </div>
+                    <div class="preview-step-actions"><button type="button" :disabled="canvasEditStep === 0" @click="canvasEditStep = Math.max(0, canvasEditStep - 1)">上一步</button><button type="button" :disabled="canvasEditStep === 4" @click="canvasEditStep = Math.min(4, canvasEditStep + 1)">下一步</button><button type="button" @click="submitCanvasPreview">{{ canvasEditStep === 4 ? '保存草稿' : '保存并查看' }}</button><button v-if="canvasEditingExistingProperty" type="button" @click="setCanvasNotice('画布不会更新已有房源。')">更新房源</button></div>
+                  </template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'authLogin'"><div class="preview-login-hero"><div class="preview-login-mark">小</div><small>{{ publicConfig.heroTitle || '小皮租房' }}</small><strong>微信登录</strong><p>登录后管理你的找房服务</p></div><form class="preview-login-card canvas-form" @submit.prevent="submitCanvasPreview"><header><div><b>微信登录</b><span>登录后可同步关注、足迹与找房进度</span></div><i>可信房源</i></header><button class="preview-wechat-login" type="button" @click="submitCanvasPreview"><i>微</i><span><b>微信一键登录</b><small>推荐使用</small></span><strong>›</strong></button><div class="preview-login-divider"><span>测试访问</span></div><div class="preview-login-credentials"><label>手机号<input v-model="canvasLoginPhone" inputmode="tel" placeholder="请输入手机号"></label><label>访问码<input v-model="canvasLoginAccessCode" inputmode="numeric" maxlength="6" placeholder="6 位数字"></label></div><button class="preview-code-login" type="submit">使用访问码登录</button><div class="preview-test-login"><small>隔离测试身份</small><button type="button" @click="switchCanvasIdentity('user')">普通用户 A</button><button type="button" @click="switchCanvasIdentity('user')">普通用户 B</button><button type="button" @click="switchCanvasIdentity('admin')">测试管理员</button><button type="button" @click="switchCanvasIdentity('guest')">禁用用户（验证拒绝）</button></div></form><p class="preview-login-note">登录即表示同意小程序隐私保护说明</p></template>
                 </div>
-                <div v-if="configPage !== 'propertyDetail'" class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="selectConfigPage(configAudience === 'customer' ? 'home' : 'adminWorkbench')">⌂<small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="selectConfigPage('properties')">▤<small>房源</small></button><button v-if="configAudience === 'customer'" :class="{ active: configPage === 'me' }" @click="selectConfigPage('me')">○<small>我的</small></button><button v-else :class="{ active: configPage === 'adminPropertyEdit' }" @click="selectConfigPage('adminPropertyEdit')">＋<small>录入</small></button></div>
+                <div v-if="['home', 'properties', 'me', 'adminWorkbench'].includes(configPage)" class="mini-tabbar"><button :class="{ active: configPage === (configAudience === 'customer' ? 'home' : 'adminWorkbench') }" @click="switchCanvasTab(configAudience === 'customer' ? 'home' : 'adminWorkbench')"><img v-if="configAudience === 'customer'" :src="configPage === 'home' ? homeTabActiveIcon : homeTabIcon" alt=""><span v-else>⌂</span><small>{{ configAudience === 'customer' ? '首页' : '工作台' }}</small></button><button :class="{ active: configPage === 'properties' }" @click="switchCanvasTab('properties')"><img :src="configPage === 'properties' ? propertyTabActiveIcon : propertyTabIcon" alt=""><small>房源</small></button><button v-if="configAudience === 'customer'" :class="{ active: configPage === 'me' }" @click="switchCanvasTab('me')"><img :src="configPage === 'me' ? meTabActiveIcon : meTabIcon" alt=""><small>我的</small></button><button v-else :class="{ active: configPage === 'adminPropertyEdit' }" @click="startCanvasPropertyEdit()"><span>＋</span><small>录入</small></button></div>
               </div>
-              <div v-if="configPage === 'propertyDetail' && previewOverlay === 'share'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><div class="share-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}/月</b><p>{{ previewPrimaryProperty?.community || '房源小区' }} · {{ previewShareTags(previewPrimaryProperty).join(' · ') || '真实好房' }}</p><small>{{ publicConfig.heroTitle || '小皮租房' }}</small></div></div>
+              </div>
+              <div v-if="configPage === 'propertyDetail' && previewOverlay === 'share'" class="preview-overlay" @click="previewOverlay = 'page'"><div class="preview-overlay-card" @click.stop><button class="overlay-close" @click="previewOverlay = 'page'">×</button><span>微信聊天中的小程序分享卡</span><strong>{{ shareTitlePreview || previewPrimaryProperty?.title || previewPrimaryProperty?.community || '暂无可展示房源' }}</strong><div class="share-cover" :style="previewCoverStyle(previewPrimaryProperty)"></div><b>¥{{ previewPrimaryProperty?.rentMonthly || 0 }}/月</b><p>{{ previewPrimaryProperty?.community || '房源小区' }} · {{ previewShareTags(previewPrimaryProperty).join(' · ') || '真实好房' }}</p><small>{{ publicConfig.heroTitle || '小皮租房' }}</small><button type="button" @click="setCanvasNotice('分享卡仅预览，不会发送消息。')">发给微信好友</button></div></div>
+              <div v-if="configPage === 'propertyDetail' && canvasDetailModal === 'appointment'" class="preview-overlay" @click="canvasDetailModal = ''"><form class="canvas-bottom-sheet canvas-form" @submit.prevent="submitCanvasPreview" @click.stop><header><div><strong>预约看房</strong><small>{{ previewPrimaryProperty?.title || previewPrimaryProperty?.community }}</small></div><button type="button" aria-label="关闭" @click="canvasDetailModal = ''">×</button></header><label>怎么称呼您</label><input v-model="canvasForm.contactName" maxlength="20" placeholder="例如：张女士"><label>联系手机号</label><input v-model="canvasForm.phone" inputmode="tel" maxlength="11" placeholder="请填写手机号"><label>什么时候方便</label><div class="canvas-appointment-times"><button v-for="time in ['今天 14:00–16:00', '今天 16:00–18:00', '明天 10:00–12:00', '明天 14:00–16:00']" :key="time" type="button" :class="{ active: canvasForm.preferredTime === time }" @click="canvasForm.preferredTime = time">{{ time }}</button></div><button class="canvas-submit-button" type="submit">提交预约</button><small>画布不会创建真实预约。</small></form></div>
+              <div v-if="configPage === 'propertyDetail' && canvasDetailModal === 'map'" class="preview-overlay" @click="canvasDetailModal = ''"><section class="canvas-bottom-sheet canvas-map-sheet" @click.stop><header><div><strong>房源位置</strong><small>{{ previewPrimaryProperty?.location }}</small></div><button type="button" aria-label="关闭" @click="canvasDetailModal = ''">×</button></header><div class="canvas-map-placeholder"><b>⌖</b><span>{{ previewPrimaryProperty?.community }}</span></div><p>坐标：{{ previewPrimaryProperty?.latitude || '未设置' }}，{{ previewPrimaryProperty?.longitude || '未设置' }}</p><button class="canvas-submit-button" type="button" @click="canvasDetailModal = ''">返回房源详情</button></section></div>
             </aside>
           </div>
         </template>
 
-        <LeadsPage v-else-if="tab === '线索管理'" :leads="leads" :loading="loading" @refresh="load" />
+        <LeadsPage v-else-if="tab === '线索管理'" :leads="leads" :loading="loading" :filter="leadFilter" @refresh="load" @filter="value => router.replace({ query: value === 'pending' ? { filter: value } : {} })" />
   </AdminLayout>
 </template>

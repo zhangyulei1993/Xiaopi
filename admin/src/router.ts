@@ -9,7 +9,8 @@ export const tabRoutes = {
   '微信用户': 'wechat-users',
   '小程序基础配置': 'miniapp-basic-config',
   '小程序页面配置': 'miniapp-page-config',
-  '管理员列表': 'admins',
+  '后台管理员': 'web-admins',
+  '小程序管理员': 'admins',
   '临时访问码': 'temporary-access',
 } as const
 
