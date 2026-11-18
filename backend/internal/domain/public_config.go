@@ -30,14 +30,19 @@ type FeaturedChannel struct {
 // PagePresentation is intentionally small: it gives operations control over
 // page-facing copy and an optional background without making layout editable.
 type PagePresentation struct {
-	Title               string `json:"title"`
-	Subtitle            string `json:"subtitle"`
-	BackgroundImage     string `json:"backgroundImage"`
-	ChannelTitle        string `json:"channelTitle,omitempty"`
-	AllChannelsText     string `json:"allChannelsText,omitempty"`
-	RecommendationTitle string `json:"recommendationTitle,omitempty"`
-	ViewAllText         string `json:"viewAllText,omitempty"`
-	NearbyLabel         string `json:"nearbyLabel,omitempty"`
+	Copy                map[string]string `json:"copy,omitempty"`
+	SearchPlaceholder   string            `json:"searchPlaceholder,omitempty"`
+	OperatorTitle       string            `json:"operatorTitle,omitempty"`
+	OperatorSubtitle    string            `json:"operatorSubtitle,omitempty"`
+	Eyebrow             string            `json:"eyebrow,omitempty"`
+	Title               string            `json:"title"`
+	Subtitle            string            `json:"subtitle"`
+	BackgroundImage     string            `json:"backgroundImage"`
+	ChannelTitle        string            `json:"channelTitle,omitempty"`
+	AllChannelsText     string            `json:"allChannelsText,omitempty"`
+	RecommendationTitle string            `json:"recommendationTitle,omitempty"`
+	ViewAllText         string            `json:"viewAllText,omitempty"`
+	NearbyLabel         string            `json:"nearbyLabel,omitempty"`
 }
 
 type PropertyStatusLabels struct {
@@ -632,6 +637,9 @@ func (config PublicConfig) Validate() error {
 	}
 	for _, key := range []string{"home", "properties", "propertyDetail", "requests", "publish", "me", "adminWorkbench", "adminPropertyEdit", "authLogin"} {
 		presentation := config.PagePresentations[key]
+		if strings.TrimSpace(presentation.Title) == "" {
+			return fmt.Errorf("%s 页面标题不能为空", key)
+		}
 		if utf8.RuneCountInString(presentation.Title) > 30 || utf8.RuneCountInString(presentation.Subtitle) > 60 || utf8.RuneCountInString(presentation.BackgroundImage) > 300 {
 			return fmt.Errorf("%s 页面展示配置内容过长", key)
 		}

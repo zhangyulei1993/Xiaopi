@@ -118,6 +118,8 @@ const followUp = async (type: "lead" | "request", id: string) => {
 if (import.meta.env.MODE === "test") {
   watchPostEffect(() => permissionAudit("render-state", "admin-workbench", leads.value.length + properties.value.length + requests.value.length + activities.value.length + interests.value.length + contactEvents.value.length > 0));
 }
+
+function copyText(fallback: string) { return presentation.value?.copy?.[fallback] || fallback }
 </script>
 <template>
   <view class="page" :style="pageStyle"
@@ -168,7 +170,7 @@ if (import.meta.env.MODE === "test") {
         ><view class="muted"
           >{{ lead.location }} · {{ lead.layout }} ·
           {{ lead.expectedRentMonthly }} 元/月</view
-        ><view class="note">{{ lead.note || "暂无补充说明" }}</view
+        ><view class="note">{{ lead.note || copyText("暂无补充说明") }}</view
         ><view class="actions"
           ><button @click="contactLead(lead.sourcePhone)">联系客户</button
           ><button @click="followUp('lead', lead.id)">标记已联系</button
@@ -177,7 +179,7 @@ if (import.meta.env.MODE === "test") {
           </button></view
         ></view
       ><view v-if="!leads.length" class="empty muted"
-        >暂无房源线索</view
+        >{{ copyText("暂无房源线索") }}</view
       ></template
     ><template v-else-if="tab === 'requests'"
       ><view v-for="item in requests" :key="item.id" class="card item"
@@ -189,13 +191,13 @@ if (import.meta.env.MODE === "test") {
         ><view v-if="item.note" class="note">{{ item.note }}</view
         ><view class="actions"><button @click="contactLead(item.phone)">联系客户</button><button @click="followUp('request', String(item.id))">标记已联系</button><button class="primary" @click="tab = 'properties'">匹配房源</button></view
         ></view
-      ><view v-if="!requests.length" class="empty muted">暂无客户需求</view
+      ><view v-if="!requests.length" class="empty muted">{{ copyText("暂无客户需求") }}</view
       ></template
     ><template v-else-if="tab === 'interests'"
       ><view v-for="item in contactEvents" :key="item.id" class="card item"><view class="row"><view class="title small">{{ item.propertyName || '房源' }}</view><text class="status">{{ item.type === 'phone_entry_click' ? '拨号入口点击' : '咨询入口点击' }}</text></view><view class="muted">{{ item.nickname || '微信用户' }} · {{ item.phone || '手机号待绑定' }}</view><view class="property-meta"><text>{{ item.source === 'detail' ? '详情页触发' : item.source || '页面触发' }}</text><text>{{ item.createdAt ? new Date(item.createdAt).toLocaleString() : '' }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone || '')">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view
-      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length && !contactEvents.length" class="empty muted">暂无用户意向记录</view></template
+      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length && !contactEvents.length" class="empty muted">{{ copyText("暂无用户意向") }}记录</view></template
     ><template v-else
-      ><view class="card property-management-entry"><strong>房源列表与管理操作已统一到「房源」页</strong><text>可在统一列表中搜索、筛选、编辑、复制、更新状态或删除房源。</text><button class="primary" @click="openPropertyList">打开房源管理</button></view></template
+      ><view class="card property-management-entry"><strong>{{ copyText("房源列表与管理操作已统一到「房源」页") }}</strong><text>{{ copyText("可在统一列表中搜索、筛选、编辑、复制、更新状态或删除房源。") }}</text><button class="primary" @click="openPropertyList()">打开房源管理</button></view></template
     ><view v-if="activities.length" class="activity card"><view class="title small">最近操作</view><view v-for="item in activities.slice(0, 5)" :key="item.id" class="muted">{{ item.action }} · {{ item.detail }}</view></view
     ></view
   >

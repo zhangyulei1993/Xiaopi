@@ -306,7 +306,7 @@ const shareFieldMeta: Record<string, { label: string; value: (property: Property
   floorInfo: { label: "楼层", value: (property) => property.floorInfo || "待补充" },
   availableDate: { label: "入住", value: (property) => property.availableDate || "拎包入住" },
 };
-const shareFieldTagMap: Record<string, string> = { layout: "layout", roomNo: "unit", listingSource: "listingSource", rentType: "rentType", areaSqm: "area" };
+const shareFieldTagMap: Record<string, string> = { layout: "layout", roomNo: "unit", listingSource: "listingSource", rentType: "rentType", areaSqm: "area", floorInfo: "floor" };
 const isPublicShareField = (key: string, surface: "share" | "poster" = "share") =>
   !shareFieldTagMap[key] || (surface === "poster" ? customerPosterTagFields.value : customerShareTagFields.value).includes(shareFieldTagMap[key]);
 const shareFieldValue = (property: Property, key: string) => shareFieldMeta[key]?.value(property) || "";
@@ -467,15 +467,16 @@ const previewImage = (url: string) => {
 const amenities = computed(() => {
   const match = String(item.value?.description || "").match(/配套设施[ \t]*[：:][ \t]*([^\n]*)/);
   if (!match?.[1]) return [];
-  const enabledLabels = detailConfig.value.facilities.filter((facility) => facility.enabled).map((facility) => facility.label);
-  return match[1]
-    .split(/[、,，]/)
-    .map((name) => name.trim())
-    .filter((name) => name && (!enabledLabels.length || enabledLabels.includes(name)))
-    .map((name) => ({
-      name,
-      icon: amenityIcon(name),
-      group: detailConfig.value.facilities.find((facility) => facility.label === name)?.group || "其他设施",
+  const names = new Set(match[1].split(/[、,，]/).map((name) => name.trim()).filter(Boolean));
+  return detailConfig.value.facilities
+    .filter((facility) => facility.enabled && (
+      names.has(facility.label) ||
+      defaultDetailFacilities.some((preset) => preset.key === facility.key && names.has(preset.label))
+    ))
+    .map((facility) => ({
+      name: facility.label,
+      icon: amenityIcon(defaultDetailFacilities.find((preset) => preset.key === facility.key)?.label || facility.label),
+      group: facility.group,
     }));
 });
 const amenityGroups = computed(() => {
@@ -597,8 +598,10 @@ const maskedPhone = computed(() => {
   const phone = boundPhone.value;
   return phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone;
 });
-const closeAppointmentFromBackdrop = (event: { target?: { id?: string }; currentTarget?: { id?: string } }) => {
-  if (event.target?.id === "appointment-mask" && event.currentTarget?.id === "appointment-mask") {
+const closeAppointmentFromBackdrop = (event: Event) => {
+  const target = event.target as HTMLElement | null;
+  const currentTarget = event.currentTarget as HTMLElement | null;
+  if (target?.id === "appointment-mask" && currentTarget?.id === "appointment-mask") {
     appointmentOpen.value = false;
   }
 };
@@ -756,6 +759,8 @@ const phoneCustomerService = () => {
   recordContact("phone_entry_click");
   callPhone(contactPhone.value, "客服电话尚未配置");
 };
+
+function copyText(fallback: string) { return presentation.value?.copy?.[fallback] || fallback }
 </script>
 <template>
   <view v-if="loading" class="page detail-skeleton"
@@ -766,11 +771,11 @@ const phoneCustomerService = () => {
     <canvas canvas-id="share-card-canvas" class="share-card-canvas" :width="600" :height="480"></canvas>
     <view v-if="showScrolledTitle" class="detail-scrolled-header" :style="{ paddingTop: `${statusBarHeight}px` }">
       <view class="detail-scrolled-back" @click="goBack"><text>‹</text></view>
-      <text class="detail-scrolled-title">{{ item.title || item.community || "房源详情" }}</text>
+      <text class="detail-scrolled-title">{{ presentation.title || "房源详情" }}</text>
     </view>
     <view class="detail-media-back" @click="goBack"><text>‹</text></view>
     <view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
-      ><image class="property-placeholder-image" :src="propertyPlaceholderIcon" mode="aspectFit" /><text>暂无实拍图</text><small>联系小皮了解房源详情</small></view
+      ><image class="property-placeholder-image" :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text><small>{{ copyText("联系小皮了解房源详情") }}</small></view
     ><view v-else class="media-gallery" :class="{ 'portrait-video': activeVideoIsPortrait, 'video-active': mediaItems[activeMediaIndex]?.type === 'video', 'video-playing': playingVideoIndex === activeMediaIndex }"
       ><swiper class="media-swiper" :style="{ height: `${mediaViewportHeight}rpx` }" circular :current="activeMediaIndex" @change="handleMediaChange">
         <swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`">
@@ -838,13 +843,13 @@ const phoneCustomerService = () => {
         ></view
       ></view
     ><view v-if="item.depositPayment || item.feeText || item.utilitiesText || item.listingSource === '转租' || (item.rentType === '合租' && (item.layout || item.areaSqm))" class="card detail-info"
-      ><view class="detail-section-heading compact"><view><view class="title small">租赁信息</view><small>费用与租期说明</small></view></view
+      ><view class="detail-section-heading compact"><view><view class="title small">{{ copyText("租赁信息") }}</view><small>{{ copyText("费用与租期说明") }}</small></view></view
       ><view class="detail-info-grid"
         ><view v-if="item.depositPayment"><small class="kv-key">押付方式</small><strong class="kv-value">{{ item.depositPayment }}</strong></view
         ><view v-if="item.feeText"><small class="kv-key">中介费</small><strong class="kv-value">{{ item.feeText }}</strong></view
         ><view v-if="item.utilitiesText" class="wide"><small class="kv-key">水电杂费</small><strong class="kv-value">{{ item.utilitiesText }}</strong></view
-        ><view v-if="item.rentType === '合租' && item.layout"><small class="kv-key">实际使用空间</small><strong class="kv-value">{{ listingLayout(item) }}</strong></view
-        ><view v-if="item.rentType === '合租' && item.areaSqm"><small class="kv-key">实际使用面积</small><strong class="kv-value">{{ item.areaSqm }}㎡</strong></view
+        ><view v-if="item.rentType === '合租' && item.layout"><small class="kv-key">使用空间</small><strong class="kv-value">{{ listingLayout(item) }}</strong></view
+        ><view v-if="item.rentType === '合租' && item.areaSqm"><small class="kv-key">使用面积</small><strong class="kv-value">{{ item.areaSqm }}㎡</strong></view
         ><view v-if="item.listingSource === '转租'"><small class="kv-key">剩余租期</small><strong class="kv-value">{{ item.remainingLeaseMonths || 0 }} 个月</strong></view
         ><view v-if="item.listingSource === '转租'"><small class="kv-key">承接押金</small><strong class="kv-value">{{ item.transferDeposit ? `¥${item.transferDeposit}` : '无需承接' }}</strong></view></view
       ></view
@@ -866,7 +871,7 @@ const phoneCustomerService = () => {
         ⌁ 导航去这里
       </button></view
     ><view v-if="detailModuleEnabled('facilities')" class="card amenity-card"
-      ><view class="detail-section-heading"><view><view class="title small">{{ detailModuleTitle('facilities', '房屋设施') }}</view><small>家具家电等可勾选配置</small></view><text>{{ amenities.length }} 项</text></view
+      ><view class="detail-section-heading"><view><view class="title small">{{ detailModuleTitle('facilities', '房屋设施') }}</view><small>{{ copyText("家具家电等可勾选配置") }}</small></view><text>{{ amenities.length }} 项</text></view
       ><template v-if="amenityGroups.length"><view v-for="group in amenityGroups" :key="group.title" class="facility-group"
         ><view class="facility-group-label">{{ group.title }}</view
         ><view class="amenity-grid"
@@ -874,11 +879,11 @@ const phoneCustomerService = () => {
           ><view class="amenity-icon"><image :src="amenity.icon" mode="aspectFit" /></view
           ><text class="amenity-name">{{ amenity.name }}</text></view
         ></view></view
-      ></template><view v-else class="amenity-empty">家具家电信息待补充，可联系小皮确认</view
+      ></template><view v-else class="amenity-empty">{{ copyText("家具家电信息待补充，可联系小皮确认") }}</view
       ></view
     ><view v-if="detailModuleEnabled('description')" class="card"
-      ><view class="detail-section-heading compact"><view><view class="title small">{{ detailModuleTitle('description', '房源简介') }}</view><small>房东补充说明与居住规则</small></view></view
-      ><view class="desc">{{ propertyDescription || "暂无描述" }}</view></view
+      ><view class="detail-section-heading compact"><view><view class="title small">{{ detailModuleTitle('description', '房源简介') }}</view><small>{{ copyText("房东补充说明与居住规则") }}</small></view></view
+      ><view class="desc">{{ propertyDescription || copyText("暂无描述") }}</view></view
     ><view v-if="detailModuleEnabled('nearby')" class="card nearby-card"
       ><view class="nearby-heading"
         ><view><view class="title small">{{ detailModuleTitle('nearby', '附近房源') }}</view></view
@@ -891,7 +896,7 @@ const phoneCustomerService = () => {
         ><view class="nearby-cover"><image v-if="propertyCover(property)" :src="propertyCover(property)" mode="aspectFill" /><text v-else>小皮</text></view
         ><view class="nearby-content"><strong>{{ property.title || property.community }}</strong><view v-if="nearbyTags(property).length" class="nearby-tags"><text v-for="tag in nearbyTags(property)" :key="tag">{{ tag }}</text></view><view class="nearby-footer"><view class="nearby-price"><text>¥{{ property.rentMonthly }}<text class="nearby-price-unit">/月</text></text></view><small class="nearby-distance">距此 {{ property.distance.toFixed(1) }}km</small></view></view
       ></view
-      ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>附近暂时没有其他可租房源</strong><text>可以继续查看其他地区的新房源</text><button @click="openAllProperties">查看全部房源</button></view
+      ><view v-if="!nearbyProperties.length" class="nearby-empty"><strong>{{ copyText("附近暂时没有其他可租房源") }}</strong><text>{{ copyText("可以继续查看其他地区的新房源") }}</text><button @click="openAllProperties">查看全部房源</button></view
       ><view v-else class="nearby-more" @click="openAllProperties">查看更多房源 <text>›</text></view></view
     ><button v-if="!isAdmin" class="floating-appointment" @click="openAppointment"><text>预约</text><small>看房</small></button
     ><button v-if="!isAdmin" class="floating-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享</text></button

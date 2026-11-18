@@ -31,7 +31,7 @@ const selectedPrice = ref(0),
   showMoreFilters = ref(false),
   configuredLocations = ref<{ label: string; keyword: string }[]>([]),
   configuredChannels = ref<Array<{ title: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }>>([]),
-  pagePresentation = ref({ title: "找一处合适的家", subtitle: "按地区和预算筛选", backgroundImage: "" }),
+  pagePresentation = ref({ copy: {} as Record<string, string>, searchPlaceholder: "", operatorTitle: "", title: "找一处合适的家", subtitle: "按地区和预算筛选", backgroundImage: "" }),
   channelFilter = ref<{
     keyword: string;
     latitude: number;
@@ -435,15 +435,15 @@ const subscribeArea = () => {
 	uni.navigateTo({ url: `/pages/requests/index?mode=area&area=${encodeURIComponent(area)}` });
 };
 const requestPrompt = computed(() => showFavoritesOnly.value
-  ? "还没有找到关注的房源"
+  ? copyText("还没有找到关注的房源")
   : subscriptionAreaName.value
-    ? `${subscriptionAreaName.value} 暂时没有合适的房源`
+    ? copyText("{area} 暂时没有合适的房源").replace(/\{area\}/g, subscriptionAreaName.value)
     : keyword.value.trim()
-      ? `没有找到“${keyword.value.trim()}”相关房源`
-      : "暂时没有符合条件的房源");
+      ? copyText("没有找到“{keyword}”相关房源").replace(/\{keyword\}/g, keyword.value.trim())
+      : copyText("暂时没有符合条件的房源"));
 const requestPromptDescription = computed(() => showFavoritesOnly.value
-  ? "先浏览房源并点亮爱心，关注的房源会集中保存在这里。"
-  : "可以调整筛选条件，或告诉小皮你的预算和入住要求。");
+  ? copyText("先浏览房源并点亮爱心，关注的房源会集中保存在这里。")
+  : copyText("可以调整筛选条件，或告诉小皮你的预算和入住要求。"));
 const handleRequestPrompt = () => {
   if (showFavoritesOnly.value) {
     resetFilters();
@@ -453,17 +453,19 @@ const handleRequestPrompt = () => {
     requestHome();
   }
 };
+
+function copyText(fallback: string) { return pagePresentation.value?.copy?.[fallback] || fallback }
 </script>
 <template>
   <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.92), rgba(247,246,241,.96)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover', backgroundAttachment: 'fixed' } : {}"
     ><view class="location"
-      >{{ isAdmin ? "房源管理" : pagePresentation.title || "找一处合适的家" }} <text>{{ filteredProperties.length }} 套{{ isAdmin ? "房源" : "可租" }}</text></view
+      >{{ isAdmin ? (pagePresentation.operatorTitle || "房源管理") : pagePresentation.title || "找一处合适的家" }} <text>{{ filteredProperties.length }} 套{{ isAdmin ? "房源" : "可租" }}</text></view
     ><view v-if="pagePresentation.subtitle" class="page-subtitle">{{ pagePresentation.subtitle }}</view
     ><view class="search card"
       ><image :src="searchIcon" mode="aspectFit" />
       <input
         v-model="keyword"
-        placeholder="搜索小区、位置或户型"
+        :placeholder="pagePresentation.searchPlaceholder || '搜索小区、位置或户型'"
         confirm-type="search"
       /><text v-if="keyword" class="clear" @click="keyword = ''">×</text></view
     ><view v-if="isAdmin" class="admin-create-property" @click="editProperty('')"><text>＋</text><strong>录入新房源</strong><small>保存为草稿后继续完善</small></view
@@ -514,7 +516,7 @@ const handleRequestPrompt = () => {
       ><view>房源加载失败</view
       ><button size="mini" @click="load">重新加载</button></view
     ><view v-else-if="filteredProperties.length" class="grid" :class="{ 'customer-masonry-grid': !isAdmin }"
-      ><template v-if="!isAdmin"><view v-for="(column, columnIndex) in customerMasonryColumns" :key="`column-${columnIndex}`" class="masonry-column"><view v-for="item in column" :key="item.id" class="masonry-property" @click="open(item.id)"><view class="masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover" /><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill" /><view v-else class="property-placeholder"><image :src="propertyPlaceholderIcon" mode="aspectFit" /><text>暂无实拍图</text></view><view class="badge" :class="`status-${item.status}`">可租</view><view v-if="masonryMedia(item)?.type === 'video'" class="masonry-video-play">▶</view><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view><view class="favorite" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="masonry-copy" :class="{ 'without-tags': !cardTags(item).length }"><view class="property-listing-title">{{ listingTitle(item) }}</view><view v-if="cardTags(item).length" class="masonry-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view><view class="price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></template><view
+      ><template v-if="!isAdmin"><view v-for="(column, columnIndex) in customerMasonryColumns" :key="`column-${columnIndex}`" class="masonry-column"><view v-for="item in column" :key="item.id" class="masonry-property" @click="open(item.id)"><view class="masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover" /><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill" /><view v-else class="property-placeholder"><image :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text></view><view class="badge" :class="`status-${item.status}`">可租</view><view v-if="masonryMedia(item)?.type === 'video'" class="masonry-video-play">▶</view><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view><view class="favorite" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="masonry-copy" :class="{ 'without-tags': !cardTags(item).length }"><view class="property-listing-title">{{ listingTitle(item) }}</view><view v-if="cardTags(item).length" class="masonry-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view><view class="price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></template><view
         v-else
         v-for="item in filteredProperties"
         :key="item.id"
@@ -528,7 +530,7 @@ const handleRequestPrompt = () => {
               v-else-if="masonryMedia(item)?.url"
               :src="resolveAssetUrl(masonryMedia(item)?.url || '')"
               :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill"
-            /><view v-else class="property-placeholder"><image :src="propertyPlaceholderIcon" mode="aspectFit" /><text>暂无实拍图</text></view><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
+            /><view v-else class="property-placeholder"><image :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text></view><view class="badge" :class="`status-${item.status}`">{{ isAdmin ? statusLabel(item.status) : "可租" }}</view
             ><view v-if="masonryMedia(item)?.type === 'video'" class="cover-video" aria-label="包含视频">▶</view
             ><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view
             ><view
@@ -552,8 +554,8 @@ const handleRequestPrompt = () => {
       ></view
     ><view v-if="!loading && !loadFailed && !filteredProperties.length" class="empty-match card" :class="{ 'favorites-empty': showFavoritesOnly }"
       ><view class="empty-icon">⌕</view
-      ><view class="empty-title">{{ showFavoritesOnly ? requestPrompt : isAdmin ? "当前筛选下暂无房源" : requestPrompt }}</view
-      ><view class="muted">{{ isAdmin ? "调整地区、预算或关键词，继续查看房源。" : requestPromptDescription }}</view
+      ><view class="empty-title">{{ showFavoritesOnly ? requestPrompt : isAdmin ? copyText("当前筛选下暂无房源") : requestPrompt }}</view
+      ><view class="muted">{{ isAdmin ? copyText("调整地区、预算或关键词，继续查看房源。") : requestPromptDescription }}</view
       ><view v-if="!isAdmin" class="request-button" @click="handleRequestPrompt"
         >{{ showFavoritesOnly ? "浏览全部房源" : subscriptionAreaName ? "关注该片区新房" : "提交找房需求" }}</view
       ><view v-else class="request-button secondary" @click="resetFilters">重置筛选</view

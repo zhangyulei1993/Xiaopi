@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { resolveAssetUrl } from "../api/client";
 import { getPublicConfig } from "../api/properties";
 
-export type PagePresentation = { title: string; subtitle: string; backgroundImage: string };
+export type PagePresentation = { copy?: Record<string, string>; searchPlaceholder?: string; operatorTitle?: string; operatorSubtitle?: string; eyebrow?: string; title: string; subtitle: string; backgroundImage: string };
 
 const fallback = (title: string, subtitle: string): PagePresentation => ({ title, subtitle, backgroundImage: "" });
 

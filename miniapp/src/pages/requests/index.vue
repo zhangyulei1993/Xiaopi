@@ -15,7 +15,7 @@ const propertyID = ref(""),
   areaMode = ref(false),
   contactPhone = ref(""),
   brandName = ref("小皮租房"),
-  pagePresentation = ref({ title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
+  pagePresentation = ref({ copy: {} as Record<string, string>, title: "小皮帮你找房", subtitle: "告诉我们你的找房需求", backgroundImage: "" }),
   submitting = ref(false), appointmentCreated = ref(false), bindingPhone = ref(false);
 const areaTemplateID = ref("");
 const keepFormKeyboard = computed(() => !propertyID.value && !areaMode.value);
@@ -110,7 +110,7 @@ const ensureLogin = () => {
   if (getSession()?.role === "user") return true;
   uni.showModal({
     title: "登录后提交",
-    content: "登录后才能保存并跟进你的找房需求",
+    content: copyText("登录后才能保存并跟进你的找房需求"),
     confirmText: "去登录",
     success: (res) =>
       res.confirm && uni.navigateTo({ url: "/pages/auth/login" }),
@@ -184,13 +184,15 @@ const call = () => callPhone(contactPhone.value);
 if (import.meta.env.MODE === "test") {
   watchPostEffect(() => permissionAudit("render-state", "request-form", Boolean(form.phone || form.contactName)));
 }
+
+function copyText(fallback: string) { return pagePresentation.value?.copy?.[fallback] || fallback }
 </script>
 <template>
   <view class="page" :style="pagePresentation.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.94), rgba(247,246,241,.98)), url(${resolveAssetUrl(pagePresentation.backgroundImage)})`, backgroundSize: 'cover' } : {}"
     ><view class="request-hero"
       ><text>{{ propertyID ? "预约房源" : areaMode ? "片区新房预约" : pagePresentation.title }}</text
       ><view>{{
-        propertyID ? propertyTitle : areaMode ? form.location : "说清需求，比反复筛选更高效"
+        propertyID ? propertyTitle : areaMode ? form.location : copyText("说清需求，比反复筛选更高效")
       }}</view
       ><small>{{
         propertyID
@@ -199,7 +201,7 @@ if (import.meta.env.MODE === "test") {
           : pagePresentation.subtitle
       }}</small></view
     ><view class="card form"
-	  ><view v-if="propertyID" class="field"><text>怎么称呼您 *</text><input v-model.trim="form.contactName" placeholder="例如：张女士" /></view
+	  ><view v-if="propertyID" class="field"><text>怎么称呼您 *</text><input v-model.trim="form.contactName" :placeholder='copyText("例如：张女士")' /></view
       ><view class="field"><text>联系手机号 *</text><view class="verified-phone" :class="{ empty: !form.phone }">{{ form.phone ? `已绑定 ${maskedPhone}` : '提交时需绑定微信手机号' }}</view></view
       ><view v-if="!propertyID" class="field"
         ><text>意向地区 *</text
@@ -207,14 +209,14 @@ if (import.meta.env.MODE === "test") {
           v-model.trim="form.location"
           :hold-keyboard="keepFormKeyboard"
           @keyboardheightchange="updateKeyboardInset"
-          placeholder="例如：佛祖岭、金融港" /></view
+          :placeholder='copyText("例如：佛祖岭、金融港")' /></view
       ><view v-if="!propertyID && !areaMode" class="field"
         ><text>期望户型</text
         ><input
           v-model.trim="form.layout"
           :hold-keyboard="keepFormKeyboard"
           @keyboardheightchange="updateKeyboardInset"
-          placeholder="例如：一室一厅 / 合租主卧" /></view
+          :placeholder='copyText("例如：一室一厅 / 合租主卧")' /></view
       ><view v-if="!propertyID" class="field"
         ><text>月租预算</text
         ><view class="budget"
@@ -248,7 +250,7 @@ if (import.meta.env.MODE === "test") {
           :hold-keyboard="keepFormKeyboard"
           @keyboardheightchange="updateKeyboardInset"
           maxlength="300"
-          :placeholder="propertyID ? '例如：工作日晚上、周末上午，或想先了解的问题' : '通勤地点、整租/合租、楼层、宠物、采光等'"
+          :placeholder="propertyID ? copyText('例如：工作日晚上、周末上午，或想先了解的问题') : copyText('通勤地点、整租/合租、楼层、宠物、采光等')"
         ></textarea></view></view
     ><view class="privacy"
       >提交即表示同意小皮使用已绑定手机号联系你，仅用于本次找房服务。</view

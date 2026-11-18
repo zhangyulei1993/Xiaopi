@@ -64,6 +64,8 @@ const submit = async () => {
     submitting.value = false
   }
 }
+
+function copyText(fallback: string) { return presentation.value?.copy?.[fallback] || fallback }
 </script>
 
 <template>
@@ -74,11 +76,11 @@ const submit = async () => {
       <view class="muted">提交基础信息后，小皮会电话联系并实地核验。正式房源由运营人员审核发布。</view>
     </view>
     <view class="card">
-      <view class="field"><text>联系人</text><input v-model.trim="form.sourceName" placeholder="怎么称呼你" /></view>
+      <view class="field"><text>联系人</text><input v-model.trim="form.sourceName" :placeholder='copyText("怎么称呼你")' /></view>
       <view class="field"><text>联系电话</text><input v-model="form.sourcePhone" type="number" maxlength="11" placeholder="方便小皮联系" /></view>
-      <view class="field"><text>小区</text><input v-model.trim="form.community" placeholder="请输入小区名称" /></view>
-      <view class="field"><text>位置</text><input v-model.trim="form.location" placeholder="区域 / 地铁 / 商圈" /></view>
-      <view class="field"><text>户型</text><input v-model.trim="form.layout" placeholder="例如：一室一厅" /></view>
+      <view class="field"><text>小区</text><input v-model.trim="form.community" :placeholder='copyText("请输入小区名称")' /></view>
+      <view class="field"><text>位置</text><input v-model.trim="form.location" :placeholder='copyText("区域 / 地铁 / 商圈")' /></view>
+      <view class="field"><text>户型</text><input v-model.trim="form.layout" :placeholder='copyText("例如：一室一厅")' /></view>
       <view class="field"><text>预期租金</text><input v-model.number="form.expectedRentMonthly" type="number" placeholder="请输入租金" /></view>
       <view class="field column"><text>补充说明</text><textarea v-model.trim="form.note" maxlength="500" placeholder="入住时间、房屋情况等"></textarea></view>
     </view>

@@ -10,6 +10,8 @@ import (
 )
 
 func TestOutboundTestModeRejectsBeforeTransport(t *testing.T) {
+	t.Setenv("TEST_REAL_MAP_ENABLED", "false")
+	t.Setenv("TENCENT_MAP_KEY", "")
 	calls := 0
 	mock := roundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("unexpected") })
 	client := &http.Client{Transport: newOutboundPolicyTransport(mock, true, "")}
@@ -22,6 +24,37 @@ func TestOutboundTestModeRejectsBeforeTransport(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("underlying transport called %d times", calls)
+	}
+}
+
+func TestTestModeAllowsOnlyConfiguredTencentPlaceSearch(t *testing.T) {
+	t.Setenv("TEST_REAL_MAP_ENABLED", "true")
+	t.Setenv("TENCENT_MAP_KEY", "local-test-key")
+	calls := 0
+	mock := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}, nil
+	})
+	client := &http.Client{Transport: newOutboundPolicyTransport(mock, true, "")}
+	allowed := "https://apis.map.qq.com/ws/place/v1/search?key=local-test-key&keyword=万科&page_size=8"
+	response, err := client.Get(allowed)
+	if err != nil {
+		t.Fatalf("allowed Tencent place search: %v", err)
+	}
+	response.Body.Close()
+	for _, target := range []string{
+		"https://apis.map.qq.com/ws/geocoder/v1/?key=local-test-key&keyword=万科",
+		"https://apis.map.qq.com.evil.invalid/ws/place/v1/search?key=local-test-key&keyword=万科",
+		"http://apis.map.qq.com/ws/place/v1/search?key=local-test-key&keyword=万科",
+		"https://apis.map.qq.com/ws/place/v1/search?key=wrong-key&keyword=万科",
+		"https://apis.map.qq.com/ws/place/v1/search?key=local-test-key&keyword=万科&redirect=https://example.invalid",
+	} {
+		if _, err := client.Get(target); err == nil {
+			t.Fatalf("expected test-mode rejection for %s", target)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("underlying transport calls = %d, want only the allowlisted search", calls)
 	}
 }
 

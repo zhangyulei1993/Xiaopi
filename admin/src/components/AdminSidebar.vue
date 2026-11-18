@@ -10,6 +10,7 @@ const groups = [
     items: [
       { key: '运营总览', label: '运营总览', icon: DataAnalysis },
       { key: '房源列表', label: '房源列表', icon: House },
+      { key: '小区门牌数据', label: '小区门牌数据', icon: Collection },
       { key: '线索管理', label: '线索管理', icon: Collection },
       { key: '租客需求', label: '租客需求', icon: Collection },
       { key: '用户意向', label: '用户意向', icon: Collection },
@@ -19,8 +20,7 @@ const groups = [
   {
     label: '内容与运营',
     items: [
-      { key: '小程序基础配置', label: '小程序基础配置', icon: Collection },
-      { key: '小程序页面配置', label: '小程序页面配置', icon: Location },
+      { key: '小程序页面配置', label: '小程序配置', icon: Location },
     ],
   },
   {

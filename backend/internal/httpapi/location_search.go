@@ -31,9 +31,11 @@ func (s *Server) searchLocations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请输入2到32个字的小区或街道名称")
 		return
 	}
-	if s.config.TestFakeMapEnabled {
+	if s.config.TencentMapKey == "" && s.config.TestFakeMapEnabled {
+		// Keep the isolated test map useful for arbitrary search terms. A fixed
+		// QA response is only a fallback when real map access is not configured.
 		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": []locationSearchItem{{
-			ID: "qa-map-wuhan-community", Title: "QA 测试小区", Address: "光谷大道 1 号", District: "洪山区",
+			ID: "qa-map-wuhan-community", Title: keyword, Address: "QA 地图占位地址（仅测试）", District: "测试环境",
 			Latitude: 30.460402, Longitude: 114.422247,
 		}}})
 		return

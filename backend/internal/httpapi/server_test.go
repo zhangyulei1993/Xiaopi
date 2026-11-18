@@ -883,6 +883,8 @@ func TestTestModeRejectsRealWechatCredentialsWithoutHTTP(t *testing.T) {
 func TestFakeMapIsAvailableOnlyWhenExplicitlyEnabledInTestMode(t *testing.T) {
 	t.Setenv("APP_ENV", "test")
 	t.Setenv("TEST_FAKE_MAP_ENABLED", "true")
+	t.Setenv("TEST_REAL_MAP_ENABLED", "false")
+	t.Setenv("TENCENT_MAP_KEY", "")
 	config := ConfigFromEnv()
 	config.AdminUsername = "operator"
 	config.TokenSecret = "test-secret-with-enough-entropy"
@@ -939,9 +941,9 @@ func TestTestModeRejectsWechatPhoneAuthorizationBeforeHTTP(t *testing.T) {
 	}
 }
 
-func TestProductionWechatLoginStillUsesConfiguredClient(t *testing.T) {
+func TestProductionWechatLoginIgnoresMockFlag(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("WECHAT_MOCK_ENABLED", "false")
+	t.Setenv("WECHAT_MOCK_ENABLED", "true")
 	t.Setenv("WECHAT_MINI_APP_ID", "wx-prod-path-test")
 	t.Setenv("WECHAT_MINI_APP_SECRET", "test-only-placeholder")
 	server := testServer(&fakeStore{})

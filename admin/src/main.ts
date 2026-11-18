@@ -20,6 +20,7 @@ import { ElTable, ElTableColumn } from 'element-plus/es/components/table/index.m
 import { ElTag } from 'element-plus/es/components/tag/index.mjs'
 import { ElSwitch } from 'element-plus/es/components/switch/index.mjs'
 import 'element-plus/es/components/alert/style/css'
+import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/avatar/style/css'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/empty/style/css'

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePropertyDoorplate } from "./usePropertyDoorplate";
 import { watchPostEffect } from "vue";
 import { readPrivateCache } from "../../auth/private-cache";
 import { permissionAudit } from "../../utils/permission-audit";
@@ -9,14 +10,11 @@ import {
   createProperty,
   deleteProperty,
   getPublicConfig,
-  listBuildingRules,
   listProperties,
   replacePropertyMedia,
-  saveBuildingRule,
   searchLocations,
   updateProperty,
   type LocationSearchItem,
-  type BuildingRule,
   type Property,
   type PropertyMedia,
 } from "../../api/properties";
@@ -63,7 +61,9 @@ const { presentation, loadPresentation, pageStyle } = usePagePresentation(
 const currentLocation = ref<{ latitude: number; longitude: number } | null>(null);
 const locationQuery = ref("");
 const locationSearching = ref(false);
-const locationResults = ref<LocationSearchItem[]>([]);
+type LocationCandidate = LocationSearchItem & { saved?: boolean; source: "library" | "map" };
+const locationResults = ref<LocationCandidate[]>([]);
+const locationMapSearched = ref(false);
 let locationSearchTimer: ReturnType<typeof setTimeout> | undefined;
 let locationSearchVersion = 0;
 const form = reactive<Partial<Property>>({
@@ -118,16 +118,34 @@ const roomCount = ref("1"),
   bayWindow = ref("有飘窗"),
   privateBathroom = ref(true),
   hasBayWindow = ref(true);
-const buildingNo = ref("");
-const unitNo = ref("");
-const roomNo = ref("");
-const selectedFloor = ref("");
-const buildingRules = ref<BuildingRule[]>([]);
-type StructureStep = "building" | "unit" | "room" | "";
-const structureStep = ref<StructureStep>("");
-const showStructureSetup = ref(false);
-const ruleSaving = ref(false);
-const ruleDraft = reactive({ unitCount: 3, floorStart: 1, floorCount: 33, householdsPerFloor: 6 });
+const {
+  buildingNo,
+  unitNo,
+  roomNo,
+  selectedFloor,
+  buildingRules,
+  manualDoorplate,
+  doorplateEntryMode,
+  structureStep,
+  buildingOptions,
+  hasDoorplateCatalog,
+  automaticFloorInfo,
+  unitOptions,
+  roomOptions,
+  generatedRoomNo,
+  loadBuildingRules,
+  selectBuildingRule,
+  chooseUnit,
+  chooseRoom,
+  canReturnToStructureStep,
+  returnToStructureStep,
+  returnToPreviousStructureStep,
+  openStructurePicker,
+  switchDoorplateEntryMode,
+  structureSummary,
+  confirmManualDoorplate,
+} = usePropertyDoorplate(form);
+
 const defaultAmenityOptions = ["冰箱", "洗衣机", "空调", "热水器", "电视", "宽带", "燃气", "油烟机", "沙发", "衣柜", "书桌", "床"];
 const amenities = ref(["冰箱", "洗衣机", "空调", "热水器"]);
 const amenityOptions = ref([...defaultAmenityOptions]);
@@ -350,7 +368,7 @@ const selectPointOnMap = (event: {
   form.longitude = Number(longitude.toFixed(7));
   selectNearestChannel(form.latitude, form.longitude);
 };
-const runLocationSearch = async (version = ++locationSearchVersion) => {
+const runLocationSearch = async (version = ++locationSearchVersion, mapOnly = false) => {
   if (locationSearchTimer) clearTimeout(locationSearchTimer);
   locationSearchTimer = undefined;
   const keyword = locationQuery.value.trim();
@@ -362,18 +380,81 @@ const runLocationSearch = async (version = ++locationSearchVersion) => {
     return;
   }
   locationSearching.value = true;
+  locationMapSearched.value = false;
   try {
-    const results = await searchLocations(
-      keyword,
-      channelLatitude.value,
-      channelLongitude.value,
-    );
+    const [catalog, locations] = mapOnly ? [{}, {}] as const : await Promise.all([
+      request<Record<string, number>>("/v1/admin/doorplates").catch(() => ({})),
+      request<Record<string, { address: string; latitude: number; longitude: number }>>("/v1/admin/community-locations").catch(() => ({})),
+    ]);
+    const savedLocations: Record<string, { address: string; latitude: number; longitude: number }> = locations;
+    // Prefer the catalog standard spelling and show one suggestion for
+    // punctuation/spacing variants already present in historical records.
+    const namesByIdentity = new Map<string, string>();
+    for (const name of [...Object.keys(catalog), ...Object.keys(locations), ...reviewProperties.value.map(item => item.community).filter(Boolean)]) {
+      const identity = normalizeCommunityName(name);
+      if (identity && !namesByIdentity.has(identity)) namesByIdentity.set(identity, name);
+    }
+    const normalizedKeyword = normalizeCommunityName(keyword);
+    const matches = [...namesByIdentity.values()].filter(name => normalizeCommunityName(name).includes(normalizedKeyword));
+    matches.sort((left, right) => {
+      const rank = (name: string) => normalizeCommunityName(name) === normalizedKeyword ? 0 : normalizeCommunityName(name).startsWith(normalizedKeyword) ? 1 : 2;
+      return rank(left) - rank(right) || left.localeCompare(right, "zh-CN");
+    });
+    const saved = matches.map(title => {
+      const matching = reviewProperties.value.filter(item => communityNameMatches(item.community, title));
+      const previous = matching.find(item => Number(item.latitude) && Number(item.longitude)) || matching[0];
+      const savedLocation = Object.entries(savedLocations).find(([name]) => communityNameMatches(name, title))?.[1];
+      const location = savedLocation || previous;
+      const address = savedLocation?.address || previous?.location || "";
+      const isPlaceholder = /QA 地图占位地址|测试环境/.test(address);
+      return {
+        id: `saved:${title}`, title, saved: true, source: "library" as const, district: "",
+        address: isPlaceholder ? "" : address, latitude: isPlaceholder ? 0 : Number(location?.latitude) || 0,
+        longitude: isPlaceholder ? 0 : Number(location?.longitude) || 0,
+      };
+    });
+    // Doorplate rows only identify the community structure; they do not imply
+    // that an address/coordinate has been recorded. Enrich exact local matches
+    // from the map when location metadata is missing.
+    const exactLibraryMatch = saved.find(item => normalizeCommunityName(item.title) === normalizedKeyword);
+    const hasExactPosition = Boolean(exactLibraryMatch?.address && exactLibraryMatch.latitude && exactLibraryMatch.longitude);
+    // Keep the dropdown useful for approximate or mistyped input: show local
+    // catalog matches first, then supplement them with Tencent map candidates
+    // unless the community is an exact, already-geocoded catalog match.
+    const shouldSearchMap = mapOnly || !exactLibraryMatch || !hasExactPosition;
+    locationMapSearched.value = shouldSearchMap;
+    const mapResults = shouldSearchMap
+      ? await searchLocations(keyword, channelLatitude.value, channelLongitude.value).then(items =>
+          items.map(item => ({ ...item, saved: false, source: "map" as const }))).catch(error => {
+          if (!saved.length) throw error;
+          return [];
+        })
+      : [];
     if (version !== locationSearchVersion || keyword !== locationQuery.value.trim()) return;
-    // 商户常把小区名写在括号中；录入房源时只保留可直接作为小区的地点。
-    locationResults.value = results.filter((item) => !/[()（）]/.test(item.title || ""));
+    if (mapOnly) {
+      locationResults.value = mapResults;
+    } else if (exactLibraryMatch && !hasExactPosition) {
+      const exactMapMatch = mapResults.find(item => normalizeCommunityName(item.title) === normalizedKeyword);
+      const mergedExact = exactMapMatch
+        ? [{ ...exactMapMatch, id: exactLibraryMatch.id, title: exactLibraryMatch.title }]
+        : [];
+      const remainingMap = mapResults.filter(item => !exactMapMatch || normalizeCommunityName(item.title) !== normalizedKeyword);
+      locationResults.value = [...mergedExact, ...saved.filter(item => !exactMapMatch || item.id !== exactLibraryMatch.id), ...remainingMap];
+    } else if (saved.length) {
+      const mergedSaved = saved.map(item => {
+        const mapMatch = mapResults.find(candidate => normalizeCommunityName(candidate.title) === normalizeCommunityName(item.title));
+        if (!mapMatch || (item.address && item.latitude && item.longitude)) return item;
+        return { ...mapMatch, id: item.id, title: item.title, saved: true, source: "map" as const };
+      });
+      const localNames = new Set(mergedSaved.filter(item => item.source === "library").map(item => normalizeCommunityName(item.title)));
+      locationResults.value = [...mergedSaved, ...mapResults.filter(item => !localNames.has(normalizeCommunityName(item.title)))];
+    } else {
+      locationResults.value = mapResults;
+    }
   } catch (error) {
     if (version !== locationSearchVersion || keyword !== locationQuery.value.trim()) return;
     locationResults.value = [];
+    locationMapSearched.value = true;
     uni.showToast({
       title: error instanceof Error ? error.message : "地址搜索失败",
       icon: "none",
@@ -388,34 +469,123 @@ const invalidateLocationSearch = () => {
   locationSearchTimer = undefined;
   locationSearching.value = false;
   locationResults.value = [];
+  locationMapSearched.value = false;
 };
+const normalizeCommunityName = (value: string) => value.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+const communityNameMatches = (left: string, right: string) =>
+  Boolean(normalizeCommunityName(left)) && normalizeCommunityName(left) === normalizeCommunityName(right);
+const locationQueryAlreadySelected = computed(() => Boolean(
+  locationQuery.value.trim() && form.community &&
+  normalizeCommunityName(locationQuery.value) === normalizeCommunityName(String(form.community)),
+));
+const canUseTypedCommunity = computed(() => {
+  const keyword = locationQuery.value.trim();
+  if (keyword.length < 2 || normalizeCommunityName(keyword) === normalizeCommunityName(String(form.community || ""))) return false;
+  if (locationResults.value.length > 0) return false;
+  return true;
+});
 const scheduleLocationSearch = () => {
   if (locationSearchTimer) clearTimeout(locationSearchTimer);
   const version = ++locationSearchVersion;
   locationSearching.value = false;
   locationResults.value = [];
+  if (locationQuery.value.trim().length < 2) return;
   locationSearchTimer = setTimeout(() => void runLocationSearch(version), 450);
 };
-const applyLocationResult = (item: LocationSearchItem) => {
-	invalidateLocationSearch();
-	const changedCommunity = form.community !== item.title;
+const searchMapLocationCandidates = () => {
+  if (locationQuery.value.trim().length < 2) {
+    uni.showToast({ title: "先输入小区或地点名称", icon: "none" });
+    return;
+  }
+  void runLocationSearch(undefined, true);
+};
+const useTypedCommunity = async () => {
+  const title = locationQuery.value.trim();
+  if (title.length < 2) return;
+  const changedCommunity = normalizeCommunityName(title) !== normalizeCommunityName(String(form.community || ""));
+  invalidateLocationSearch();
+  form.community = title;
+  if (changedCommunity) {
+    form.location = "";
+    form.latitude = 0;
+    form.longitude = 0;
+    buildingRules.value = [];
+    buildingNo.value = "";
+    unitNo.value = "";
+    roomNo.value = "";
+    selectedFloor.value = "";
+    form.floorInfo = "";
+  }
+  locationQuery.value = title;
+  await loadBuildingRules();
+  doorplateEntryMode.value = hasDoorplateCatalog.value ? doorplateEntryMode.value : "manual";
+};
+const applyLocationResult = async (item: LocationCandidate) => {
+  invalidateLocationSearch();
+  const changedCommunity = !communityNameMatches(form.community || "", item.title);
   form.community = item.title;
-  form.location = [item.district, item.address].filter(Boolean).join(" · ");
-  form.latitude = Number(item.latitude.toFixed(7));
-  form.longitude = Number(item.longitude.toFixed(7));
-  selectNearestChannel(form.latitude, form.longitude);
+  const selectedAddress = [item.district, item.address].filter(Boolean).join(" · ");
+  const mapPosition = item.source === "map";
+  if (changedCommunity || (selectedAddress && (!item.saved || mapPosition || !form.location))) form.location = selectedAddress;
+  if (changedCommunity || !item.saved || mapPosition || !geoReady.value) {
+    form.latitude = Number(item.latitude.toFixed(7));
+    form.longitude = Number(item.longitude.toFixed(7));
+  }
+  if (geoReady.value) selectNearestChannel(Number(form.latitude), Number(form.longitude));
   locationQuery.value = item.title;
   locationResults.value = [];
-	if (changedCommunity) {
-		buildingNo.value = "";
-		unitNo.value = "";
-		roomNo.value = "";
-		selectedFloor.value = "";
-		form.floorInfo = "";
-		showStructureSetup.value = false;
-	}
-  void loadBuildingRules();
-  structureStep.value = "building";
+  if (changedCommunity) {
+    buildingNo.value = "";
+    unitNo.value = "";
+    roomNo.value = "";
+    selectedFloor.value = "";
+    form.floorInfo = "";
+  }
+  await openStructurePicker();
+};
+const communityPositionOpen = ref(false);
+const communityPositionSaving = ref(false);
+const communityPosition = reactive({ address: "", latitude: "", longitude: "" });
+watch(() => form.community, () => { communityPositionOpen.value = false; });
+const openCommunityPosition = () => {
+  const community = String(form.community || "").trim();
+  if (!community) {
+    uni.showToast({ title: "请先选择小区", icon: "none" });
+    return;
+  }
+  communityPosition.address = form.location || "";
+  communityPosition.latitude = geoReady.value ? String(form.latitude) : "";
+  communityPosition.longitude = geoReady.value ? String(form.longitude) : "";
+  communityPositionOpen.value = true;
+};
+const saveCommunityPosition = async () => {
+  if (communityPositionSaving.value) return;
+  const community = String(form.community || "").trim();
+  const address = communityPosition.address.trim();
+  const latitude = Number(communityPosition.latitude);
+  const longitude = Number(communityPosition.longitude);
+  if (!community || !address || !latitude || !longitude || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    uni.showToast({ title: "请填写地址和有效的经纬度", icon: "none" });
+    return;
+  }
+  communityPositionSaving.value = true;
+  try {
+    await request(`/v1/admin/community-locations?community=${encodeURIComponent(community)}`, {
+      method: "PUT",
+      data: { address, latitude, longitude },
+    });
+    if (String(form.community || "").trim() !== community) return;
+    form.location = address;
+    form.latitude = latitude;
+    form.longitude = longitude;
+    selectNearestChannel(latitude, longitude);
+    communityPositionOpen.value = false;
+    uni.showToast({ title: "位置已保存，下次自动带入", icon: "none" });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "保存位置失败", icon: "none" });
+  } finally {
+    communityPositionSaving.value = false;
+  }
 };
 const choosePropertyLocation = () => {
 	invalidateLocationSearch();
@@ -437,14 +607,14 @@ const choosePropertyLocation = () => {
         roomNo.value = "";
         selectedFloor.value = "";
         form.floorInfo = "";
-        showStructureSetup.value = false;
+
       }
       form.latitude = Number(result.latitude.toFixed(7));
       form.longitude = Number(result.longitude.toFixed(7));
       selectNearestChannel(form.latitude, form.longitude);
       form.location = result.address || selectedCommunity || form.location;
       void loadBuildingRules();
-      if (form.community?.trim()) structureStep.value = "building";
+      if (form.community?.trim()) void openStructurePicker();
     },
     fail: (error) => {
       if (!String(error.errMsg || "").includes("cancel")) {
@@ -556,146 +726,6 @@ watch([() => form.community], () => {
     ? generatedTitle.value
     : "";
 }, { immediate: true });
-const defaultBuildingRules = Array.from({ length: 30 }, (_, index) => ({
-  id: `default-building-${index + 1}`,
-  community: "",
-  buildingNo: `${index + 1}栋`,
-  unitCount: 3,
-  floorStart: 1,
-  floorCount: 33,
-  householdsPerFloor: 6,
-}));
-// Until a community has verified building data, use one predictable hierarchy
-// for every selected community. Exact rules saved later replace only their
-// matching building and leave the remainder usable.
-const buildingOptions = computed(() => {
-  const exactRules = new Map(buildingRules.value.map((rule) => [rule.buildingNo, rule]));
-  const defaults = defaultBuildingRules.map((rule) => ({
-    ...rule,
-    community: String(form.community || ""),
-    ...(exactRules.get(rule.buildingNo) || {}),
-  }));
-  const extras = buildingRules.value.filter((rule) => !defaultBuildingRules.some((item) => item.buildingNo === rule.buildingNo));
-  return [...defaults, ...extras];
-});
-const selectedBuildingRule = computed(() =>
-  buildingOptions.value.find((rule) => rule.buildingNo === buildingNo.value.trim()) || null,
-);
-const automaticFloorInfo = computed(() => {
-  return selectedFloor.value ? `${selectedFloor.value}楼` : "";
-});
-const hasStructureRule = computed(() => Boolean(selectedBuildingRule.value));
-const unitOptions = computed(() => {
-  const total = selectedBuildingRule.value?.unitCount || 0;
-  return Array.from({ length: total }, (_, index) => String(index + 1));
-});
-const roomOptions = computed(() => {
-  const rule = selectedBuildingRule.value;
-  if (!rule) return [];
-  const floors = Array.from(
-    { length: rule.floorCount },
-    (_, index) => String(rule.floorStart + rule.floorCount - index - 1),
-  );
-  return floors.flatMap((floor) =>
-    Array.from({ length: rule.householdsPerFloor }, (_, index) => {
-      const household = String(index + 1).padStart(2, "0");
-      return { floor, roomNo: `${floor}${household}` };
-    }),
-  );
-});
-const generatedRoomNo = computed(() => {
-  return roomNo.value;
-});
-const loadBuildingRules = async () => {
-  const community = String(form.community || "").trim();
-  if (!community) {
-    buildingRules.value = [];
-    return;
-  }
-  buildingRules.value = await listBuildingRules(community).catch(() => []);
-};
-const selectBuildingRule = (rule: BuildingRule) => {
-  if (!rule) return;
-  buildingNo.value = rule.buildingNo;
-  unitNo.value = "";
-  selectedFloor.value = "";
-  roomNo.value = "";
-  form.floorInfo = "";
-  structureStep.value = "unit";
-};
-const chooseUnit = (unit: string) => {
-  unitNo.value = unit;
-  selectedFloor.value = "";
-  roomNo.value = "";
-  form.floorInfo = "";
-  structureStep.value = "room";
-};
-const chooseRoom = (room: { floor: string; roomNo: string }) => {
-  selectedFloor.value = room.floor;
-  roomNo.value = room.roomNo;
-  form.floorInfo = automaticFloorInfo.value;
-  structureStep.value = "";
-};
-const structureStepIndex = (step: StructureStep) =>
-  (["building", "unit", "room"] as StructureStep[]).indexOf(step);
-const canReturnToStructureStep = (step: StructureStep) => {
-  if (step === "building") return true;
-  if (step === "unit") return Boolean(buildingNo.value);
-  return Boolean(buildingNo.value && unitNo.value);
-};
-const returnToStructureStep = (step: StructureStep) => {
-  if (!step || !canReturnToStructureStep(step)) return;
-  if (step === "building") {
-    unitNo.value = "";
-    selectedFloor.value = "";
-    roomNo.value = "";
-    form.floorInfo = "";
-  } else if (step === "unit") {
-    roomNo.value = "";
-    selectedFloor.value = "";
-    form.floorInfo = "";
-  }
-  structureStep.value = step;
-};
-const returnToPreviousStructureStep = () => {
-  const currentIndex = structureStepIndex(structureStep.value);
-  if (currentIndex <= 0) return;
-  returnToStructureStep((["building", "unit", "room"] as StructureStep[])[currentIndex - 1]);
-};
-const openStructurePicker = () => {
-  if (!form.community?.trim()) return;
-  structureStep.value = buildingNo.value
-    ? unitNo.value
-      ? "room"
-      : "unit"
-    : "building";
-};
-const structureSummary = computed(() =>
-  [buildingNo.value, unitNo.value && `${unitNo.value}单元`, roomNo.value && `${roomNo.value}室`]
-    .filter(Boolean)
-    .join("") || "未选择",
-);
-const saveCurrentBuildingRule = async () => {
-  const community = String(form.community || "").trim();
-  const building = buildingNo.value.trim();
-  if (!community || !building) {
-    uni.showToast({ title: "请先选择小区并填写楼栋", icon: "none" });
-    return;
-  }
-  ruleSaving.value = true;
-  try {
-    const saved = await saveBuildingRule({ community, buildingNo: building, ...ruleDraft });
-    const index = buildingRules.value.findIndex((rule) => rule.buildingNo === saved.buildingNo);
-    if (index >= 0) buildingRules.value.splice(index, 1, saved);
-    else buildingRules.value.push(saved);
-    buildingRules.value = [...buildingRules.value];
-    uni.showToast({ title: "楼栋规则已保存" });
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : "保存失败", icon: "none" });
-  } finally {
-    ruleSaving.value = false;
-  }
-};
 const syncLayout = () => {
   toiletType.value = privateBathroom.value ? "独卫" : "非独卫";
   bayWindow.value = hasBayWindow.value ? "有飘窗" : "无飘窗";
@@ -806,6 +836,15 @@ const loadProperty = async () => {
     );
     if (!property) throw new Error("房源不存在");
     Object.assign(form, property);
+    if (!geoReady.value && property.community) {
+      const locations = await request<Record<string, { address: string; latitude: number; longitude: number }>>("/v1/admin/community-locations").catch(() => null);
+      const savedPosition = Object.entries(locations || {}).find(([name]) => communityNameMatches(name, property.community))?.[1];
+      if (savedPosition && form.community === property.community && !geoReady.value) {
+        form.location = form.location?.trim() || savedPosition.address;
+        form.latitude = savedPosition.latitude;
+        form.longitude = savedPosition.longitude;
+      }
+    }
     paymentCycle.value = paymentCycles.find((item) => String(property.depositPayment || "").includes(item)) || "付一";
     form.listingSource = property.listingSource || "直租";
     transferDepositMultiplier.value = Number(property.transferDeposit) && Number(property.rentMonthly)
@@ -848,7 +887,7 @@ const loadFacilityCatalog = async () => {
     .map((facility) => facility.label)
     .filter(Boolean);
   amenityOptions.value = detailModuleEnabled("facilities")
-    ? (options?.length ? Array.from(new Set(options)) : [...defaultAmenityOptions])
+    ? (options ? Array.from(new Set(options)) : [...defaultAmenityOptions])
     : [];
 };
 onLoad(async (query) => {
@@ -1099,6 +1138,7 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
       fail: (error) => reject(new Error(error.errMsg || "素材上传失败")),
     }),
   );
+const completedUploads = new Map<string, PropertyMedia>();
 type SaveMode = "draft" | "preview" | "publish";
 const save = async (mode: SaveMode = "draft") => {
   if (saving.value) return;
@@ -1177,7 +1217,14 @@ const save = async (mode: SaveMode = "draft") => {
     const uploaded: PropertyMedia[] = [];
     for (let index = 0; index < queue.length; index++) {
       uploadProgress.value = `上传素材 ${index + 1}/${queue.length}`;
-      uploaded.push(await upload(queue[index].path, queue[index].type, property.id, queue[index].sort));
+      const item = queue[index];
+      const key = JSON.stringify([property.id, item.type, item.path]);
+      let media = completedUploads.get(key);
+      if (!media) {
+        media = await upload(item.path, item.type, property.id, item.sort);
+        completedUploads.set(key, media);
+      }
+      uploaded.push(media);
     }
     const uploadedImages = uploaded.filter((item) => item.type === "image");
     const uploadedVideos = uploaded.filter((item) => item.type === "video");
@@ -1190,6 +1237,7 @@ const save = async (mode: SaveMode = "draft") => {
       : [...existingImages, ...uploadedImages];
     const finalMedia = [...existingVideos, ...uploadedVideos, ...finalImages];
     await replacePropertyMedia(property.id, finalMedia.map((item) => item.id));
+    completedUploads.clear();
     existingMedia.value = finalMedia;
     images.value = [];
     coverImageIndex.value = 0;
@@ -1228,6 +1276,11 @@ const save = async (mode: SaveMode = "draft") => {
 };
 const confirmPublish = () => {
   if (saving.value) return;
+  if (!geoReady.value) {
+    goToSection(0);
+    openCommunityPosition();
+    return;
+  }
   if (!requiredReady.value || mediaCount.value === 0) {
     uni.showToast({ title: "请先完成必填信息并上传至少一张实拍图", icon: "none" });
     return;
@@ -1268,13 +1321,15 @@ const mediaUrl = resolveAssetUrl;
 if (import.meta.env.MODE === "test") {
   watchPostEffect(() => permissionAudit("render-state", "property-editor", Boolean(form.id || existingMedia.value.length)));
 }
+
+function copyText(fallback: string) { return presentation.value?.copy?.[fallback] || fallback }
 </script>
 <template>
   <view class="page editor-page" :style="pageStyle"
     ><view class="page-presentation-head"><view class="page-presentation-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view
     ><view class="editor-hero"
       ><view
-        ><text>{{ id ? "完善房源信息" : "开始录入房源" }}</text></view
+        ><text>{{ id ? copyText("完善房源信息") : copyText("开始录入房源") }}</text></view
       ><view class="completion"
         ><strong>{{ completionCount }}/5</strong><small>已完成</small></view
       ></view
@@ -1302,33 +1357,34 @@ if (import.meta.env.MODE === "test") {
             ><strong>基础信息</strong></view
           ></view
         ><view class="map-section-heading community-heading"
-          ><view><strong>小区名称 *</strong><small>搜索并选择小区，自动获取地图坐标</small></view
-          ><text @click="choosePropertyLocation">地图选点</text></view
+          ><view><strong>小区名称 *</strong><small>优先匹配小区库；库外小区可搜索或地图选点</small></view></view
         ><view class="location-search community-search"
           ><view class="location-search-box"
             ><text>⌕</text
             ><input
               v-model.trim="locationQuery"
-              placeholder="输入小区名称、街道或写字楼"
+              :placeholder='copyText("输入小区名称、街道或写字楼")'
               confirm-type="search"
               @input="scheduleLocationSearch"
-              @confirm="runLocationSearch"
-            /><small v-if="locationSearching">搜索中</small></view
+              @confirm="runLocationSearch()"
+            /><small v-if="locationSearching">搜索中</small><text v-else class="location-search-action" @click="runLocationSearch()">搜索</text><text class="location-map-action" @click="searchMapLocationCandidates">地图选点</text></view
           ><view v-if="locationResults.length" class="location-results"
             ><view
               v-for="item in locationResults"
               :key="item.id"
               @click="applyLocationResult(item)"
               ><view
-                ><strong>{{ item.title }}</strong
-                ><small>{{ item.district }} · {{ item.address }}</small></view
+                ><strong>{{ item.title }} <text class="location-source">{{ item.saved && item.source === "map" ? "小区库 · 地图定位" : item.source === "library" ? "小区库" : "地图" }}</text></strong
+                ><small>{{ [item.district, item.address].filter(Boolean).join(" · ") || (item.saved ? "库内小区 · 位置待补" : "") }}</small></view
               ><text v-if="item.distance"
                 >{{ (item.distance / 1000).toFixed(1) }}km</text
 			></view
             ></view
-          ><view v-else-if="locationQuery.length >= 2 && !locationSearching" class="location-search-tip"
-            >继续输入名称，系统会显示武汉范围内的匹配地点</view
-          ><view v-if="form.community" class="selected-community">已选择：{{ form.community }}</view></view
+          ><view v-if="canUseTypedCommunity" class="location-custom-option"><view><strong>不在小区库？使用“{{ locationQuery.trim() }}”</strong><small>确认名称后，可单独选择门牌或地图位置</small></view><text @click="useTypedCommunity">使用名称 ›</text></view
+          ><view v-else-if="locationQuery.length >= 2 && !locationSearching && !locationQueryAlreadySelected && !locationResults.some(item => item.source === 'map')" class="location-search-tip"
+            >{{ locationMapSearched ? "地图暂未找到该地点，可直接在地图上选点" : "小区库暂无匹配，正在切换地图搜索" }}</view
+          ><text v-if="locationQuery.length >= 2 && !locationSearching && !locationQueryAlreadySelected && !locationResults.some(item => item.source === 'map')" class="location-map-fallback" @click="runLocationSearch(undefined, true)">{{ locationMapSearched ? "重新搜索地图 ›" : "地图搜索 ›" }}</text
+          ><view v-if="form.community" class="selected-community"><strong>已选择：{{ form.community }}</strong><view class="selected-location-state" :class="{ ready: geoReady }"><text>{{ geoReady ? "✓ 位置已获取" : "尚未获取位置" }}</text><small>{{ geoReady ? (form.location?.trim() || "地图未返回文字地址，可通过坐标确认位置") : "点击地图选点后，这里会显示地址和坐标" }}</small><small v-if="geoReady">坐标：{{ Number(form.latitude).toFixed(6) }}, {{ Number(form.longitude).toFixed(6) }}</small></view></view></view
         ><view v-if="form.community" class="unit-selector-card" :class="{ selected: Boolean(roomNo) }" @click="openStructurePicker"
           ><view><strong>{{ roomNo ? "已选门牌" : "门牌信息" }}</strong><text>{{ structureSummary }}</text></view><b>{{ roomNo ? "重选 ›" : "选择 ›" }}</b></view
         ><view class="field"
@@ -1336,17 +1392,12 @@ if (import.meta.env.MODE === "test") {
           ><picker :range="marketingPhraseOptions" :value="marketingPhraseIndex" @change="chooseMarketingPhrase"
             ><view class="channel-picker marketing-phrase-picker"><view><strong>{{ form.marketingPhrase || "不使用广告词" }}</strong><small>仅用于客户标题；管理员仅显示房源原始数据</small></view><text>选择 ›</text></view></picker
           ></view
-        ><view v-if="hasStructureRule" class="structure-setup-trigger" @click="showStructureSetup = !showStructureSetup"><text>{{ showStructureSetup ? "门牌规则设置" : `默认门牌规则：${selectedBuildingRule?.unitCount || 3} 单元 · ${selectedBuildingRule?.floorCount || 33} 层` }}</text><b>{{ showStructureSetup ? "收起" : "调整 ›" }}</b></view
-        ><view v-if="hasStructureRule && showStructureSetup" class="rule-setup"
-              ><view class="rule-setup-head"><text>门牌规则</text><small>保存后，同一小区下次录入将直接使用</small></view
-              ><view class="rule-inputs"><view><small>单元数</small><input v-model.number="ruleDraft.unitCount" type="number" /></view><view><small>起始层</small><input v-model.number="ruleDraft.floorStart" type="number" /></view><view><small>总层数</small><input v-model.number="ruleDraft.floorCount" type="number" /></view><view><small>每层户数</small><input v-model.number="ruleDraft.householdsPerFloor" type="number" /></view></view
-              ><button :loading="ruleSaving" :disabled="!buildingNo || ruleSaving" @click="saveCurrentBuildingRule">保存楼栋规则</button></view
-		><view class="field"
+        ><view class="field"
           ><text>详细地址补充</text
           ><input
             v-model.trim="form.location"
             maxlength="60"
-            placeholder="选择小区后自动回填，可补充门牌信息" /></view
+            :placeholder='copyText("选择小区后自动回填，可补充门牌信息")' /></view
         ><view class="channel-scope"
           ><view class="scope-heading"><text>归属地区</text><small>保存后按当前选择归类</small></view
           ><picker
@@ -1362,6 +1413,16 @@ if (import.meta.env.MODE === "test") {
               ><text>调整 ›</text></view
             ></picker
           ><view v-if="geoReady" class="map-toggle" @click="mapExpanded = !mapExpanded"><text>{{ mapExpanded ? "收起地图" : "地图调整位置" }}</text><small>地图仅用于确认房源坐标</small></view></view
+        ><view v-if="form.community && (!geoReady || communityPositionOpen)" class="field community-position"
+          ><button v-if="!communityPositionOpen" @click="openCommunityPosition">补齐小区位置</button
+          ><template v-else>
+            <text>小区位置 · 保存后可复用</text>
+            <input v-model="communityPosition.address" maxlength="60" placeholder="小区地址" />
+            <input v-model="communityPosition.latitude" type="digit" placeholder="纬度（GCJ-02）" />
+            <input v-model="communityPosition.longitude" type="digit" placeholder="经度（GCJ-02）" />
+            <button :loading="communityPositionSaving" @click="saveCommunityPosition">保存小区位置</button>
+            <button :disabled="communityPositionSaving" @click="communityPositionOpen = false">取消</button>
+          </template></view
         ><view v-if="!geoReady || mapExpanded" class="map-picker"
           ><map
             class="property-map"
@@ -1434,7 +1495,7 @@ if (import.meta.env.MODE === "test") {
           ></view
         ><checkbox-group v-if="detailModuleEnabled('facilities')"
           class="amenity-grid"
-          @change="amenities = $event.detail.value"
+          @change="amenities = [...amenities.filter(name => !amenityOptions.includes(name)), ...$event.detail.value]"
           ><label
             v-for="option in amenityOptions"
             :key="option"
@@ -1453,12 +1514,12 @@ if (import.meta.env.MODE === "test") {
           <textarea
             v-model.trim="form.description"
             maxlength="800"
-            placeholder="填写采光、楼层、朝向、入住要求、周边交通等信息"
+            :placeholder='copyText("填写采光、楼层、朝向、入住要求、周边交通等信息")'
           ></textarea
           ><text>{{ String(form.description || "").length }}/800</text></view
         ><view v-if="detailModuleEnabled('description')" class="field"
           ><text>入住规则</text
-          ><input v-model.trim="form.rulesText" maxlength="200" placeholder="如：可做饭，宠物需沟通，女生优先" /></view
+          ><input v-model.trim="form.rulesText" maxlength="200" :placeholder='copyText("如：可做饭，宠物需沟通，女生优先")' /></view
         ><view v-if="!detailModuleEnabled('facilities') && !detailModuleEnabled('description')" class="module-entry-disabled">当前后台未启用“房屋设施”或“房源简介”，此步无需填写。</view>
         ></view>
       <view v-show="activeSection === 3" class="section-card"
@@ -1592,7 +1653,7 @@ if (import.meta.env.MODE === "test") {
           <view :class="{ ready: sectionReady[3] }"><text>租金入住</text><small>{{ Number(form.rentMonthly) || 0 }}/月 {{ form.depositPayment || "" }}</small></view>
           <view :class="{ ready: sectionReady[4] }"><text>图片素材</text><small>{{ mediaCount }}/9 张图片 · {{ videoCount }} 个视频</small></view>
         </view>
-        <view class="listing-compare"><view class="listing-compare-head"><strong>列表效果核对</strong><small>以下为保存后首页与“房源”页的真实卡片布局</small></view><view class="review-perspective-switch"><view :class="{ active: reviewPerspective === 'customer' }" @click="reviewPerspective = 'customer'">普通用户 · 瀑布流</view><view :class="{ active: reviewPerspective === 'admin' }" @click="reviewPerspective = 'admin'">管理员 · 列表</view></view>
+        <view class="listing-compare"><view class="listing-compare-head"><strong>{{ copyText("列表效果核对") }}</strong><small>以下为保存后首页与“房源”页的真实卡片布局</small></view><view class="review-perspective-switch"><view :class="{ active: reviewPerspective === 'customer' }" @click="reviewPerspective = 'customer'">普通用户 · 瀑布流</view><view :class="{ active: reviewPerspective === 'admin' }" @click="reviewPerspective = 'admin'">管理员 · 列表</view></view>
           <swiper class="review-preview-swiper" :current="reviewPerspective === 'customer' ? 0 : 1" :duration="260" @change="reviewPerspective = Number($event.detail.current) === 0 ? 'customer' : 'admin'">
             <swiper-item class="review-preview-item">
               <view class="preview-home-masonry"><view class="preview-home-masonry-column"><view class="preview-home-masonry-card current"><view class="preview-home-masonry-cover"><image v-if="reviewCoverUrl" :src="reviewCoverUrl" :style="{ objectPosition: `${form.coverFocusX ?? 50}% ${form.coverFocusY ?? 50}%` }" mode="aspectFill"/><text v-else>小皮</text><view class="preview-listing-status">可租</view><view class="preview-current-label">当前编辑</view><view v-if="videoCount" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ form.areaLabel || reviewLocation }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ customerGeneratedTitle }}</view><view v-if="previewPrimaryTags.length || previewSecondaryTags.length" class="preview-home-masonry-tags"><text v-for="label in [...previewPrimaryTags, ...previewSecondaryTags]" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ Number(form.rentMonthly) || 0 }}<text>/月</text></view></view></view><view v-for="property in reviewReferenceProperties.filter((_, index) => index % 2 === 1)" :key="property.id" class="preview-home-masonry-card"><view class="preview-home-masonry-cover"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ publicListingTitle(property) }}</view><view class="preview-home-masonry-tags"><text v-for="label in referenceTags(property, previewTagFields)" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view><view class="preview-home-masonry-column"><view v-for="property in reviewReferenceProperties.filter((_, index) => index % 2 === 0)" :key="property.id" class="preview-home-masonry-card"><view class="preview-home-masonry-cover"><image :src="referenceCoverUrl(property)" mode="aspectFill"/><view class="preview-listing-status">可租</view><view v-if="property.media?.some((media) => media.type === 'video')" class="preview-home-video-play">▶</view><view class="preview-home-cover-location">⌖ {{ property.areaLabel || referenceLocation(property) }}</view></view><view class="preview-home-masonry-copy"><view class="preview-home-listing-title">{{ publicListingTitle(property) }}</view><view class="preview-home-masonry-tags"><text v-for="label in referenceTags(property, previewTagFields)" :key="label">{{ label }}</text></view><view class="preview-listing-price">¥ {{ property.rentMonthly }}<text>/月</text></view></view></view></view></view>
@@ -1622,7 +1683,7 @@ if (import.meta.env.MODE === "test") {
           </button></view
         ><view v-else class="save-actions" :class="{ 'three-actions': !isLiveEditing }"
           ><template v-if="isLiveEditing"><button :disabled="saving" @click="save()">保存修改</button><button class="primary" :disabled="saving || !requiredReady" @click="save('preview')">查看公开效果</button></template
-          ><template v-else><button :disabled="saving" @click="save()">保存草稿</button><button :disabled="saving || !requiredReady" @click="save('preview')">预览草稿</button><button class="primary" :disabled="saving || !requiredReady" @click="confirmPublish">{{ saving ? "处理中..." : "直接发布" }}</button></template
+          ><template v-else><button :disabled="saving" @click="save()">保存草稿</button><button :disabled="saving || !requiredReady" @click="save('preview')">预览草稿</button><button class="primary" :disabled="saving" @click="confirmPublish">{{ saving ? "处理中..." : "直接发布" }}</button></template
           ></view
         ></view
       ><view v-if="structureStep" class="structure-modal" @click="structureStep = ''"
@@ -1630,953 +1691,18 @@ if (import.meta.env.MODE === "test") {
           ><view class="structure-sheet-head"
             ><view><strong>{{ structureStep === "building" ? "选择楼栋" : structureStep === "unit" ? "选择单元" : "选择房号" }}</strong><small>{{ form.community }}</small></view><view class="structure-head-actions"><text v-if="structureStep !== 'building'" class="structure-back" @click="returnToPreviousStructureStep">‹ 返回</text><text class="structure-close" @click="structureStep = ''">×</text></view></view
           ><view class="structure-progress structure-progress-three"><text :class="{ active: structureStep === 'building', available: canReturnToStructureStep('building') }" @click="returnToStructureStep('building')">楼栋</text><text :class="{ active: structureStep === 'unit', available: canReturnToStructureStep('unit') }" @click="returnToStructureStep('unit')">单元</text><text :class="{ active: structureStep === 'room', available: canReturnToStructureStep('room') }" @click="returnToStructureStep('room')">房号</text></view
+          ><view v-if="hasDoorplateCatalog" class="doorplate-entry-switch"><text :class="{ active: doorplateEntryMode === 'catalog' }" @click="switchDoorplateEntryMode('catalog')">选择已有门牌</text><text :class="{ active: doorplateEntryMode === 'manual' }" @click="switchDoorplateEntryMode('manual')">自定义输入</text></view
           ><scroll-view scroll-y class="structure-grid-scroll"
-            ><view v-if="structureStep === 'building'" class="structure-grid"><view v-for="rule in buildingOptions" :key="rule.id" class="structure-grid-item" :class="{ active: buildingNo === rule.buildingNo }" @click="selectBuildingRule(rule)">{{ rule.buildingNo }}</view></view
-            ><view v-else-if="structureStep === 'unit'" class="structure-grid"><view v-for="unit in unitOptions" :key="unit" class="structure-grid-item" :class="{ active: unitNo === unit }" @click="chooseUnit(unit)">{{ unit }} 单元</view></view
-            ><view v-else class="structure-grid"><view v-for="room in roomOptions" :key="room.roomNo" class="structure-grid-item" :class="{ active: roomNo === room.roomNo }" @click="chooseRoom(room)">{{ room.roomNo }}</view></view></scroll-view
-          ><view class="structure-sheet-footer"><text>不填门牌也可以继续录入</text><button @click="structureStep = ''">暂不选择</button></view
+            ><view v-if="!hasDoorplateCatalog || doorplateEntryMode === 'manual'" class="manual-doorplate-entry"><text v-if="!hasDoorplateCatalog">该小区暂无门牌库数据，可直接自定义填写。</text><text v-else>当前步骤：{{ structureStep === 'building' ? '楼栋' : structureStep === 'unit' ? '单元' : '房号' }}</text><input v-model="manualDoorplate" maxlength="24" :placeholder="structureStep === 'building' ? '输入楼栋，如 3' : structureStep === 'unit' ? '输入单元，如 1' : '输入房号，如 3301'" @confirm="confirmManualDoorplate" /><button :disabled="!manualDoorplate.trim()" @click="confirmManualDoorplate">{{ structureStep === 'room' ? '确认房号' : '确认并继续' }}</button></view
+            ><view v-else-if="doorplateEntryMode === 'catalog' && structureStep === 'building'" class="structure-grid"><view v-for="rule in buildingOptions" :key="rule" class="structure-grid-item" :class="{ active: buildingNo === rule }" @click="selectBuildingRule(rule)">{{ rule }}</view></view
+            ><view v-else-if="doorplateEntryMode === 'catalog' && structureStep === 'unit'" class="structure-grid"><view v-for="unit in unitOptions" :key="unit" class="structure-grid-item" :class="{ active: unitNo === unit }" @click="chooseUnit(unit)">{{ unit }} 单元</view></view
+            ><view v-else-if="doorplateEntryMode === 'catalog'" class="structure-grid"><view v-for="room in roomOptions" :key="room.roomNo" class="structure-grid-item" :class="{ active: roomNo === room.roomNo }" @click="chooseRoom(room)">{{ room.roomNo }}</view></view
+          ></scroll-view
+          ><view class="structure-sheet-footer"><button v-if="structureStep === 'unit'" @click="chooseUnit('')">无单元，跳过</button><text>不填门牌也可以继续录入</text><button @click="structureStep = ''">暂不选择</button></view
         ></view
       ></view
       ></template
     ></view
   >
 </template>
-<style scoped>
-.editor-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin: -28rpx -32rpx 0;
-  padding: 38rpx 32rpx 64rpx;
-  border-radius: 0 0 44rpx 44rpx;
-  background:
-    radial-gradient(
-      circle at 88% 10%,
-      rgba(229, 196, 133, 0.22),
-      transparent 38%
-    ),
-    #29382d;
-  color: #fff;
-}
-.editor-hero view:first-child > text,
-.editor-hero small {
-  display: block;
-}
-.editor-hero view:first-child > text {
-  font-size: 42rpx;
-  font-weight: 800;
-  letter-spacing: -1rpx;
-}
-.editor-hero small {
-  margin-top: 10rpx;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 22rpx;
-  line-height: 1.55;
-}
-.completion {
-  flex: none;
-  text-align: right;
-}
-.completion strong,
-.completion small {
-  display: block;
-}
-.completion strong {
-  color: #f0cf8d;
-  font-size: 36rpx;
-  font-variant-numeric: tabular-nums;
-}
-.completion small {
-  margin-top: 2rpx;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 19rpx;
-}
-.step-nav {
-  position: relative;
-  z-index: 2;
-  width: auto;
-  margin: -36rpx 0 24rpx;
-  border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 18rpx 42rpx rgba(23, 63, 60, 0.12);
-}
-.step-track {
-  display: flex;
-  min-width: 800rpx;
-  padding: 14rpx 10rpx;
-}
-.step-item {
-  display: flex;
-  width: 160rpx;
-  min-width: 160rpx;
-  flex: none;
-  align-items: center;
-  gap: 8rpx;
-  padding: 12rpx 10rpx;
-  color: #879183;
-}
-.step-item text {
-  display: flex;
-  width: 34rpx;
-  height: 34rpx;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #edf4f1;
-  font-size: 19rpx;
-  font-weight: 700;
-}
-.step-item small {
-  font-size: 20rpx;
-  white-space: nowrap;
-}
-.step-item.active {
-  color: #29382d;
-  font-weight: 700;
-}
-.step-item.active text {
-  background: #29382d;
-  color: #fff;
-}
-.step-item.done:not(.active) text {
-  background: #e7edcf;
-  color: #40543f;
-}
-.loading {
-  text-align: center;
-  color: #7e887d;
-}
-.section-card {
-  margin-bottom: 20rpx;
-  padding: 34rpx 30rpx 40rpx;
-  border-radius: 26rpx;
-  background: #fff;
-  box-shadow: 0 12rpx 36rpx rgba(23, 63, 60, 0.055);
-}
-.section-head {
-  display: flex;
-  align-items: center;
-  gap: 18rpx;
-  margin-bottom: 18rpx;
-}
-.section-head > text {
-  display: flex;
-  width: 52rpx;
-  height: 52rpx;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14rpx;
-  background: #eef2e7;
-  color: #40543f;
-  font-size: 21rpx;
-  font-weight: 800;
-}
-.section-head strong,
-.section-head small {
-  display: block;
-}
-.section-head strong {
-  color: #29382d;
-  font-size: 30rpx;
-}
-.section-head small {
-  margin-top: 5rpx;
-  color: #7e887d;
-  font-size: 21rpx;
-}
-.field {
-  margin-top: 18rpx;
-  padding: 20rpx 22rpx;
-  border: 1rpx solid #e3eeea;
-  border-radius: 16rpx;
-  background: #fbfdfc;
-}
-.field > text {
-  display: block;
-  margin-bottom: 12rpx;
-  color: #6d8e89;
-  font-size: 21rpx;
-  font-weight: 600;
-}
-.field input {
-  width: 100%;
-  color: #29382d;
-  font-size: 27rpx;
-}
-.auto-title {
-  background: #f1f7f4;
-}
-.auto-title strong {
-  display: block;
-  overflow: hidden;
-  color: #29382d;
-  font-size: 28rpx;
-  font-weight: 750;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.auto-title small {
-  display: block;
-  margin-top: 8rpx;
-  color: #7d9992;
-  font-size: 20rpx;
-}
-.final-title-composer { margin-top:18rpx; }
-.final-title-composer .auto-title { margin-top:18rpx;padding:18rpx;border-radius:14rpx; }
-.final-title-composer .auto-title text { display:block;margin-bottom:8rpx;color:#6d8e89;font-size:20rpx;font-weight:600; }
-.final-review { margin:18rpx 30rpx 0;padding:22rpx;border-radius:18rpx;background:#f7faf8;border:1rpx solid #e1ece8; }
-.final-review-head { display:flex;align-items:flex-start;justify-content:space-between;gap:20rpx; }
-.final-review-head strong,.final-review-head small { display:block; }
-.final-review-head strong { color:#29382d;font-size:25rpx; }
-.final-review-head small { margin-top:5rpx;color:#7b9790;font-size:19rpx; }
-.final-review-head>text { padding:5rpx 12rpx;border-radius:20rpx;background:#e7edcf;color:#40543f;font-size:20rpx;font-weight:800; }
-.final-review-grid { display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:18rpx; }
-.final-review-grid>view { min-width:0;padding:14rpx;border-radius:12rpx;background:#fff;color:#879183; }
-.final-review-grid>view.ready { background:#eef2e7;color:#52644c; }
-.final-review-grid text,.final-review-grid small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.final-review-grid text { font-size:20rpx;font-weight:700; }
-.final-review-grid small { margin-top:5rpx;font-size:18rpx; }
-.listing-compare{margin-top:18rpx;padding-top:18rpx;border-top:1rpx solid #e2ebe6}.listing-compare-head strong,.listing-compare-head small{display:block}.listing-compare-head strong{color:#31463d;font-size:23rpx}.listing-compare-head small{margin-top:5rpx;color:#7b9187;font-size:18rpx}.review-list-card{position:relative;padding:14rpx;border:1rpx solid #e4ebe5;border-radius:18rpx;background:#fff;box-shadow:0 8rpx 18rpx rgba(31,55,43,.04)}.review-list-card.current{border-color:#8fa68c;box-shadow:0 0 0 3rpx rgba(100,133,96,.12)}.admin-review-card{background:#f7faf8}.preview-current-label{position:absolute;z-index:2;top:8rpx;right:8rpx;padding:3rpx 7rpx;border-radius:6rpx;background:#40543f;color:#fff;font-size:15rpx;font-weight:800}.review-card-main{display:flex;gap:13rpx;min-height:154rpx}.review-cover{position:relative;flex:none;overflow:hidden;width:178rpx;height:154rpx;border-radius:12rpx;background:#e8eee4;color:#587062}.review-cover image{width:100%;height:100%}.review-cover>text{display:flex;height:100%;align-items:center;justify-content:center;font-size:22rpx;font-weight:800}.review-cover i{position:absolute;top:9rpx;left:9rpx;padding:4rpx 8rpx;border-radius:7rpx;background:#118f80;color:#fff;font-size:18rpx;font-style:normal;font-weight:800}.review-copy{display:flex;min-width:0;flex:1;flex-direction:column}.review-copy>strong,.review-copy>small{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.review-copy>strong{color:#293b31;font-size:24rpx;line-height:1.28;font-weight:800}.review-copy>small{margin-top:6rpx;color:#7a877f;font-size:18rpx;line-height:1.25}.review-copy .review-admin-doorplate{margin-top:6rpx;color:#426258;font-weight:700}.review-tags{display:flex;gap:6rpx;overflow:hidden;margin-top:8rpx;white-space:nowrap}.review-tags text{flex:none;padding:3rpx 7rpx;border-radius:6rpx;font-size:16rpx;line-height:1.35}.review-primary-tags text{background:#edf3e7;color:#577049}.review-secondary-tags text{background:#fff0e9;color:#c26b54}.preview-rent{display:inline-flex;align-items:baseline;white-space:nowrap}.review-copy .preview-rent{margin-top:auto;color:#d86749;font-size:29rpx;line-height:1;font-weight:800}.review-copy .preview-rent em{margin-left:3rpx;color:#7b817a;font-size:17rpx;font-style:normal;font-weight:500}
-.review-masonry-card{position:relative;overflow:hidden;border:1rpx solid #e9e2d8;border-radius:14rpx;background:#fffdf9;box-shadow:0 6rpx 14rpx rgba(55,65,50,.05)}.review-masonry-card.current{border-color:#8fa68c;box-shadow:0 0 0 3rpx rgba(100,133,96,.12)}.review-masonry-cover{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;background:#e8eee4;color:#587062}.review-masonry-cover image{width:100%;height:100%}.review-masonry-cover>text{display:flex;height:100%;align-items:center;justify-content:center;font-size:26rpx;font-weight:800}.review-masonry-cover i{position:absolute;top:9rpx;left:9rpx;padding:4rpx 8rpx;border-radius:7rpx;background:#40543f;color:#fff;font-size:17rpx;font-style:normal;font-weight:800}.review-masonry-cover>b{position:absolute;top:50%;left:50%;display:grid;width:42rpx;height:42rpx;place-items:center;border:1rpx solid rgba(255,255,255,.8);border-radius:50%;background:rgba(31,44,35,.56);color:#fff;font-size:20rpx;transform:translate(-50%,-50%);padding-left:2rpx;box-sizing:border-box}.review-masonry-copy{padding:12rpx}.review-masonry-copy>strong{display:-webkit-box;overflow:hidden;color:#293b31;font-size:22rpx;font-weight:800;line-height:1.3;-webkit-box-orient:vertical;-webkit-line-clamp:2}.review-masonry-copy .review-tags{flex-wrap:wrap;max-height:52rpx;white-space:normal}.review-masonry-copy>.preview-rent{margin-top:12rpx;color:#d86749;font-size:26rpx;font-style:normal;font-weight:800;line-height:1}.review-masonry-copy>.preview-rent small{margin-left:3rpx;color:#7b817a;font-size:16rpx;font-weight:500}.sample-cover{display:flex;align-items:center;justify-content:center;width:100%;color:#fff;font-size:20rpx;font-weight:800}.sample-cover-one{background:linear-gradient(140deg,#9cad9d,#536b5d)}.sample-cover-two{background:linear-gradient(140deg,#dfb083,#b9755e)}
-.review-perspective-switch{display:flex;gap:8rpx;margin-top:16rpx;padding:6rpx;border-radius:14rpx;background:#edf2eb}.review-perspective-switch>view{flex:1;padding:12rpx 8rpx;border-radius:10rpx;color:#738073;font-size:21rpx;font-weight:700;text-align:center}.review-perspective-switch>view.active{background:#40543f;color:#fff;box-shadow:0 4rpx 10rpx rgba(47,69,52,.14)}.customer-masonry-stage{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:max-content;gap:16rpx;height:100%;padding:8rpx;box-sizing:border-box}.customer-masonry-stage .review-masonry-card{min-width:0}.admin-list-stage{display:flex;flex-direction:column;gap:14rpx;height:100%;padding:8rpx;box-sizing:border-box}.admin-list-stage .review-list-card{flex:1;min-height:0}.admin-list-stage .review-card-main{height:100%;min-height:0}.admin-list-stage .review-cover{width:150rpx;height:auto;min-height:130rpx}.admin-list-stage .review-copy>strong{font-size:22rpx}.admin-list-stage .review-copy>small{margin-top:4rpx;font-size:17rpx}.admin-list-stage .review-tags{margin-top:5rpx}.admin-list-stage .review-copy .preview-rent{font-size:25rpx}
-.review-preview-swiper{height:760rpx}.review-preview-item{box-sizing:border-box;padding-top:1rpx}
-/* Preview cards deliberately use the production listing measurements. Only the
-   data set is capped; a preview must not become a third card design. */
-.review-preview-swiper{height:920rpx}.admin-list-stage{height:auto;gap:18rpx}.admin-list-stage .review-list-card{flex:none;min-height:0;padding:14rpx;border-color:#e5e9df;border-radius:22rpx;background:#fffefa}.admin-list-stage .review-card-main{height:auto;min-height:244rpx;align-items:flex-start;gap:16rpx}.admin-list-stage .review-cover{width:276rpx;height:208rpx;min-height:0;border-radius:16rpx}.admin-list-stage .review-copy{min-height:244rpx}.admin-list-stage .review-copy>strong{font-size:30rpx;line-height:1.33}.admin-list-stage .review-copy>small{margin-top:8rpx;font-size:22rpx;line-height:1.35}.admin-list-stage .review-copy .review-admin-doorplate{padding:5rpx 9rpx;border:1rpx solid #d8e2d2;border-radius:8rpx;background:#f3f7ee;color:#40543f;font-size:19rpx;line-height:1.2}.admin-list-stage .review-tags{gap:8rpx;margin-top:8rpx}.admin-list-stage .review-tags text{padding:4rpx 8rpx;border-radius:8rpx;font-size:19rpx;line-height:1.1}.admin-list-stage .review-copy .preview-rent{font-size:35rpx;line-height:1}.admin-list-stage .preview-rent em{font-size:19rpx}.customer-masonry-stage{gap:16rpx}.customer-masonry-stage .review-masonry-card{border-radius:20rpx;box-shadow:0 7rpx 18rpx rgba(55,65,50,.05)}.review-masonry-cover{background:#dde5d4}.review-masonry-copy{padding:15rpx 14rpx 16rpx}.review-masonry-copy>strong{font-size:26rpx;line-height:1.35}.review-masonry-copy .review-tags{gap:6rpx;margin-top:10rpx}.review-masonry-copy .review-tags text{padding:5rpx 7rpx;border-radius:6rpx;font-size:17rpx;line-height:1.15}.review-masonry-copy>.preview-rent{margin-top:14rpx;color:#d76440;font-size:30rpx}.review-masonry-copy>.preview-rent small{font-size:18rpx}.review-masonry-copy .review-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}
-.preview-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:28rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:17rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.review-masonry-cover .preview-current-label{top:10rpx;right:10rpx}
-/* These mirror the canonical cards in pages/home/index.vue; only the preview
-   data source is limited. Keep these values in lockstep with the home cards. */
-.preview-home-masonry{display:flex;align-items:flex-start;gap:16rpx;padding:8rpx}.preview-home-masonry-column{min-width:0;flex:1}.preview-home-masonry-card{position:relative;overflow:hidden;margin-bottom:16rpx;border:1rpx solid #e9e2d8;border-radius:20rpx;background:#fffdf9;box-shadow:0 7rpx 18rpx rgba(55,65,50,.05)}.preview-home-masonry-card.current{border-color:#8fa68c;box-shadow:0 0 0 3rpx rgba(100,133,96,.12)}.preview-home-masonry-cover{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;background:#dfd4be}.preview-home-masonry-cover image{width:100%;height:100%}.preview-home-masonry-cover>text{display:grid;width:100%;height:100%;place-items:center;color:#fff;font-size:25rpx}.preview-listing-status{position:absolute;top:12rpx;left:12rpx;padding:7rpx 11rpx;border-radius:10rpx;background:#167b70;color:#fff;font-size:20rpx;font-weight:700;line-height:1.1}.preview-home-video-play,.preview-admin-video-play{position:absolute;top:50%;left:50%;display:grid;width:62rpx;height:62rpx;place-items:center;border:2rpx solid rgba(255,255,255,.88);border-radius:50%;box-sizing:border-box;background:rgba(28,38,30,.5);color:#fff;font-size:28rpx;line-height:1;transform:translate(-50%,-50%);padding-left:4rpx}.preview-home-cover-location,.preview-admin-cover-location{position:absolute;right:0;bottom:0;left:0;overflow:hidden;padding:28rpx 10rpx 8rpx;background:linear-gradient(transparent,rgba(28,38,30,.68));color:#fff;font-size:17rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.preview-home-masonry-copy{padding:15rpx 14rpx 16rpx}.preview-home-listing-title{display:-webkit-box;overflow:hidden;max-width:100%;color:#2d3d30;font-size:26rpx;font-weight:800;line-height:1.35;text-overflow:ellipsis;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}.preview-home-masonry-tags{display:flex;flex-wrap:wrap;gap:6rpx;margin-top:10rpx}.preview-home-masonry-tags text{padding:5rpx 7rpx;border-radius:6rpx;background:#edf0dc;color:#536a45;font-size:17rpx;line-height:1.15}.preview-home-masonry-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}.preview-listing-price{display:inline-flex;align-items:baseline;gap:3rpx;margin-top:14rpx;color:#d76440;font-size:30rpx;font-weight:800;line-height:1;white-space:nowrap}.preview-listing-price text{color:#8a8f85;font-size:18rpx;font-weight:400}.preview-home-masonry-card .preview-current-label{top:10rpx;right:10rpx}
-.preview-admin-list{padding:8rpx}.preview-admin-listing{position:relative;display:flex;gap:18rpx;height:232rpx;margin-bottom:18rpx;padding:12rpx;box-sizing:border-box;border:1rpx solid #e9e1d7;border-radius:22rpx;background:#fffdf9;box-shadow:0 8rpx 22rpx rgba(91,69,44,.055)}.preview-admin-listing.current{border-color:#8fa68c;box-shadow:0 0 0 3rpx rgba(100,133,96,.12)}.preview-admin-image{position:relative;flex:none;width:248rpx;height:208rpx;overflow:hidden;border-radius:16rpx;background:#dde5d4}.preview-admin-image image{width:100%;height:100%}.preview-admin-image>text{display:grid;width:100%;height:100%;place-items:center;color:#fff;font-size:25rpx}.preview-admin-info{display:flex;min-width:0;flex:1;height:208rpx;flex-direction:column;padding:5rpx 5rpx 4rpx 0;box-sizing:border-box}.preview-admin-info .preview-home-listing-title{font-size:30rpx;line-height:1.33;white-space:nowrap}.preview-admin-doorplate{display:block;overflow:hidden;margin-top:8rpx;padding:5rpx 9rpx;border:1rpx solid #d8e2d2;border-radius:8rpx;background:#f3f7ee;color:#40543f;font-size:19rpx;font-weight:700;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}.preview-admin-tags{display:flex;flex-direction:column;align-items:flex-start;gap:5rpx;margin-top:8rpx}.preview-tags{display:flex;max-width:100%;gap:8rpx;overflow:hidden;white-space:nowrap}.preview-tags text{flex:none;padding:4rpx 8rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;line-height:1.1}.preview-tags.fee text{background:#f8eadf;color:#b7644b}.preview-admin-info .preview-listing-price{margin-top:auto;color:#d66d50;font-size:35rpx;line-height:1.1}.preview-admin-info .preview-listing-price text{font-size:19rpx}.preview-admin-listing .preview-current-label{top:10rpx;right:10rpx}.preview-admin-video-play{width:54rpx;height:54rpx;font-size:24rpx}.preview-admin-cover-location{padding:24rpx 10rpx 8rpx;font-size:18rpx}
-.draft-delete-link { display:block;margin-top:18rpx;color:#bd5a45;font-size:21rpx;text-align:center; }
-.title-part-list { display:flex;flex-wrap:wrap;gap:10rpx;margin-top:16rpx; }
-.title-part { display:flex;align-items:center;overflow:hidden;border:1rpx solid #dfe5da;border-radius:11rpx;background:#fff;color:#708a84;font-size:20rpx; }
-.title-part.active { border-color:#cbd7c1;background:#eef2e7;color:#40543f;font-weight:700; }
-.title-part-name { display:flex;align-items:center;gap:7rpx;padding:10rpx 12rpx; }
-.title-part-name text { display:flex;width:26rpx;height:26rpx;align-items:center;justify-content:center;border-radius:50%;background:#f0f4f2;color:#7e887d;font-size:18rpx; }
-.title-part.active .title-part-name text { background:#40543f;color:#fff; }
-.rent-type-tabs { display:grid;grid-template-columns:1fr 1fr;gap:12rpx;padding:8rpx;border-radius:18rpx;background:#eef5f2; }
-.rent-type-tabs>view { padding:18rpx 20rpx;border-radius:13rpx;background:transparent;color:#6f7b6c; }
-.rent-type-tabs>view.active { background:#40543f;color:#fff;box-shadow:0 8rpx 16rpx rgba(64,84,63,.18); }
-.rent-type-tabs strong,.rent-type-tabs small { display:block; }
-.rent-type-tabs strong { font-size:27rpx;line-height:1.25; }
-.rent-type-tabs small { margin-top:5rpx;font-size:19rpx;opacity:.78; }
-.listing-source { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:16rpx;padding:16rpx 18rpx;border:1rpx solid #e1ece8;border-radius:16rpx;background:#fbfdfc; }
-.listing-source>text { flex:none;color:#6d8e89;font-size:21rpx;font-weight:700; }
-.listing-source-options { display:flex;gap:10rpx; }
-.listing-source-options>view { display:flex;align-items:center;justify-content:center;min-width:106rpx;height:54rpx;padding:0 12rpx;box-sizing:border-box;border:1rpx solid #dfe5da;border-radius:10rpx;color:#6f7b6c;font-size:22rpx;font-weight:700; }
-.listing-source-options>view.active { border-color:#40543f;background:#40543f;color:#fff; }
-.listing-source-options text { display:inline-block;min-width:22rpx;margin-right:4rpx; }
-.layout-guidance { margin:14rpx 2rpx 18rpx;color:#76918b;font-size:20rpx;line-height:1.5; }
-.auto-floor strong { display:block;color:#52644c;font-size:26rpx;line-height:1.4; }
-.option-field checkbox-group { display:block; }
-.option-field label { display:flex;align-items:center;gap:8rpx;color:#52644c;font-size:25rpx;font-weight:700; }
-.option-field checkbox { transform:scale(.88);margin-right:2rpx; }
-.utility-summary strong { display:block;color:#52644c;font-size:25rpx;line-height:1.4; }
-.term-block { margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #e3eeea;border-radius:16rpx;background:#fbfdfc; }
-.term-block>text { display:block;margin-bottom:14rpx;color:#6d8e89;font-size:21rpx;font-weight:600; }
-.transfer-settlement { margin-top:18rpx;padding:20rpx 22rpx;border:1rpx solid #d8e1d1;border-radius:16rpx;background:#f4fbf8; }
-.transfer-heading { display:flex;align-items:flex-start;justify-content:space-between;gap:16rpx; }
-.transfer-heading strong,.transfer-heading small { display:block; }
-.transfer-heading strong { color:#29382d;font-size:25rpx; }
-.transfer-heading small { margin-top:5rpx;color:#7e887d;font-size:19rpx;line-height:1.4; }
-.transfer-heading>text { padding:4rpx 12rpx;border-radius:20rpx;background:#e7edcf;color:#40543f;font-size:19rpx;font-weight:800; }
-.transfer-choice { display:flex;align-items:center;justify-content:space-between;gap:12rpx;margin-top:18rpx; }
-.transfer-choice>text { flex:none;color:#6d8e89;font-size:21rpx;font-weight:700; }
-.transfer-choice>view { display:flex;flex:1;justify-content:flex-end;gap:8rpx; }
-.transfer-choice button { min-width:0;height:54rpx;line-height:54rpx;margin:0;padding:0 12rpx;border:1rpx solid #dfe5da;border-radius:10rpx;background:#fff;color:#64705f;font-size:19rpx;font-weight:700; }
-.transfer-choice button::after { border:0; }
-.transfer-choice button.active { border-color:#40543f;background:#40543f;color:#fff; }
-.transfer-stepper>view { align-items:center; }
-.transfer-stepper button { flex:none;min-width:54rpx;padding:0;font-size:25rpx; }
-.transfer-stepper input { width:74rpx;height:54rpx;box-sizing:border-box;border:1rpx solid #dfe5da;border-radius:10rpx;background:#fff;color:#29382d;font-size:21rpx;font-weight:700;text-align:center; }
-.transfer-stepper>view>text { color:#64705f;font-size:20rpx;font-weight:700; }
-.transfer-summary { margin-top:18rpx;padding:14rpx 16rpx;border-radius:12rpx;background:#fff; }
-.transfer-summary small,.transfer-summary strong { display:block; }
-.transfer-summary small { color:#7e887d;font-size:19rpx; }
-.transfer-summary strong { margin-top:5rpx;color:#52644c;font-size:23rpx;line-height:1.4; }
-.payment-options { display:grid;grid-template-columns:repeat(5,1fr);gap:10rpx; }
-.payment-options>view { display:flex;min-height:58rpx;align-items:center;justify-content:center;border:1rpx solid #dfe5da;border-radius:10rpx;background:#fff;color:#5d7973;font-size:21rpx;font-weight:700; }
-.payment-options .payment-fixed { border-color:#d8e1d1;background:#eef2e7;color:#40543f; }
-.payment-options>view.active { border-color:#40543f;background:#40543f;color:#fff; }
-.utility-options { display:grid;grid-template-columns:1fr 1fr;gap:10rpx; }
-.utility-options label { display:flex;align-items:center;min-height:64rpx;box-sizing:border-box;padding:0 12rpx;border:1rpx solid #dfe5da;border-radius:11rpx;background:#fff;color:#5d7973;font-size:20rpx;line-height:1.25; }
-.utility-options label.active { border-color:#40543f;background:#eef2e7;color:#40543f;font-weight:700; }
-.utility-options radio { transform:scale(.78);margin-right:0; }
-.rent-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14rpx;
-}
-.unit-selector-card { display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin-top:18rpx;padding:16rpx 20rpx;border:1rpx solid #dfe5da;border-radius:16rpx;background:#fbfdfc; }
-.unit-selector-card.selected { border-color:#cbd7c1;background:#eef2e7;box-shadow:0 8rpx 18rpx rgba(64,84,63,.08); }
-.unit-selector-card strong,.unit-selector-card text { display:block; }
-.unit-selector-card strong { color:#63817a;font-size:21rpx;font-weight:600; }
-.unit-selector-card strong small { margin-left:8rpx;color:#8aa39d;font-size:19rpx;font-weight:500; }
-.unit-selector-card text { margin-top:5rpx;color:#52644c;font-size:24rpx;font-weight:700; }
-.unit-selector-card b { flex:none;color:#40543f;font-size:22rpx;font-weight:700; }
-.structure-modal { position:fixed;z-index:1000;top:0;right:0;bottom:0;left:0;display:flex;align-items:flex-end;background:rgba(8,32,29,.46); }
-.structure-sheet { width:100%;max-height:78vh;border-radius:30rpx 30rpx 0 0;background:#fff;box-shadow:0 -16rpx 40rpx rgba(5,35,31,.16); }
-.structure-sheet-head { display:flex;align-items:flex-start;justify-content:space-between;padding:30rpx 30rpx 20rpx; }
-.structure-sheet-head strong,.structure-sheet-head small { display:block; }
-.structure-sheet-head strong { color:#29382d;font-size:32rpx; }
-.structure-sheet-head small { margin-top:7rpx;color:#81948f;font-size:20rpx; }
-.structure-head-actions { display:flex;align-items:center;gap:12rpx; }
-.structure-back { padding:0 16rpx;border-radius:24rpx;background:#eef2e7;color:#40543f;font-size:21rpx;font-weight:700;line-height:48rpx; }
-.structure-close { width:48rpx;height:48rpx;line-height:44rpx;text-align:center;border-radius:50%;background:#f0f5f2;color:#527069;font-size:38rpx; }
-.structure-progress { display:grid;grid-template-columns:repeat(4,1fr);gap:8rpx;margin:0 30rpx;padding:12rpx;border-radius:14rpx;background:#f3f7f5; }
-.structure-progress-three { grid-template-columns:repeat(3,1fr); }
-.structure-progress text { text-align:center;color:#91a59f;font-size:20rpx; }
-.structure-progress text.available { color:#55766f;text-decoration:underline; }
-.structure-progress text.active { color:#40543f;font-weight:800; }
-.structure-grid-scroll { height:500rpx;padding:24rpx 30rpx;box-sizing:border-box; }
-.structure-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16rpx; }
-.structure-grid-item { display:flex;min-height:66rpx;align-items:center;justify-content:center;padding:0 8rpx;border-radius:10rpx;background:#f3f5f5;color:#294d47;font-size:22rpx;font-weight:700; }
-.structure-grid-item.active { background:#40543f;color:#fff;box-shadow:0 8rpx 16rpx rgba(64,84,63,.2); }
-.structure-sheet-footer { display:flex;align-items:center;justify-content:space-between;gap:16rpx;padding:20rpx 30rpx calc(20rpx + env(safe-area-inset-bottom));border-top:1rpx solid #edf2f0; }
-.structure-sheet-footer text { color:#829691;font-size:19rpx; }
-.structure-sheet-footer button { min-width:150rpx;margin:0;border:0;border-radius:12rpx;background:#edf4f1;color:#37675f;font-size:22rpx;line-height:68rpx; }
-.rule-setup { margin-top:14rpx;padding:16rpx;border-radius:12rpx;background:#eef5f2; }
-.rule-setup-head text,.rule-setup-head small { display:block; }
-.rule-setup-head text { color:#315b54;font-size:21rpx;font-weight:700; }
-.rule-setup-head small { margin-top:5rpx;color:#7e887d;font-size:18rpx; }
-.rule-inputs { display:grid;grid-template-columns:repeat(4,1fr);gap:8rpx;margin-top:14rpx; }
-.rule-inputs>view { padding:10rpx;border-radius:10rpx;background:#fff; }
-.rule-inputs small { display:block;color:#7e887d;font-size:17rpx; }
-.rule-inputs input { height:38rpx;margin-top:4rpx;color:#29382d;font-size:22rpx; }
-.rule-setup button { margin:14rpx 0 0;border:0;border-radius:10rpx;background:#40543f;color:#fff;font-size:21rpx;line-height:62rpx; }
-.structure-setup-trigger { display:flex;align-items:center;justify-content:space-between;gap:14rpx;margin-top:14rpx;padding:16rpx 2rpx;color:#6f7b6c;font-size:20rpx; }
-.structure-setup-trigger b { color:#40543f;font-size:20rpx;font-weight:700; }
-.detail-row{margin-top:14rpx}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx;margin-top:16rpx}.detail-grid .field{margin-top:0}.detail-grid .metro-field{grid-column:span 2}
-.channel-scope {
-  margin-top: 16rpx;
-}
-.scope-heading { display:flex;align-items:baseline;justify-content:space-between;gap:14rpx;margin-bottom:12rpx; }
-.scope-heading text { color:#52644c;font-size:24rpx;font-weight:700; }
-.scope-heading small { color:#879183;font-size:19rpx; }
-.auto-channel-picker { border-color:#d8e1d1;background:#eef2e7; }
-.map-toggle { display:flex;align-items:center;justify-content:space-between;gap:14rpx;margin-top:12rpx;padding:0 6rpx;color:#40543f;font-size:21rpx;font-weight:700; }
-.map-toggle small { color:#7e887d;font-size:19rpx;font-weight:500; }
-.map-section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-top: 34rpx;
-}
-.map-section-heading strong,
-.map-section-heading small {
-  display: block;
-}
-.map-section-heading strong {
-  color: #29382d;
-  font-size: 30rpx;
-}
-.map-section-heading small {
-  margin-top: 7rpx;
-  color: #86a19c;
-  font-size: 20rpx;
-}
-.map-section-heading > text {
-  flex: none;
-  padding-top: 4rpx;
-  color: #40543f;
-  font-size: 23rpx;
-  font-weight: 700;
-}
-.community-heading { margin-top: 4rpx; }
-.community-search { margin-top: 14rpx; }
-.selected-community {
-  margin-top: 10rpx;
-  padding: 14rpx 16rpx;
-  border-radius: 12rpx;
-  background: #eef2e7;
-  color: #40543f;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-.title-composer {
-  margin-top: 18rpx;
-  padding: 20rpx;
-  border-radius: 16rpx;
-  background: #f7faf8;
-}
-.title-composer > view strong,
-.title-composer > view small { display: block; }
-.title-composer > view strong { color: #29382d; font-size: 24rpx; }
-.title-composer > view small { margin-top: 6rpx; color: #7e887d; font-size: 19rpx; }
-.title-composer checkbox-group { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
-.title-composer label {
-  display: flex;
-  align-items: center;
-  gap: 4rpx;
-  padding: 8rpx 12rpx;
-  border-radius: 10rpx;
-  background: #fff;
-  color: #637b76;
-  font-size: 20rpx;
-}
-.title-composer label.active { background: #e0f0eb; color: #0b766d; font-weight: 700; }
-.title-composer checkbox { transform: scale(.78); margin-right: -4rpx; }
-.location-search {
-  position: relative;
-  z-index: 3;
-  margin-top: 18rpx;
-}
-.location-search-box {
-  display: flex;
-  height: 82rpx;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 12rpx;
-  padding: 0 20rpx;
-  border: 1rpx solid #dbe9e5;
-  border-radius: 16rpx;
-  background: #fbfdfc;
-}
-.location-search-box > text {
-  color: #40543f;
-  font-size: 32rpx;
-}
-.location-search-box input {
-  min-width: 0;
-  flex: 1;
-  color: #29382d;
-  font-size: 25rpx;
-}
-.location-search-box small {
-  flex: none;
-  color: #7e887d;
-  font-size: 19rpx;
-}
-.location-results {
-  margin-top: 8rpx;
-  overflow: hidden;
-  border: 1rpx solid #dbe9e5;
-  border-radius: 16rpx;
-  background: #fff;
-  box-shadow: 0 16rpx 36rpx rgba(23, 63, 60, 0.12);
-}
-.location-results > view {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  padding: 20rpx;
-  border-bottom: 1rpx solid #edf3f1;
-}
-.location-results > view:last-child {
-  border-bottom: 0;
-}
-.location-results strong,
-.location-results small {
-  display: block;
-}
-.location-results strong {
-  color: #29382d;
-  font-size: 24rpx;
-}
-.location-results small {
-  margin-top: 6rpx;
-  color: #7f9b96;
-  font-size: 20rpx;
-}
-.location-results > view > text {
-  flex: none;
-  color: #40543f;
-  font-size: 19rpx;
-}
-.location-search-tip {
-  padding: 12rpx 4rpx 0;
-  color: #8ba39f;
-  font-size: 19rpx;
-}
-.channel-scope > text {
-  display: block;
-  margin-bottom: 12rpx;
-  color: #4f7974;
-  font-size: 24rpx;
-  font-weight: 700;
-}
-.channel-picker {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx;
-  border: 0;
-  border-radius: 16rpx;
-  background: #eef2e7;
-}
-.channel-picker strong,
-.channel-picker small {
-  display: block;
-}
-.channel-picker strong {
-  color: #29382d;
-  font-size: 25rpx;
-}
-.channel-picker small {
-  margin-top: 6rpx;
-  color: #7e887d;
-  font-size: 20rpx;
-}
-.channel-picker > text {
-  color: #40543f;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-.map-picker {
-  margin: 14rpx 0 8rpx;
-  overflow: hidden;
-  border: 1rpx solid #dfeae6;
-  border-radius: 20rpx;
-  background: #f4fbf8;
-}
-.property-map {
-  width: 100%;
-  height: 330rpx;
-}
-.map-picker-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  padding: 20rpx;
-}
-.map-picker-footer > view {
-  min-width: 0;
-  flex: 1;
-}
-.map-picker-footer strong,
-.map-picker-footer small {
-  display: block;
-}
-.map-picker-footer strong {
-  color: #29382d;
-  font-size: 24rpx;
-}
-.map-picker-footer strong.warning {
-  color: #c36b2b;
-}
-.map-picker-footer small {
-  margin-top: 6rpx;
-  color: #7e887d;
-  font-size: 20rpx;
-  line-height: 1.45;
-}
-.map-picker-footer button {
-  flex: none;
-  margin: 0;
-  border: 0;
-  border-radius: 12rpx;
-  background: #40543f;
-  color: #fff;
-  font-size: 22rpx;
-}
-.map-hint {
-  flex: none;
-  color: #40543f;
-  font-size: 20rpx;
-}
-.delete-draft { color: #bd5a45 !important; background: #fff4f1 !important; }
-.rent-input {
-  display: flex;
-  align-items: center;
-}
-.rent-input input {
-  min-width: 0;
-  flex: 1;
-}
-.rent-input small {
-  flex: none;
-  color: #879183;
-  font-size: 21rpx;
-}
-.rent-summary { display:flex;align-items:baseline;gap:12rpx;margin-top:18rpx;padding:20rpx 22rpx;border-radius:16rpx;background:#f8f3ea; }
-.rent-summary text { color:#8a7b62;font-size:20rpx; }
-.rent-summary strong { color:#d95c38;font-size:32rpx;line-height:1;white-space:nowrap; }
-.rent-summary span { color:#667d76;font-size:21rpx; }
-.picker-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14rpx;
-}
-.whole-rental-options { grid-column:1 / -1;overflow:hidden;border:1rpx solid #e1ece8;border-radius:16rpx;background:#fbfdfc; }
-.whole-option-row { display:flex;align-items:center;justify-content:space-between;gap:18rpx;min-height:78rpx;padding:0 20rpx;border-bottom:1rpx solid #e8f0ed; }
-.whole-option-row:last-child { border-bottom:0; }
-.whole-option-row>text { flex:none;color:#66827b;font-size:22rpx;font-weight:700; }
-.whole-option-row>view { display:flex;align-items:center;justify-content:flex-end;gap:9rpx; }
-.whole-option-row button { min-width:58rpx;height:48rpx;line-height:48rpx;margin:0;padding:0 12rpx;border:1rpx solid #dfe5da;border-radius:10rpx;background:#fff;color:#64705f;font-size:21rpx;font-weight:700; }
-.whole-option-row button::after { border:0; }
-.whole-option-row button.active { border-color:#40543f;background:#40543f;color:#fff; }
-.whole-option-row input { width:64rpx;height:48rpx;box-sizing:border-box;padding:0 8rpx;border:1rpx solid #40543f;border-radius:10rpx;background:#fff;color:#29382d;font-size:21rpx;text-align:center; }
-.picker-item {
-  position: relative;
-  padding: 24rpx 22rpx;
-  text-align: left;
-  border: 1rpx solid #e1ece8;
-  border-radius: 16rpx;
-  background: #fbfdfc;
-}
-.picker-item strong,
-.picker-item small {
-  display: block;
-}
-.picker-item strong {
-  color: #29382d;
-  font-size: 28rpx;
-}
-.picker-item small {
-  margin-top: 6rpx;
-  color: #86a19c;
-  font-size: 20rpx;
-}
-.shared-checkbox-item checkbox-group { margin-top:16rpx; }
-.shared-checkbox-item label { display:flex;align-items:center;gap:8rpx;color:#52644c;font-size:25rpx;font-weight:700; }
-.shared-rental-options { grid-column:1 / -1; }
-.shared-room-type { padding:22rpx;border:1rpx solid #e1ece8;border-radius:16rpx;background:#fbfdfc; }
-.shared-room-type > small { display:block;color:#6d8e89;font-size:20rpx;font-weight:600; }
-.shared-room-type-options { display:grid;grid-template-columns:repeat(4,1fr);gap:10rpx;margin-top:16rpx; }
-.shared-room-type-options label { display:flex;align-items:center;justify-content:center;gap:4rpx;min-height:56rpx;border:1rpx solid #dfe5da;border-radius:10rpx;background:#fff;color:#5e6d59;font-size:21rpx; }
-.shared-room-type-options label.active { border-color:#c9d5bb;background:#eef2e7;color:#40543f;font-weight:700; }
-.shared-feature-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:14rpx;margin-top:14rpx; }
-.layout-preview {
-  margin-top: 22rpx;
-  padding: 22rpx;
-  border-left: 6rpx solid #d9b876;
-  border-radius: 4rpx 16rpx 16rpx 4rpx;
-  background: #f7f4ed;
-}
-.layout-preview text,
-.layout-preview strong {
-  display: block;
-}
-.layout-preview text {
-  color: #7e887d;
-  font-size: 21rpx;
-}
-.layout-preview strong {
-  margin-top: 7rpx;
-  color: #52644c;
-  font-size: 24rpx;
-}
-.amenity-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12rpx;
-}
-.amenity-grid label {
-  display: flex;
-  min-height: 132rpx;
-  box-sizing: border-box;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  padding: 14rpx 8rpx 12rpx;
-  border: 1rpx solid #e2eeea;
-  border-radius: 16rpx;
-  color: #5f8580;
-  font-size: 23rpx;
-  text-align: center;
-}
-.amenity-grid label.active {
-  border-color: #c9d5bb;
-  background: #eef2e7;
-  color: #40543f;
-}
-.amenity-grid checkbox {
-  position: absolute;
-  width: 1rpx;
-  height: 1rpx;
-  opacity: 0;
-}
-.amenity-option-icon {
-  width: 48rpx;
-  height: 48rpx;
-  padding: 10rpx;
-  border-radius: 18rpx;
-  background: #f0f8f5;
-}
-.amenity-grid label.active .amenity-option-icon {
-  background: #d9f2ea;
-}
-.description {
-  position: relative;
-  margin-top: 22rpx;
-  padding: 18rpx;
-  border: 1rpx solid #e2ece9;
-  border-radius: 16rpx;
-  background: #fbfdfc;
-}
-.description textarea {
-  width: 100%;
-  height: 190rpx;
-  font-size: 26rpx;
-}
-.description > text {
-  position: absolute;
-  right: 16rpx;
-  bottom: 12rpx;
-  color: #9ab2ae;
-  font-size: 19rpx;
-}
-.media-guidance {
-  display: flex;
-  align-items: center;
-  gap: 14rpx;
-  margin-bottom: 20rpx;
-  padding: 16rpx 20rpx;
-  border-radius: 16rpx;
-  background: #f1f5ea;
-}
-.media-guidance strong {
-  color: #40543f;
-  font-size: 24rpx;
-}
-.media-guidance text {
-  color: #61705d;
-  font-size: 21rpx;
-}
-.uploaded-gallery,
-.pending-gallery,
-.video-preview-list {
-  margin-bottom: 24rpx;
-}
-.media-group-title {
-  display: block;
-  margin: 0 0 12rpx 2rpx;
-  color: #61705d;
-  font-size: 22rpx;
-  font-weight: 600;
-}
-.photo-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14rpx;
-}
-.photo-card {
-  position: relative;
-  height: 224rpx;
-  overflow: hidden;
-  border-radius: 18rpx;
-  background: #e6f3ef;
-}
-.photo-card.cover {
-  box-shadow: 0 0 0 3rpx #536a45;
-}
-.photo-card image {
-  width: 100%;
-  height: 100%;
-}
-.photo-card > text,
-.video-card > text {
-  position: absolute;
-  left: 8rpx;
-  bottom: 8rpx;
-  padding: 4rpx 8rpx;
-  border-radius: 8rpx;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  font-size: 18rpx;
-}
-.photo-card > .cover-mark {
-  background: rgba(54, 77, 48, 0.8);
-}
-.uploaded-photo { opacity: 0.9; }
-.media-tools {
-  position: absolute;
-  top: 8rpx;
-  right: 8rpx;
-  display: flex;
-  gap: 6rpx;
-}
-.media-tools text {
-  min-width: 42rpx;
-  height: 34rpx;
-  padding: 0 8rpx;
-  border-radius: 9rpx;
-  background: rgba(25, 33, 25, 0.66);
-  color: #fff;
-  font-size: 18rpx;
-  line-height: 34rpx;
-  text-align: center;
-}
-.media-tools .remove {
-  min-width: 34rpx;
-  padding: 0;
-  background: rgba(160, 62, 52, 0.82);
-  font-size: 28rpx;
-}
-.video-card {
-  position: relative;
-  height: 360rpx;
-  overflow: hidden;
-  border-radius: 18rpx;
-  background: #1e2825;
-}
-.video-entry + .video-entry { margin-top: 14rpx; }
-.video-card video {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.video-toggle {
-  width: 100%;
-  height: 72rpx;
-  margin: 12rpx 0 0;
-  border: 0;
-  border-radius: 14rpx;
-  background: #eef3eb;
-  color: #40543f;
-  font-size: 23rpx;
-  font-weight: 600;
-  line-height: 72rpx;
-}
-.media-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14rpx;
-}
-.media-actions > view {
-  padding: 26rpx 12rpx;
-  border: 2rpx dashed #b7dcd4;
-  border-radius: 16rpx;
-  text-align: center;
-}
-.media-actions strong,
-.media-actions small {
-  display: block;
-}
-.media-actions strong {
-  color: #40543f;
-  font-size: 24rpx;
-}
-.media-actions small {
-  margin-top: 8rpx;
-  color: #7e887d;
-  font-size: 20rpx;
-}
-.media-limit-hint {
-  padding: 24rpx 24rpx 0;
-  color: #91a19b;
-  font-size: 20rpx;
-  line-height: 1.45;
-  text-align: center;
-}
-.save-space {
-  height: 170rpx;
-}
-.save-bar {
-  position: fixed;
-  z-index: 5;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 -8rpx 28rpx rgba(15, 70, 65, 0.09);
-}
-.progress {
-  margin-bottom: 10rpx;
-  color: #40543f;
-  font-size: 21rpx;
-  text-align: center;
-}
-.save-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10rpx;
-}
-.save-actions.three-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.step-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
-  align-items: center;
-  gap: 14rpx;
-}
-.step-actions.three-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.step-actions button,
-.save-actions button {
-  height: 88rpx;
-  line-height: 88rpx;
-}
-.draft-link {
-  color: #5f807b;
-  font-size: 25rpx;
-  font-weight: 600;
-  text-align: center;
-}
-.back-button {
-  margin: 0;
-  border: 0;
-  border-radius: 16rpx;
-  background: #edf4f1;
-  color: #52644c;
-  font-size: 25rpx;
-}
-.step-save-button {
-  margin: 0;
-  border: 1rpx solid #bad5cf;
-  border-radius: 16rpx;
-  background: #f1f8f5;
-  color: #287a70;
-  font-size: 24rpx;
-  font-weight: 700;
-}
-.next-button {
-  margin: 0;
-  border: 0;
-  border-radius: 16rpx;
-  background: #29382d;
-  color: #fff;
-  font-size: 26rpx;
-  font-weight: 700;
-}
-.next-button:active,
-.back-button:active,
-.media-actions > view:active,
-.picker-item:active {
-  transform: scale(0.985);
-}
-.save-actions button {
-  margin: 0;
-  border: 0;
-  border-radius: 16rpx;
-  background: #eef2e7;
-  color: #40543f;
-  padding: 0 8rpx;
-  font-size: 22rpx;
-  white-space: nowrap;
-}
-.save-actions button::after {
-  border: 0;
-}
-.save-actions .primary {
-  background: #40543f;
-  color: #fff;
-}
-.save-actions button[disabled] {
-  opacity: 0.5;
-}
-.module-entry-disabled {
-  padding: 34rpx 26rpx;
-  border: 1rpx dashed #cfddd3;
-  border-radius: 18rpx;
-  background: #f7faf6;
-  color: #738073;
-  font-size: 25rpx;
-  line-height: 1.55;
-  text-align: center;
-}
-.editor-page .page-presentation-head{margin-bottom:26rpx}.editor-hero{margin:8rpx -32rpx 0;padding-top:34rpx;padding-bottom:58rpx}.step-nav{margin-top:-30rpx;margin-bottom:28rpx}.section-card{margin-bottom:24rpx;padding:36rpx 30rpx 42rpx}.section-head{margin-bottom:22rpx}.field{margin-top:20rpx;padding:22rpx}.map-section-heading{margin-top:38rpx;margin-bottom:18rpx}
-.cover-focus-control{margin-top:18rpx;padding:20rpx;border:1rpx solid #dfe9df;border-radius:16rpx;background:#f8fbf7}.cover-focus-control>view:first-child strong,.cover-focus-control>view:first-child text{display:block}.cover-focus-control>view:first-child strong{color:#385446;font-size:25rpx}.cover-focus-control>view:first-child text{margin-top:6rpx;color:#77877d;font-size:20rpx;line-height:1.4}.focus-options{display:flex;gap:14rpx;margin-top:16rpx}.focus-options>view{display:flex;min-width:0;flex:1;align-items:center;justify-content:space-between;padding:14rpx;border-radius:12rpx;background:#fff}.focus-options text{color:#75847a;font-size:21rpx}.focus-options picker{color:#365447;font-size:22rpx;font-weight:700}
-.editor-hero view:first-child>text{font-size:40rpx;line-height:1.25}.step-item small{font-size:21rpx;line-height:1.25}.section-head strong{font-size:33rpx;line-height:1.3}.field>text{font-size:25rpx;line-height:1.25}.field input{font-size:28rpx;line-height:1.4}.map-section-heading strong{font-size:32rpx;line-height:1.3}.location-search-box input{font-size:27rpx}.channel-scope>text{font-size:25rpx}.channel-picker{padding:22rpx}.channel-picker strong{font-size:28rpx;line-height:1.3}.channel-picker small{margin-top:7rpx;line-height:1.45}.map-picker-footer{padding:20rpx 22rpx}.map-picker-footer small{margin-top:8rpx;line-height:1.5}.picker-item{min-height:116rpx}.picker-item strong{font-size:29rpx;line-height:1.25}.picker-item small{margin-top:7rpx;line-height:1.2}
-</style>
+<style scoped src="./property-edit.css"></style>

@@ -25,12 +25,14 @@ const testAccounts = [
 ]
 const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
 
+const loginCopy = (fallback: string) => presentation.value.copy?.[fallback] || fallback
+
 onLoad(async (query) => {
 	resetReauthentication()
   const config = await loadPresentation()
   brandName.value = config?.heroTitle || brandName.value
   const reason = String(query?.reason || '')
-  loginReason.value = ['favorite', 'favorites'].includes(reason) ? '登录后查看并同步你的关注房源' : reason === 'footprints' ? '登录后查看最近浏览过的房源' : reason === 'area_subscription' ? '登录后预约该片区新房源' : reason === 'requests' ? '登录后查看你的预约与找房记录' : reason === 'expired' ? '登录状态已过期，请重新登录后继续' : loginReason.value
+  loginReason.value = loginCopy(['favorite', 'favorites'].includes(reason) ? '登录后查看并同步你的关注房源' : reason === 'footprints' ? '登录后查看最近浏览过的房源' : reason === 'area_subscription' ? '登录后预约该片区新房源' : reason === 'requests' ? '登录后查看你的预约与找房记录' : reason === 'expired' ? '登录状态已过期，请重新登录后继续' : '登录后可同步关注、足迹与找房进度')
 })
 onShow(() => {
   const croppedAvatar = String(uni.getStorageSync('xiaopi-avatar-crop-result') || '')

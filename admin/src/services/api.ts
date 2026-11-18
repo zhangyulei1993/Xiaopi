@@ -13,7 +13,7 @@ export function createAdminApi({ baseUrl, onUnauthorized }: AdminApiOptions) {
       onUnauthorized()
       throw new Error('登录已过期，请重新登录')
     }
-    if (!response.ok || body.code !== 0) throw new Error(body.message || '请求失败')
+    if (!response.ok || body.code !== 0) throw Object.assign(new Error(body.message || '请求失败'), { status: response.status })
     return body.data as T
   }
 }

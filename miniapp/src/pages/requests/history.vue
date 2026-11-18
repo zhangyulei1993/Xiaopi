@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePagePresentation } from "../../utils/presentation";
+const { presentation, loadPresentation } = usePagePresentation("requestHistory", "我的找房记录", "预约、订阅和找房需求都会保留在这里");
 import { watchPostEffect } from "vue";
 import { permissionAudit } from "../../utils/permission-audit";
 import { onShow } from "@dcloudio/uni-app";
@@ -54,19 +56,21 @@ const openProperty = (item: RentalRequest) => {
   if (item.requestType !== "appointment" || !item.propertyAvailable || !item.propertyId) return;
   uni.navigateTo({ url: `/pages/properties/detail?id=${encodeURIComponent(item.propertyId)}` });
 };
-onShow(() => { void load(); });
+onShow(() => { void load(); void loadPresentation(); });
 if (import.meta.env.MODE === "test") {
   watchPostEffect(() => permissionAudit("render-state", "request-history", items.value.length > 0));
 }
+
+function copyText(fallback: string) { return presentation.value?.copy?.[fallback] || fallback }
 </script>
 
 <template>
   <view class="page">
-    <view class="hero"><view><text>我的找房记录</text><small>预约、订阅和找房需求都会保留在这里</small></view><view class="count"><strong>{{ activeCount }}</strong><small>进行中</small></view></view>
-    <view v-if="needsLogin" class="empty state"><strong>登录后查看找房记录</strong><text>预约和找房需求会保存在你的微信账号中。</text><button @click="goLogin">微信登录</button></view>
+    <view class="hero"><view><text>{{ presentation.title }}</text><small>{{ presentation.subtitle }}</small></view><view class="count"><strong>{{ activeCount }}</strong><small>进行中</small></view></view>
+    <view v-if="needsLogin" class="empty state"><strong>{{ copyText("登录后查看找房记录") }}</strong><text>{{ copyText("预约和找房需求会保存在你的微信账号中。") }}</text><button @click="goLogin">微信登录</button></view>
     <view v-else-if="loading" class="empty state"><text>正在加载找房记录…</text></view>
     <view v-else-if="loadFailed" class="empty state"><strong>记录暂时加载失败</strong><text>网络恢复后可以重新尝试。</text><button @click="load">重新加载</button></view>
-    <view v-else-if="!items.length" class="empty"><strong>暂时没有找房记录</strong><text>提交需求或预约看房后，会在这里查看进度。</text><button @click="goFind">去找房</button></view>
+    <view v-else-if="!items.length" class="empty"><strong>{{ copyText("暂时没有找房记录") }}</strong><text>{{ copyText("提交需求或预约看房后，会在这里查看进度。") }}</text><button @click="goFind">{{ copyText("去找房") }}</button></view>
     <view v-else class="list"><view v-for="item in items" :key="item.id" class="record" :class="{ clickable: item.requestType === 'appointment' && item.propertyAvailable }" @click="openProperty(item)"><view class="record-head"><view><strong>{{ typeLabel(item.requestType) }}</strong><text>{{ titleOf(item) }}</text></view><text class="status" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</text></view><view class="record-detail">{{ detailOf(item) }}</view><view v-if="item.followUpNote" class="follow-up"><text>小皮跟进</text><strong>{{ item.followUpNote }}</strong></view><view class="record-foot"><text>{{ dateOf(item) }}</text><text v-if="item.requestType === 'appointment'">{{ item.propertyAvailable ? '查看房源 ›' : '房源已下架' }}</text></view></view></view>
   </view>
 </template>

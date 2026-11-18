@@ -137,14 +137,14 @@ const saveNickname = async () => {
 const publish = () => uni.navigateTo({ url: "/pages/publish/index" });
 const browse = () => uni.switchTab({ url: "/pages/properties/index" });
 const requestHome = () => uni.navigateTo({ url: "/pages/requests/index" });
-const openRequestHistory = () => requireLogin("登录后查看找房记录", "预约、订阅和找房需求会同步到你的微信账号", () => uni.navigateTo({ url: "/pages/requests/history" }));
+const openRequestHistory = () => requireLogin(copyText("登录后查看找房记录"), copyText("预约、订阅和找房需求会同步到你的微信账号"), () => uni.navigateTo({ url: "/pages/requests/history" }));
 const openFavorites = () => {
   uni.setStorageSync("xiaopi_show_favorites", true);
   browse();
 };
-const favorites = () => requireLogin("登录后查看关注", "关注记录会同步到你的微信账号", openFavorites);
+const favorites = () => requireLogin(copyText("登录后查看关注"), copyText("关注记录会同步到你的微信账号"), openFavorites);
 const openFootprints = () => uni.navigateTo({ url: "/pages/footprints/index" });
-const footprints = () => requireLogin("登录后查看足迹", "登录后可查看最近浏览过的房源", openFootprints);
+const footprints = () => requireLogin(copyText("登录后查看足迹"), copyText("登录后可查看最近浏览过的房源"), openFootprints);
 const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
 const openAdminTab = (tab: "properties" | "leads" | "requests" | "interests") => {
   uni.setStorageSync("xiaopi_admin_tab", tab);
@@ -250,22 +250,24 @@ const logout = () => {
     },
   });
 };
+
+function copyText(fallback: string) { return presentation.value?.copy?.[fallback] || fallback }
 </script>
 
 <template>
   <view class="page" :style="pageStyle">
-    <view v-if="isAdmin" class="me-head"><view><text>个人中心</text><view>{{ presentation.title }}</view></view><text class="me-head-note">运营管理与待办事项</text></view>
-    <view v-else class="me-head"><view><text>个人中心</text><view>{{ presentation.title }}</view></view><text class="me-head-note">{{ presentation.subtitle }}</text></view>
+    <view v-if="isAdmin" class="me-head"><view><text>{{ presentation.eyebrow || "个人中心" }}</text><view>{{ presentation.title }}</view></view><text class="me-head-note">{{ presentation.operatorSubtitle || "运营管理与待办事项" }}</text></view>
+    <view v-else class="me-head"><view><text>{{ presentation.eyebrow || "个人中心" }}</text><view>{{ presentation.title }}</view></view><text class="me-head-note">{{ presentation.subtitle }}</text></view>
 
     <view v-if="!isAdmin" class="profile" :class="{ guest: !isLoggedIn }" @click="!isLoggedIn && login()">
-      <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isUploadingAvatar" @chooseavatar="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><input v-if="isLoggedIn" v-model="nickname" class="nickname-input" type="nickname" maxlength="32" placeholder="点击填写微信昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><view v-else class="title">登录后开始找房</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : "同步收藏、足迹和找房需求" }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
+      <view class="profile-glow"></view><view class="profile-top"><button v-if="isLoggedIn" class="avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isUploadingAvatar" @chooseavatar="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>{{ isAdmin ? "管" : "小" }}</text></button><view v-else class="avatar"><text>{{ isAdmin ? "管" : "小" }}</text></view><view class="profile-copy"><view class="profile-title"><input v-if="isLoggedIn" v-model="nickname" class="nickname-input" type="nickname" maxlength="32" placeholder="点击填写微信昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><view v-else class="title">{{ copyText("登录后开始找房") }}</view><text v-if="isLoggedIn" class="role-badge">{{ isAdmin ? "管理员" : "普通用户" }}</text></view><view class="profile-sub">{{ isAdmin ? "房源运营权限已启用" : isLoggedIn ? (phone ? `手机号 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "微信账号已登录") : copyText("同步收藏、足迹和找房需求") }}</view></view><text class="profile-arrow">{{ isLoggedIn ? "" : "›" }}</text></view>
       <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : (isLoggingIn ? "正在登录…" : "点击直接微信登录") }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
-    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>我的找房</strong><text>常用服务</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><view class="shortcut-copy"><strong>全部房源</strong><text>无需登录</text></view></view><view @click="favorites"><i class="shortcut-icon favorite"></i><view class="shortcut-copy"><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : "登录后查看" }}</text></view></view><view @click="footprints"><i class="shortcut-icon footprint"></i><view class="shortcut-copy"><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : "登录后查看" }}</text></view></view><view @click="requestHome"><i class="shortcut-icon request"></i><view class="shortcut-copy"><strong>找房需求</strong><text>提交时登录</text></view></view></view>
+    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>{{ copyText("我的找房") }}</strong><text>{{ copyText("常用服务") }}</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><view class="shortcut-copy"><strong>全部房源</strong><text>{{ copyText("无需登录") }}</text></view></view><view @click="favorites"><i class="shortcut-icon favorite"></i><view class="shortcut-copy"><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : copyText("登录后查看") }}</text></view></view><view @click="footprints"><i class="shortcut-icon footprint"></i><view class="shortcut-copy"><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : copyText("登录后查看") }}</text></view></view><view @click="requestHome"><i class="shortcut-icon request"></i><view class="shortcut-copy"><strong>找房需求</strong><text>{{ copyText("提交时登录") }}</text></view></view></view>
     </view>
-    <view v-if="!isAdmin" class="card secondary-entry request-history-entry" @click="openRequestHistory"><view><strong>我的预约与找房记录</strong><text>{{ isLoggedIn ? "查看预约、订阅和跟进进度" : "登录后可查看" }}</text></view><text>›</text></view>
-    <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>有房源想推荐？</strong><text>无需登录，提交后电话核验</text></view><text>›</text></view>
+    <view v-if="!isAdmin" class="card secondary-entry request-history-entry" @click="openRequestHistory"><view><strong>{{ copyText("我的预约与找房记录") }}</strong><text>{{ isLoggedIn ? "查看预约、订阅和跟进进度" : "登录后可查看" }}</text></view><text>›</text></view>
+    <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>{{ copyText("有房源想推荐？") }}</strong><text>{{ copyText("无需登录") }}，提交后电话核验</text></view><text>›</text></view>
 
     <view v-if="isAdmin" class="admin-identity">
       <button class="admin-avatar avatar-button" open-type="chooseAvatar" :loading="isUploadingAvatar" :disabled="isUploadingAvatar" @chooseavatar="chooseAvatar"><image v-if="avatarDisplay" :src="avatarDisplay" mode="aspectFill" /><text v-else>管</text></button>
@@ -277,9 +279,9 @@ const logout = () => {
       <view class="admin-summary"><view @click="openPropertyManagement('draft')"><strong>{{ adminOverview.draft }}</strong><text>房源草稿</text></view><view @click="openAdminTab('requests')"><strong>{{ adminOverview.pending }}</strong><text>待联系</text></view><view @click="openPropertyManagement('incomplete')"><strong>{{ adminOverview.incomplete }}</strong><text>待补资料</text></view></view>
     </view>
     <view v-if="isAdmin" class="admin-actions">
-      <view @click="editProperty"><view class="action-icon publish-icon">＋</view><strong>录入房源</strong><text>发布可租房源</text></view>
-      <view @click="openPropertyManagement()"><view class="action-icon workspace-icon">▦</view><strong>房源管理</strong><text>查看和编辑房源</text></view>
-      <view @click="openAdminTab('requests')"><view class="action-icon request-icon">◌</view><strong>客户需求</strong><text>预约与找房需求</text></view>
+      <view @click="editProperty"><view class="action-icon publish-icon">＋</view><strong>录入房源</strong><text>{{ copyText("发布可租房源") }}</text></view>
+      <view @click="openPropertyManagement()"><view class="action-icon workspace-icon">▦</view><strong>房源管理</strong><text>{{ copyText("查看和编辑房源") }}</text></view>
+      <view @click="openAdminTab('requests')"><view class="action-icon request-icon">◌</view><strong>客户需求</strong><text>{{ copyText("预约与找房需求") }}</text></view>
       <view @click="openAdminTab('interests')"><view class="action-icon interest-icon">♡</view><strong>用户意向</strong><text>{{ adminOverview.interests }} 条关注记录</text></view>
     </view>
 

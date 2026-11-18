@@ -18,6 +18,12 @@ export const amenityIcons: Record<string, string> = {
   阳台: "/static/amenities/balcony.svg",
   独立卫浴: "/static/amenities/bathroom.svg",
   独立卫生间: "/static/amenities/bathroom.svg",
+  微波炉: "/static/amenities/microwave.svg",
+  洗碗机: "/static/amenities/dishwasher.svg",
+  烘干机: "/static/amenities/dryer.svg",
+  窗帘: "/static/amenities/curtains.svg",
+  餐桌: "/static/amenities/dining_table.svg",
+  电磁炉: "/static/amenities/range.svg",
 };
 
 export const amenityIcon = (name: string) =>

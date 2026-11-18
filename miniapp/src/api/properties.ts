@@ -186,6 +186,7 @@ export interface PublicConfig {
   }[];
   statusLabels?: { draft?: string; pendingReview?: string; published?: string; available?: string; rented?: string; offline?: string };
   pagePresentations?: Record<string, {
+    copy?: Record<string, string>; searchPlaceholder?: string; operatorTitle?: string; operatorSubtitle?: string; eyebrow?: string;
     title?: string;
     subtitle?: string;
     backgroundImage?: string;
