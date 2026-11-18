@@ -537,12 +537,12 @@ func (s *MySQL) ConvertLeadToProperty(ctx context.Context, leadID string, p doma
 }
 
 func (s *MySQL) UpsertUser(ctx context.Context, user domain.User) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE open_id=VALUES(open_id),nickname=IF(VALUES(nickname)='',nickname,VALUES(nickname)),avatar_url=IF(VALUES(avatar_url)='',avatar_url,VALUES(avatar_url)),phone=IF(VALUES(phone)='',phone,VALUES(phone)),status=IF(VALUES(status)='',status,VALUES(status)),updated_at=CURRENT_TIMESTAMP`, user.ID, user.OpenID, user.Nickname, user.AvatarURL, user.Phone, user.Status)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO users (id,open_id,nickname,avatar_url,phone,status,last_login_at) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE last_login_at=CURRENT_TIMESTAMP, open_id=VALUES(open_id),nickname=IF(VALUES(nickname)='',nickname,VALUES(nickname)),avatar_url=IF(VALUES(avatar_url)='',avatar_url,VALUES(avatar_url)),phone=IF(VALUES(phone)='',phone,VALUES(phone)),status=IF(VALUES(status)='',status,VALUES(status)),updated_at=CURRENT_TIMESTAMP`, user.ID, user.OpenID, user.Nickname, user.AvatarURL, user.Phone, user.Status)
 	return err
 }
 
 func (s *MySQL) ListUsers(ctx context.Context) ([]domain.User, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at FROM users ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,open_id,nickname,avatar_url,phone,status,created_at,updated_at,last_login_at FROM users ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +550,7 @@ func (s *MySQL) ListUsers(ctx context.Context) ([]domain.User, error) {
 	items := make([]domain.User, 0)
 	for rows.Next() {
 		var user domain.User
-		if err := rows.Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.OpenID, &user.Nickname, &user.AvatarURL, &user.Phone, &user.Status, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt); err != nil {
 			return nil, err
 		}
 		items = append(items, user)

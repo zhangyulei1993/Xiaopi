@@ -3,6 +3,9 @@ import type { WechatUser } from '../types/domain'
 
 defineProps<{ users: WechatUser[]; loading: boolean }>()
 const emit = defineEmits<{ refresh: [] }>()
+const apiBase = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/api'
+const apiOrigin = apiBase.endsWith('/api') ? apiBase.slice(0, -4) : apiBase
+const avatarUrl = (value: string) => value?.startsWith('/') ? apiOrigin + value : value
 const formatTime = (value: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'
 </script>
 
@@ -11,9 +14,11 @@ const formatTime = (value: string) => value ? new Date(value).toLocaleString('zh
   <section class="surface table-panel">
     <div class="table-heading"><div><h2>微信用户列表</h2><p>共 {{ users.length }} 人，已绑定手机号 {{ users.filter((item) => item.phone).length }} 人</p></div></div>
     <el-table v-loading="loading" :data="users" empty-text="暂无微信用户">
-      <el-table-column label="用户" min-width="220"><template #default="scope"><div class="user-cell"><el-avatar :size="38" :src="scope.row.avatarUrl">微</el-avatar><div><strong>{{ scope.row.nickname || '微信用户' }}</strong><span>{{ scope.row.id }}</span></div></div></template></el-table-column>
+      <el-table-column label="头像" width="84"><template #default="scope"><el-avatar :size="38" :src="avatarUrl(scope.row.avatarUrl)">微</el-avatar></template></el-table-column>
+      <el-table-column label="用户" min-width="220"><template #default="scope"><div class="user-cell"><div><strong>{{ scope.row.nickname || '微信用户' }}</strong><span>{{ scope.row.id }}</span></div></div></template></el-table-column>
       <el-table-column label="手机号" min-width="160"><template #default="scope"><span v-if="scope.row.phone">{{ scope.row.phone }}</span><el-tag v-else type="info">未绑定</el-tag></template></el-table-column>
       <el-table-column label="状态" width="120"><template #default="scope"><el-tag :type="scope.row.status === 'active' ? 'success' : 'danger'">{{ scope.row.status === 'active' ? '正常' : '已停用' }}</el-tag></template></el-table-column>
+      <el-table-column label="最近登录" min-width="180"><template #default="scope">{{ formatTime(scope.row.lastLoginAt) }}</template></el-table-column>
       <el-table-column label="首次登录" min-width="180"><template #default="scope">{{ formatTime(scope.row.createdAt) }}</template></el-table-column>
     </el-table>
   </section>

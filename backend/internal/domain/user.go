@@ -15,14 +15,15 @@ const (
 )
 
 type User struct {
-	ID        string     `json:"id"`
-	OpenID    string     `json:"-"`
-	Nickname  string     `json:"nickname"`
-	AvatarURL string     `json:"avatarUrl"`
-	Phone     string     `json:"phone"`
-	Status    UserStatus `json:"status"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
+	ID          string     `json:"id"`
+	OpenID      string     `json:"-"`
+	Nickname    string     `json:"nickname"`
+	AvatarURL   string     `json:"avatarUrl"`
+	Phone       string     `json:"phone"`
+	Status      UserStatus `json:"status"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
+	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
 }
 
 type AdminUser struct {
