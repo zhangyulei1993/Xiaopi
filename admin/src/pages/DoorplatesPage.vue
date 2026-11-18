@@ -9,7 +9,18 @@ const selected = ref('')
 const rows = ref<Doorplate[]>([])
 const pending = ref<Doorplate[]>([])
 const importNames = ref<Record<string, string>>({})
-const sourceNames = computed(() => [...new Set(pending.value.map(row => row.community))])
+const declaredCommunities = ref<{ name: string; expected?: number }[]>([])
+const sourceNames = computed(() => [...new Set([
+  ...declaredCommunities.value.map(item => item.name),
+  ...pending.value.map(row => row.community),
+])])
+const importCounts = computed(() => {
+  const counts = new Map<string, number>()
+  for (const row of pending.value) counts.set(row.community, (counts.get(row.community) || 0) + 1)
+  return counts
+})
+const missingCommunities = computed(() => sourceNames.value.filter(name => !importCounts.value.get(name)))
+const declaredCount = (name: string) => declaredCommunities.value.find(item => item.name === name)?.expected
 const normalizeCommunityName = (value: string) => value.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
 const suggestedImportName = (source: string) => {
   const key = normalizeCommunityName(source)
@@ -170,10 +181,20 @@ async function read(event: Event) {
   if (!file) return
   error.value = ''
   pending.value = []
+  declaredCommunities.value = []
   importNames.value = Object.create(null)
   try {
     const data = JSON.parse(await file.text())
-    if (!Array.isArray(data.records) || !data.records.length) throw new Error('请选择包含 records 的门牌导出 JSON')
+    if (!Array.isArray(data.records)) throw new Error('请选择包含 records 的门牌导出 JSON')
+    if (Array.isArray(data.communities)) {
+      declaredCommunities.value = data.communities.flatMap((item: unknown) => {
+        if (typeof item === 'string' && item.trim()) return [{ name: item.trim() }]
+        if (!item || typeof item !== 'object') return []
+        const value = item as { name?: unknown; room_count_observed?: unknown }
+        if (typeof value.name !== 'string' || !value.name.trim()) return []
+        return [{ name: value.name.trim(), expected: typeof value.room_count_observed === 'number' ? value.room_count_observed : undefined }]
+      })
+    }
     pending.value = data.records.map(({ community, building, unit, room }: Doorplate) => {
       if (![community, building, room].every(value => typeof value === 'string' && value.trim()) || typeof unit !== 'string') {
         throw new Error('存在格式错误的小区或门牌')
@@ -192,6 +213,7 @@ async function importRows() {
   try {
     counts.value = await props.api(path, { method: 'POST', body: JSON.stringify(pending.value.map(row => ({ ...row, community: importNames.value[row.community]?.trim() || suggestedImportName(row.community) }))) })
     pending.value = []
+    declaredCommunities.value = []
     if (selected.value) await show(selected.value)
   } catch (e) {
     error.value = (e as Error).message
@@ -228,9 +250,10 @@ onMounted(load)
           <el-button v-if="pending.length" type="primary" :loading="busy" @click="importRows">导入 {{ pending.length }} 条门牌</el-button>
         </div>
       </div>
-      <div v-if="pending.length" class="doorplate-import-review">
-        <p>系统会忽略标点、空格等名称差异并匹配已有小区；请核对映射，必要时可手动指定标准名称。</p>
-        <label v-for="name in sourceNames" :key="name"><span>{{ name }}</span><el-input v-model="importNames[name]" :aria-label="name + '的录入名称'" :placeholder="suggestedImportName(name)" :disabled="busy" /><small>将导入到：{{ importNames[name]?.trim() || suggestedImportName(name) }}</small></label>
+      <div v-if="sourceNames.length" class="doorplate-import-review">
+        <p>文件包含 {{ sourceNames.length }} 个小区、{{ pending.length.toLocaleString() }} 条门牌。名称会忽略标点和空格匹配已有小区，可手动修改导入名称。</p>
+        <p v-if="missingCommunities.length" class="doorplate-import-warning">{{ missingCommunities.length }} 个小区没有门牌记录，无法导入：{{ missingCommunities.join('、') }}。请补充房号后重新选择文件。</p>
+        <label v-for="name in sourceNames" :key="name"><span>{{ name }} · {{ (importCounts.get(name) || 0).toLocaleString() }} 条<span v-if="declaredCount(name) != null && declaredCount(name) !== (importCounts.get(name) || 0)">（文件标注 {{ declaredCount(name) }} 条）</span></span><el-input v-model="importNames[name]" :aria-label="name + '的录入名称'" :placeholder="suggestedImportName(name)" :disabled="busy" /><small>将导入到：{{ importNames[name]?.trim() || suggestedImportName(name) }}</small></label>
       </div>
       <div class="doorplate-split">
       <aside class="doorplate-catalog"><h3>小区列表</h3>
@@ -334,6 +357,7 @@ onMounted(load)
 .doorplate-import input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .doorplate-import-review { background: var(--el-fill-color-light); border-radius: 12px; padding: 12px; }
 .doorplate-import-review p { margin: 0 0 10px; }
+.doorplate-import-warning { color: #b85d35; }
 .doorplate-import-review label { display: grid; grid-template-columns: minmax(100px, 1fr) 2fr; align-items: center; gap: 8px; margin-top: 6px; }
 .doorplate-bars { display: grid; gap: 4px; }
 .doorplate-bars button { display: grid; grid-template-columns: minmax(104px, 1fr) minmax(50px, 4fr) 55px; gap: 12px; align-items: center; padding: 8px 10px; background: transparent; border: 1px solid transparent; border-radius: 8px; text-align: left; color: inherit; cursor: pointer; }
