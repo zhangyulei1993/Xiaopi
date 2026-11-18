@@ -12,7 +12,11 @@ import (
 const maxJSONBodyBytes = 1 << 20
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	return decodeJSONLimit(w, r, destination, maxJSONBodyBytes)
+}
+
+func decodeJSONLimit(w http.ResponseWriter, r *http.Request, destination any, limit int64) error {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {

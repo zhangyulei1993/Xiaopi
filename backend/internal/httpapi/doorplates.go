@@ -36,7 +36,16 @@ func (s *Server) doorplates(w http.ResponseWriter, r *http.Request) {
 	rows = consolidateDoorplateRows(rows)
 	if r.Method == http.MethodPost {
 		var input []doorplate
-		if err := decodeJSON(w, r, &input); err != nil || len(input) == 0 || len(input) > 30000 {
+		if err := decodeJSONLimit(w, r, &input, 8<<20); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				writeError(w, http.StatusRequestEntityTooLarge, "门牌数据超过 8 MB，请分批导入")
+			} else {
+				writeError(w, 400, "门牌数据格式不正确")
+			}
+			return
+		}
+		if len(input) == 0 || len(input) > 30000 {
 			writeError(w, 400, "请选择有效的门牌数据")
 			return
 		}
