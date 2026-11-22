@@ -6,7 +6,12 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'https://api.xiaopizufang.cn/a
 export const API_ORIGIN = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE
 
 import { validateUploadUrl } from './upload-url.mjs'
+import { validateDownloadUrl } from './download-url.mjs'
 export const safeUploadUrl = (url: string) => validateUploadUrl(url, import.meta.env.MODE === 'test', API_ORIGIN)
+
+// Property media may be downloaded only from this API or the app's COS domain.
+// This keeps admin video downloads from following arbitrary URLs in media data.
+export const safeDownloadUrl = (path: string) => validateDownloadUrl(resolveAssetUrl(path), API_ORIGIN)
 
 export const resolveAssetUrl = (path = '') => {
   const value = String(path).trim()

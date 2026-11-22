@@ -74,6 +74,7 @@ const openPropertyList = (filter = "") => {
   uni.setStorageSync("xiaopi_admin_property_status", filter || "all");
   uni.switchTab({ url: "/pages/properties/index" });
 };
+const openOperationLogs = () => uni.navigateTo({ url: "/pages/admin/operation-logs" });
 const openRequestProperty = (item: RentalRequest) => {
   if (item.requestType !== "appointment" || !item.propertyAvailable || !item.propertyId) return;
   uni.navigateTo({ url: `/pages/properties/detail?id=${encodeURIComponent(item.propertyId)}` });
@@ -105,9 +106,13 @@ const convert = async (lead: PropertyLead) => {
 const contactLead = (phoneNumber: string) => callPhone(phoneNumber, "客户手机号缺失");
 const enableAppointmentAlerts = async () => {
 	const accepted = await requestMessageSubscription(appointmentTemplateID.value);
-	if (!accepted) { uni.showToast({ title: "未开启预约提醒", icon: "none" }); return; }
-	await registerMessageSubscription(appointmentTemplateID.value);
-	uni.showToast({ title: "已开启一次预约提醒" });
+	if (!accepted) return;
+	try {
+		await registerMessageSubscription(appointmentTemplateID.value);
+		uni.showToast({ title: "已开启一次预约提醒" });
+	} catch (error) {
+		uni.showToast({ title: error instanceof Error ? `授权成功，登记失败：${error.message}` : "授权成功，但预约提醒登记失败", icon: "none" });
+	}
 };
 const followUp = async (type: "lead" | "request", id: string) => {
   try {
@@ -140,6 +145,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
         ><strong>{{ summary.incomplete }}</strong
         ><text>待补资料</text></view
       ></view
+    ><view class="activity-entry card" @click="openOperationLogs"><view class="activity-entry-head"><view><strong>操作记录</strong><text>分类查看并按时间回溯管理员操作</text></view><text class="activity-entry-link">查看全部 ›</text></view><view v-for="item in activities.slice(0, 3)" :key="item.id" class="activity-entry-row"><strong>{{ item.action }}</strong><text>{{ item.detail || item.targetType }}</text></view><view v-if="!activities.length" class="activity-entry-empty">暂无操作记录</view></view
     ><view class="tabs"
       ><text
         :class="{ active: tab === 'properties' }"
@@ -198,7 +204,6 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length && !contactEvents.length" class="empty muted">{{ copyText("暂无用户意向") }}记录</view></template
     ><template v-else
       ><view class="card property-management-entry"><strong>{{ copyText("房源列表与管理操作已统一到「房源」页") }}</strong><text>{{ copyText("可在统一列表中搜索、筛选、编辑、复制、更新状态或删除房源。") }}</text><button class="primary" @click="openPropertyList()">打开房源管理</button></view></template
-    ><view v-if="activities.length" class="activity card"><view class="title small">最近操作</view><view v-for="item in activities.slice(0, 5)" :key="item.id" class="muted">{{ item.action }} · {{ item.detail }}</view></view
     ></view
   >
 </template>
@@ -233,6 +238,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .summary text {
   display: block;
 }
+.activity-entry{margin:-4rpx 0 24rpx;padding:20rpx 24rpx}.activity-entry-head{display:flex;align-items:center;justify-content:space-between;gap:14rpx}.activity-entry-head>view:first-child{min-width:0}.activity-entry-head strong,.activity-entry-head text{display:block}.activity-entry-head strong{color:#344633;font-size:27rpx}.activity-entry-head>view:first-child text{margin-top:5rpx;color:#899287;font-size:20rpx}.activity-entry-link{flex:none;color:#506747;font-size:21rpx;font-weight:700}.activity-entry-row{display:flex;align-items:baseline;gap:12rpx;margin-top:13rpx;padding-top:12rpx;border-top:1rpx solid #eff0e9}.activity-entry-row strong{flex:none;color:#52614d;font-size:20rpx}.activity-entry-row text{overflow:hidden;color:#8a9288;font-size:19rpx;text-overflow:ellipsis;white-space:nowrap}.activity-entry-empty{margin-top:13rpx;padding-top:12rpx;border-top:1rpx solid #eff0e9;color:#92998f;font-size:20rpx}
 .summary strong {
   color: #29382d;
   font-size: 38rpx;

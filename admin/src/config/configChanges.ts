@@ -47,7 +47,7 @@ export function configChanges(before: PublicConfig, after: PublicConfig): Config
   if(root==='shareCard'&&rows.some(x=>x.paths[0][0]==='listingTitle'&&x.paths[0][1]!=='marketingPhrases'))key='tags'
   if(!key){grouped.push(row);continue}if(used.has(key))continue;used.add(key)
   const members=rows.filter(x=>key==='coverage'?['locations','featuredChannels'].includes(x.paths[0][0]):key==='facilities'?x.paths[0][0]==='propertyDetail'&&x.paths[0][1]==='facilities':(x.paths[0][0]==='listingTitle'&&x.paths[0][1]!=='marketingPhrases')||x.paths[0][0]==='shareCard')
-  grouped.push({id:key,paths:members.flatMap(x=>x.paths),page:'global',label:({coverage:'地区与频道（关联修改）',facilities:'房屋设施库（名称、图标、标识关联修改）',tags:'房源标签与分享约束（关联修改）'} as Record<string,string>)[key],roles:[...new Set(members.map(x=>x.roles))].join('；'),before:members.map(x=>({项目:x.label,内容:x.before??'默认'})),after:members.map(x=>({项目:x.label,内容:x.after??'默认'}))})
+  grouped.push({id:key,paths:members.flatMap(x=>x.paths),page:'global',label:({coverage:'精选频道与地区入口',facilities:'房屋设施库（名称、图标、标识关联修改）',tags:'房源标签与分享约束（关联修改）'} as Record<string,string>)[key],roles:[...new Set(members.map(x=>x.roles))].join('；'),before:members.map(x=>({项目:x.label,内容:x.before??'默认'})),after:members.map(x=>({项目:x.label,内容:x.after??'默认'}))})
  }
  return grouped
 }

@@ -44,16 +44,17 @@ if (expected && !combined.includes(expected)) fail('configured test API not foun
 if (combined.includes('api.xiaopizufang.cn')) { report.rejected.push('production API domain present in output'); report.status = 'FAIL' }
 // Pins cover the reviewed test callers and their validators. A rebuild does not refresh them.
 const reviewed = {
-  'api/client.js': 'cc74809fde0d8e37a37f390a5544cf99906d4745abdc6cea73c9c0c890fa1acc',
+  'api/client.js': '769f8c9eec21264099bf956779526661de51f254d2079afc01b7996e358f722d',
   'api/request-url.js': '0717acf313cd34bbb238750ba2fa8d5e9598f73b560b219ce28c23f72bd8e97e',
   'api/upload-url.js': '0483e3525aa2ff158e23c90b0025c68e6af41057c0fc8d45224da815cc3cef6e',
-  'pages/admin/property-edit.js': '52788cd0c5d8e7c35933d9d4870db795d729361e913a94261dbcf1ac8eec05c9',
-  'pages/auth/login.js': '60b2a6eb80c71518a6d5a8c4615dd10ffeac12ce55dfce9328c8ff49c6e671e5',
-  'pages/me/index.js': '80d0a68214fe735b7bdccb1ac43d7a41087f1e1948f017c995eb256e21720b4b',
+  'pages/admin/property-edit.js': '5430cd5fb5edd350d99c380124d2fd47e2f35a7b82e49e7cb16b9fd903184a8d',
+  'pages/auth/login.js': '49dc6d0164e4c393b6df5939e740fd29aa006b2162364ad3a690e320f6b67404',
+  'pages/me/index.js': '90e096aa97385064aa1beec52ab046d593a1b7846a882579648f2dd5a6f8d98b',
+  'pages/properties/detail.js': '5c768dbbfd8f192a8e901999f3581574d23e78ea71dd826b0f5c02e775069398',
 }
 const verified = report.buildProvenance.status === 'PASS'
   && Object.entries(reviewed).every(([file, digest]) => report.artifactSha256[file] === digest)
-  && report.sourceCalls.length === 4
+  && report.sourceCalls.length === 5
   && report.sourceCalls.every(call => call.originVerified && call.importAlias && call.directGuard && !call.reassigned)
 const matched = new Set()
 report.guardedCalls = []

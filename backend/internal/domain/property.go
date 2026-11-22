@@ -30,6 +30,7 @@ type Property struct {
 	BuildingNo           string          `json:"buildingNo"`
 	UnitNo               string          `json:"unitNo"`
 	RoomNo               string          `json:"roomNo"`
+	RoomSequence         int             `json:"roomSequence"`
 	Latitude             float64         `json:"latitude"`
 	Longitude            float64         `json:"longitude"`
 	Layout               string          `json:"layout"`
@@ -55,6 +56,8 @@ type Property struct {
 	RulesText            string          `json:"rulesText"`
 	Description          string          `json:"description"`
 	DisplayTags          []string        `json:"displayTags"`
+	IsMaterial           bool            `json:"isMaterial"`
+	MaterialCategory     string          `json:"materialCategory"`
 	Status               PropertyStatus  `json:"status"`
 	OwnerID              string          `json:"ownerId"`
 	Media                []PropertyMedia `json:"media"`

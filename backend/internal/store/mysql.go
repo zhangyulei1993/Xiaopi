@@ -44,7 +44,7 @@ func (s *MySQL) Close() error { return s.db.Close() }
 func (s *MySQL) DB() *sql.DB { return s.db }
 
 func (s *MySQL) ListProperties(ctx context.Context) ([]domain.Property, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,title,marketing_phrase,community,location,area_label,cover_focus_x,cover_focus_y,building_no,unit_no,room_no,latitude,longitude,layout,actual_layout,whole_layout,rent_monthly,fee_text,rent_type,listing_source,remaining_lease_months,transfer_deposit,available_date,deposit_payment,utilities_text,area_sqm,actual_area_sqm,whole_area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,display_tags,status,owner_id,created_at,updated_at FROM properties ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,title,marketing_phrase,community,location,area_label,cover_focus_x,cover_focus_y,building_no,unit_no,room_no,latitude,longitude,layout,actual_layout,whole_layout,room_sequence,rent_monthly,fee_text,rent_type,listing_source,remaining_lease_months,transfer_deposit,available_date,deposit_payment,utilities_text,area_sqm,actual_area_sqm,whole_area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,display_tags,is_material,material_category,status,owner_id,created_at,updated_at FROM properties ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (s *MySQL) ListProperties(ctx context.Context) ([]domain.Property, error) {
 	for rows.Next() {
 		var p domain.Property
 		var displayTags []byte
-		if err := rows.Scan(&p.ID, &p.Title, &p.MarketingPhrase, &p.Community, &p.Location, &p.AreaLabel, &p.CoverFocusX, &p.CoverFocusY, &p.BuildingNo, &p.UnitNo, &p.RoomNo, &p.Latitude, &p.Longitude, &p.Layout, &p.ActualLayout, &p.WholeLayout, &p.RentMonthly, &p.FeeText, &p.RentType, &p.ListingSource, &p.RemainingLeaseMonths, &p.TransferDeposit, &p.AvailableDate, &p.DepositPayment, &p.UtilitiesText, &p.AreaSqm, &p.ActualAreaSqm, &p.WholeAreaSqm, &p.FloorInfo, &p.Orientation, &p.Elevator, &p.MetroMinutes, &p.VerificationDate, &p.RulesText, &p.Description, &displayTags, &p.Status, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Title, &p.MarketingPhrase, &p.Community, &p.Location, &p.AreaLabel, &p.CoverFocusX, &p.CoverFocusY, &p.BuildingNo, &p.UnitNo, &p.RoomNo, &p.Latitude, &p.Longitude, &p.Layout, &p.ActualLayout, &p.WholeLayout, &p.RoomSequence, &p.RentMonthly, &p.FeeText, &p.RentType, &p.ListingSource, &p.RemainingLeaseMonths, &p.TransferDeposit, &p.AvailableDate, &p.DepositPayment, &p.UtilitiesText, &p.AreaSqm, &p.ActualAreaSqm, &p.WholeAreaSqm, &p.FloorInfo, &p.Orientation, &p.Elevator, &p.MetroMinutes, &p.VerificationDate, &p.RulesText, &p.Description, &displayTags, &p.IsMaterial, &p.MaterialCategory, &p.Status, &p.OwnerID, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(displayTags, &p.DisplayTags)
@@ -94,13 +94,13 @@ func (s *MySQL) listPropertyMedia(ctx context.Context, propertyID string) ([]dom
 
 func (s *MySQL) CreateProperty(ctx context.Context, p domain.Property) error {
 	displayTags, _ := json.Marshal(p.DisplayTags)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO properties (id,title,marketing_phrase,community,location,area_label,cover_focus_x,cover_focus_y,building_no,unit_no,room_no,latitude,longitude,layout,actual_layout,whole_layout,rent_monthly,fee_text,rent_type,listing_source,remaining_lease_months,transfer_deposit,available_date,deposit_payment,utilities_text,area_sqm,actual_area_sqm,whole_area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,display_tags,status,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Title, p.MarketingPhrase, p.Community, p.Location, p.AreaLabel, p.CoverFocusX, p.CoverFocusY, p.BuildingNo, p.UnitNo, p.RoomNo, p.Latitude, p.Longitude, p.Layout, p.ActualLayout, p.WholeLayout, p.RentMonthly, p.FeeText, p.RentType, p.ListingSource, p.RemainingLeaseMonths, p.TransferDeposit, p.AvailableDate, p.DepositPayment, p.UtilitiesText, p.AreaSqm, p.ActualAreaSqm, p.WholeAreaSqm, p.FloorInfo, p.Orientation, p.Elevator, p.MetroMinutes, p.VerificationDate, p.RulesText, p.Description, displayTags, p.Status, p.OwnerID, p.CreatedAt, p.UpdatedAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO properties (id,title,marketing_phrase,community,location,area_label,cover_focus_x,cover_focus_y,building_no,unit_no,room_no,latitude,longitude,layout,actual_layout,whole_layout,room_sequence,rent_monthly,fee_text,rent_type,listing_source,remaining_lease_months,transfer_deposit,available_date,deposit_payment,utilities_text,area_sqm,actual_area_sqm,whole_area_sqm,floor_info,orientation,elevator,metro_minutes,verification_date,rules_text,description,display_tags,is_material,material_category,status,owner_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Title, p.MarketingPhrase, p.Community, p.Location, p.AreaLabel, p.CoverFocusX, p.CoverFocusY, p.BuildingNo, p.UnitNo, p.RoomNo, p.Latitude, p.Longitude, p.Layout, p.ActualLayout, p.WholeLayout, p.RoomSequence, p.RentMonthly, p.FeeText, p.RentType, p.ListingSource, p.RemainingLeaseMonths, p.TransferDeposit, p.AvailableDate, p.DepositPayment, p.UtilitiesText, p.AreaSqm, p.ActualAreaSqm, p.WholeAreaSqm, p.FloorInfo, p.Orientation, p.Elevator, p.MetroMinutes, p.VerificationDate, p.RulesText, p.Description, displayTags, p.IsMaterial, p.MaterialCategory, p.Status, p.OwnerID, p.CreatedAt, p.UpdatedAt)
 	return err
 }
 
 func (s *MySQL) UpdateProperty(ctx context.Context, p domain.Property) error {
 	displayTags, _ := json.Marshal(p.DisplayTags)
-	_, err := s.db.ExecContext(ctx, `UPDATE properties SET title=?,marketing_phrase=?,community=?,location=?,area_label=?,cover_focus_x=?,cover_focus_y=?,building_no=?,unit_no=?,room_no=?,latitude=?,longitude=?,layout=?,actual_layout=?,whole_layout=?,rent_monthly=?,fee_text=?,rent_type=?,listing_source=?,remaining_lease_months=?,transfer_deposit=?,available_date=?,deposit_payment=?,utilities_text=?,area_sqm=?,actual_area_sqm=?,whole_area_sqm=?,floor_info=?,orientation=?,elevator=?,metro_minutes=?,verification_date=?,rules_text=?,description=?,display_tags=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, p.Title, p.MarketingPhrase, p.Community, p.Location, p.AreaLabel, p.CoverFocusX, p.CoverFocusY, p.BuildingNo, p.UnitNo, p.RoomNo, p.Latitude, p.Longitude, p.Layout, p.ActualLayout, p.WholeLayout, p.RentMonthly, p.FeeText, p.RentType, p.ListingSource, p.RemainingLeaseMonths, p.TransferDeposit, p.AvailableDate, p.DepositPayment, p.UtilitiesText, p.AreaSqm, p.ActualAreaSqm, p.WholeAreaSqm, p.FloorInfo, p.Orientation, p.Elevator, p.MetroMinutes, p.VerificationDate, p.RulesText, p.Description, displayTags, p.ID)
+	_, err := s.db.ExecContext(ctx, `UPDATE properties SET title=?,marketing_phrase=?,community=?,location=?,area_label=?,cover_focus_x=?,cover_focus_y=?,building_no=?,unit_no=?,room_no=?,latitude=?,longitude=?,layout=?,actual_layout=?,whole_layout=?,room_sequence=?,rent_monthly=?,fee_text=?,rent_type=?,listing_source=?,remaining_lease_months=?,transfer_deposit=?,available_date=?,deposit_payment=?,utilities_text=?,area_sqm=?,actual_area_sqm=?,whole_area_sqm=?,floor_info=?,orientation=?,elevator=?,metro_minutes=?,verification_date=?,rules_text=?,description=?,display_tags=?,is_material=?,material_category=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, p.Title, p.MarketingPhrase, p.Community, p.Location, p.AreaLabel, p.CoverFocusX, p.CoverFocusY, p.BuildingNo, p.UnitNo, p.RoomNo, p.Latitude, p.Longitude, p.Layout, p.ActualLayout, p.WholeLayout, p.RoomSequence, p.RentMonthly, p.FeeText, p.RentType, p.ListingSource, p.RemainingLeaseMonths, p.TransferDeposit, p.AvailableDate, p.DepositPayment, p.UtilitiesText, p.AreaSqm, p.ActualAreaSqm, p.WholeAreaSqm, p.FloorInfo, p.Orientation, p.Elevator, p.MetroMinutes, p.VerificationDate, p.RulesText, p.Description, displayTags, p.IsMaterial, p.MaterialCategory, p.ID)
 	return err
 }
 
@@ -259,6 +259,53 @@ func (s *MySQL) ListOperationLogs(ctx context.Context, limit int) ([]domain.Oper
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *MySQL) ListOperationLogsPage(ctx context.Context, category, startDate, endDate string, limit, offset int) ([]domain.OperationLog, int, error) {
+	conditions := make([]string, 0, 3)
+	args := make([]any, 0, 4)
+	switch category {
+	case "property":
+		conditions = append(conditions, `target_type IN ('property','material','building_rule')`)
+	case "customer":
+		conditions = append(conditions, `target_type IN ('lead','request')`)
+	case "message":
+		conditions = append(conditions, `target_type='subscription'`)
+	case "all", "":
+	default:
+		return nil, 0, fmt.Errorf("invalid operation log category")
+	}
+	if startDate != "" {
+		conditions = append(conditions, `created_at >= ?`)
+		args = append(args, startDate+` 00:00:00`)
+	}
+	if endDate != "" {
+		conditions = append(conditions, `created_at < DATE_ADD(?, INTERVAL 1 DAY)`)
+		args = append(args, endDate+` 00:00:00`)
+	}
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM operation_logs`+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	pageArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,operator_id,target_type,target_id,action,detail,created_at FROM operation_logs`+where+` ORDER BY created_at DESC LIMIT ? OFFSET ?`, pageArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	items := make([]domain.OperationLog, 0)
+	for rows.Next() {
+		var item domain.OperationLog
+		if err := rows.Scan(&item.ID, &item.OperatorID, &item.TargetType, &item.TargetID, &item.Action, &item.Detail, &item.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	return items, total, rows.Err()
 }
 
 func (s *MySQL) CreateRentalRequest(ctx context.Context, item domain.RentalRequest) error {

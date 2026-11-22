@@ -1,6 +1,8 @@
 {
   "pages": [
     { "path": "pages/home/index", "style": { "navigationBarTitleText": "小皮租房" } },
+    { "path": "pages/channels/index", "style": { "navigationBarTitleText": "精选频道" } },
+    { "path": "pages/map/index", "style": { "navigationBarTitleText": "地图找房" } },
     { "path": "pages/properties/index", "style": { "navigationBarTitleText": "房源" } },
     { "path": "pages/properties/detail", "style": { "navigationStyle": "custom" } },
     { "path": "pages/footprints/index", "style": { "navigationBarTitleText": "浏览足迹" } },
@@ -10,6 +12,8 @@
     { "path": "pages/me/index", "style": { "navigationBarTitleText": "我的" } },
     { "path": "pages/admin/index", "style": { "navigationBarTitleText": "小皮工作台" } },
     { "path": "pages/admin/property-edit", "style": { "navigationBarTitleText": "编辑房源" } },
+    { "path": "pages/admin/material-library", "style": { "navigationBarTitleText": "房源素材库" } },
+    { "path": "pages/admin/operation-logs", "style": { "navigationBarTitleText": "操作记录" } },
     { "path": "pages/admin/image-crop", "style": { "navigationBarTitleText": "调整图片展示" } },
     { "path": "pages/auth/avatar-crop", "style": { "navigationBarTitleText": "调整头像" } },
     { "path": "pages/auth/login", "style": { "navigationBarTitleText": "微信登录" } }

@@ -1,6 +1,7 @@
 docker/.env
 .env
 tests/.env.test
+tests/.env.map.test
 docker/mysql/data/
 docker/redis/data/
 *.pem

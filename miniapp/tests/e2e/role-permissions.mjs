@@ -57,6 +57,7 @@ const ui = {
   'pages/admin/index': { guest: '.page', user: '.page', admin: '.tabs' },
   'pages/admin/property-edit': { guest: '.page', user: '.page', admin: '.page' },
   'pages/home/index': { guest: '.home-page', user: '.home-page', admin: '.home-page' },
+  'pages/map/index': { guest: '.map-page', user: '.map-page', admin: '.map-page' },
   'pages/properties/index': { guest: '.page', user: '.page', admin: '.page' },
   'pages/me/index': { guest: '.page', user: '.page', admin: '.page' },
   'pages/publish/index': { guest: '.page', user: '.page', admin: '.page' },
@@ -109,7 +110,7 @@ try {
       const refresh = route.path === '/api/v1/auth/refresh'
       const dependsOnService = /(?:login|\/phone|\/avatar|\/media\/upload|\/location\/|message-subscriptions)/.test(route.path)
       if ((!refresh && route.probe !== 'GET' && expected === 'ALLOW') ||
-          (route.probe === 'NOT_RUN') || route.method === 'DELETE' && !route.path.includes('{')) {
+          (route.probe === 'NOT_RUN') || route.method === 'DELETE' && !route.path.includes('{') && expected === 'ALLOW') {
         report.api.push({ ...item, status: 'NOT_RUN', reason: dependsOnService ? '需要专用认证或外部服务测试条件' : '需要一次性合成数据及验证清理' })
         continue
       }
@@ -524,24 +525,23 @@ try {
           assert.match(JSON.stringify(hero), /完善房源信息/)
           const loaded = cli('automation_evaluate', '--fn-source', 'function(){const p=getCurrentPages().at(-1);return p?.options?.id ?? p?.$page?.options?.id}').result.result
           assert.equal(loaded, id, 'Unexpected editor target')
-          el('tap', '.step-item:nth-child(4)')
-          const rent = '.rent-input input'
-          assert.match(JSON.stringify(el('value', rent)), /1800/, 'QA draft did not load')
-          el('input', rent, '--value', '1801')
-          assert.match(JSON.stringify(el('value', rent)), /1801/)
-          assert.deepEqual(mysql(`SELECT rent_monthly FROM properties WHERE ${where}`), ['1800'])
+          const address = 'input[placeholder="选择小区后自动回填，可补充门牌信息"]'
+          assert.match(JSON.stringify(el('value', address)), /QA Address/, 'QA draft address did not load')
+          el('input', address, '--value', 'QA Address updated')
+          assert.match(JSON.stringify(el('value', address)), /QA Address updated/)
+          assert.deepEqual(mysql(`SELECT location FROM properties WHERE ${where}`), ['QA Address'])
           el('tap', '.step-save-button')
           const deadline = Date.now() + 10000
           let observed
           do {
-            observed = mysql(`SELECT rent_monthly FROM properties WHERE ${where}`)
-            if (observed[0] === '1801') break
+            observed = mysql(`SELECT location FROM properties WHERE ${where}`)
+            if (observed[0] === 'QA Address updated') break
             await new Promise(resolve => setTimeout(resolve, 250))
           } while (Date.now() < deadline)
-          assert.deepEqual(observed, ['1801'])
+          assert.deepEqual(observed, ['QA Address updated'])
           const screenshot = path.join(out, 'admin-save-draft.png')
           cli('simulator_screenshot', '--path', screenshot, '--optimize=false')
-          return { database: { before: 1800, after: 1801, status: 'draft' }, fixture: id, screenshot }
+          return { database: { before: 'QA Address', after: 'QA Address updated', status: 'draft' }, fixture: id, screenshot }
         } catch (error) {
           try { cli('simulator_screenshot', '--path', path.join(out, 'admin-save-draft-failure.png'), '--optimize=false') } catch {}
           throw error

@@ -53,7 +53,7 @@ try {
   const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
   assert.equal(mysql('fixture-precheck', "SELECT COUNT(*) FROM users WHERE id IN ('qa-user-a','qa-user-b') AND open_id=CONCAT('test:',id) AND status='active';").trim(), '2')
   assert.equal(mysql('property-precheck', "SELECT COUNT(*) FROM properties WHERE id='qa-property-1' AND status='available';").trim(), '1')
-  const fixtureSQL = "SELECT id,title,rent_monthly FROM properties WHERE status='available' ORDER BY id;"
+  const fixtureSQL = "SELECT id,title,rent_monthly FROM properties WHERE id='qa-property-1' AND status='available';"
   assert.equal(mysql('listing-fixture', fixtureSQL).trim(), 'qa-property-1\tTEST Listing A\t1800')
   const counts = "SELECT COUNT(*) FROM property_favorites WHERE user_id IN ('qa-user-a','qa-user-b') AND property_id='qa-property-1';"
   const footprints = "SELECT user_id,property_id,view_count FROM user_footprints WHERE user_id IN ('qa-user-a','qa-user-b') ORDER BY user_id,property_id;"

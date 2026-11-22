@@ -33,6 +33,7 @@ type Store interface {
 	CreateContactEvent(context.Context, domain.ContactEvent) (bool, error)
 	CreateOperationLog(context.Context, domain.OperationLog) error
 	ListOperationLogs(context.Context, int) ([]domain.OperationLog, error)
+	ListOperationLogsPage(context.Context, string, string, string, int, int) ([]domain.OperationLog, int, error)
 	ListFavoritePropertyIDs(context.Context, string) ([]string, error)
 	SetPropertyFavorite(context.Context, string, string, bool) error
 	ListFavoriteContacts(context.Context) ([]domain.FavoriteContact, error)
@@ -113,13 +114,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/location/search", s.requireRoles(s.searchLocations, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/doorplate-plans", s.requireRoles(s.doorplatePlans, roleAdmin))
 	mux.HandleFunc("PUT /api/v1/admin/doorplate-plans", s.requireRoles(s.doorplatePlans, roleAdmin))
+	mux.HandleFunc("DELETE /api/v1/admin/doorplate-plans", s.requireRoles(s.doorplatePlans, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/community-locations", s.requireRoles(s.communityLocations, roleAdmin))
 	mux.HandleFunc("PUT /api/v1/admin/community-locations", s.requireRoles(s.communityLocations, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/doorplates", s.requireRoles(s.doorplates, roleAdmin))
 	mux.HandleFunc("POST /api/v1/admin/doorplates", s.requireRoles(s.doorplates, roleAdmin))
+	mux.HandleFunc("DELETE /api/v1/admin/doorplates", s.requireRoles(s.doorplates, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/building-rules", s.requireRoles(s.listBuildingRules, roleAdmin))
 	mux.HandleFunc("PUT /api/v1/admin/building-rules", s.requireRoles(s.upsertBuildingRule, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/location/static", s.requireRoles(s.staticLocationMap, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/material-library", s.requireRoles(s.listMaterialLibrary, roleAdmin))
+	mux.HandleFunc("POST /api/v1/admin/material-library", s.requireRoles(s.createMaterial, roleAdmin))
+	mux.HandleFunc("DELETE /api/v1/admin/material-library/{propertyID}", s.requireRoles(s.deleteMaterial, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/material-library/{propertyID}/convert", s.requireRoles(s.convertMaterial, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/material-library/categories", s.requireRoles(s.materialCategories, roleAdmin))
+	mux.HandleFunc("PUT /api/v1/admin/material-library/categories", s.requireRoles(s.materialCategories, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))
@@ -135,6 +144,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/admin/rental-requests/follow-up", s.requireRoles(s.updateRentalRequestFollowUp, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/contact-events", s.requireRoles(s.listContactEvents, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/operation-logs", s.requireRoles(s.listOperationLogs, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/operation-logs/query", s.requireRoles(s.queryOperationLogs, roleAdmin))
 	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))
 	mux.HandleFunc("GET /api/v1/rental-requests/mine", s.requireRoles(s.listMyRentalRequests, roleUser))
 	mux.HandleFunc("POST /api/v1/contact-events", s.requireRoles(s.createContactEvent, roleUser))
@@ -211,6 +221,7 @@ type publicProperty struct {
 	Layout               string                 `json:"layout"`
 	ActualLayout         string                 `json:"actualLayout"`
 	WholeLayout          string                 `json:"wholeLayout"`
+	RoomSequence         int                    `json:"roomSequence"`
 	RentMonthly          int64                  `json:"rentMonthly"`
 	FeeText              string                 `json:"feeText"`
 	RentType             string                 `json:"rentType"`

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"xiaopi/backend/internal/domain"
@@ -51,6 +52,59 @@ func (s *Server) listOperationLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) queryOperationLogs(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	category := strings.TrimSpace(query.Get("category"))
+	if category == "" {
+		category = "all"
+	}
+	if category != "all" && category != "property" && category != "customer" && category != "message" {
+		writeError(w, http.StatusBadRequest, "invalid operation log category")
+		return
+	}
+	page := 1
+	pageSize := 20
+	if value := query.Get("page"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 1_000_000 {
+			writeError(w, http.StatusBadRequest, "invalid page")
+			return
+		}
+		page = parsed
+	}
+	if value := query.Get("pageSize"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeError(w, http.StatusBadRequest, "invalid page size")
+			return
+		}
+		pageSize = parsed
+	}
+	startDate := strings.TrimSpace(query.Get("startDate"))
+	endDate := strings.TrimSpace(query.Get("endDate"))
+	for _, value := range []string{startDate, endDate} {
+		if value == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid date range")
+			return
+		}
+	}
+	if startDate != "" && endDate != "" && startDate > endDate {
+		writeError(w, http.StatusBadRequest, "start date must not exceed end date")
+		return
+	}
+	items, total, err := s.store.ListOperationLogsPage(r.Context(), category, startDate, endDate, pageSize, (page-1)*pageSize)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to query operation logs")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{
+		"items": items, "total": total, "page": page, "pageSize": pageSize, "pageCount": (total + pageSize - 1) / pageSize,
+	}})
 }
 
 func (s *Server) listRentalRequests(w http.ResponseWriter, r *http.Request) {

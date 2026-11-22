@@ -180,7 +180,7 @@ try {
   run('docker',['exec',api,'sh','-ec','[ "$APP_ENV" = test ] && [ "$MYSQL_HOST" = mysql-test ] && [ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && test -z "$WECHAT_MINI_APP_ID$WECHAT_MINI_APP_SECRET"'])
   const sql = listingDataMode === 'imported'
     ? "SELECT COUNT(*) FROM properties WHERE id<>'qa-property-1' AND status='available'; SELECT id FROM users WHERE id='qa-user-a' AND open_id='test:qa-user-a' AND status='active'; SELECT COUNT(*) FROM property_favorites WHERE user_id='qa-user-a'; SELECT JSON_UNQUOTE(JSON_EXTRACT(config_value,'$.contactPhone')) FROM app_configs WHERE config_key='miniapp_public';"
-    : "SELECT id,title,rent_monthly FROM properties WHERE status='available'; SELECT id FROM users WHERE id='qa-user-a' AND open_id='test:qa-user-a' AND status='active'; SELECT COUNT(*) FROM property_favorites WHERE user_id='qa-user-a';"
+    : "SELECT id,title,rent_monthly FROM properties WHERE id='qa-property-1' AND status='available'; SELECT id FROM users WHERE id='qa-user-a' AND open_id='test:qa-user-a' AND status='active'; SELECT COUNT(*) FROM property_favorites WHERE user_id='qa-user-a';"
   const expected = listingDataMode === 'imported' ? '4\nqa-user-a\n0\n' : 'qa-property-1\tTEST Listing A\t1800\nqa-user-a\n0'
   assert.equal(run('docker',['exec',db,'sh','-ec','[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE" -e "$1"','sh',sql]).trim(),expected.trim())
   const health = await fetch('http://127.0.0.1:18083/api/health',{redirect:'error',signal:AbortSignal.timeout(5000)})

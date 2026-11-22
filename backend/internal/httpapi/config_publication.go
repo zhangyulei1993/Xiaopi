@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 	"xiaopi/backend/internal/domain"
 )
 
@@ -50,6 +51,10 @@ func (s *Server) publishConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 428, "请先读取最新配置再发布")
 		return
 	}
+	if err := canonicalizeFeaturedChannelCommunities(r.Context(), s.store, &input.Config); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	input.Config.Normalize()
 	if err := input.Config.Validate(); err != nil {
 		writeError(w, 400, err.Error())
@@ -89,6 +94,61 @@ func (s *Server) publishConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"code": 0, "data": entry})
+}
+
+func canonicalizeFeaturedChannelCommunities(ctx context.Context, rawStore any, config *domain.PublicConfig) error {
+	usesCatalogSelection := false
+	for _, channel := range config.FeaturedChannels {
+		if strings.TrimSpace(channel.Community) != "" {
+			usesCatalogSelection = true
+			break
+		}
+	}
+	// Keep older admin clients compatible until the updated workspace reaches
+	// production. The updated client always supplies Community and validates it.
+	if !usesCatalogSelection {
+		return nil
+	}
+	store, ok := rawStore.(appConfigStore)
+	if !ok {
+		return errors.New("读取门牌库失败，无法验证精选频道小区")
+	}
+	raw, err := store.GetAppConfig(ctx, "doorplate_catalog")
+	if err != nil {
+		return errors.New("门牌库暂不可用，无法发布精选频道")
+	}
+	var rows []doorplate
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return errors.New("门牌库数据格式异常，无法发布精选频道")
+	}
+	known := doorplateCommunities(consolidateDoorplateRows(rows))
+	if len(known) == 0 {
+		return errors.New("门牌库还没有小区数据，无法配置精选频道")
+	}
+	for index := range config.FeaturedChannels {
+		channel := &config.FeaturedChannels[index]
+		requested := strings.TrimSpace(channel.Community)
+		if requested == "" {
+			requested = strings.TrimSpace(channel.Keyword)
+		}
+		if requested == "" {
+			return errors.New("精选频道必须从门牌库选择关联小区")
+		}
+		canonical, _ := resolveCommunityName(requested, known)
+		found := false
+		for _, candidate := range known {
+			if normalizeCommunityName(candidate) == normalizeCommunityName(requested) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.New("精选频道关联小区必须从门牌库选择：" + requested)
+		}
+		channel.Community = canonical
+		channel.Keyword = canonical
+	}
+	return nil
 }
 
 func (s *Server) recordConfigFailure(r *http.Request, after domain.PublicConfig, source, message string) {

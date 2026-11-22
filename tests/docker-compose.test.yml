@@ -29,6 +29,9 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     working_dir: /workspace/backend
+    env_file:
+      - path: .env.map.test
+        required: false
     environment:
       APP_ENV: test
       APP_NAME: Xiaopi isolated test API
@@ -46,7 +49,6 @@ services:
       TEST_WECHAT_CODE_MAP: ${TEST_WECHAT_CODE_MAP:?TEST_WECHAT_CODE_MAP is required}
       WECHAT_MINI_APP_ID: ""
       WECHAT_MINI_APP_SECRET: ""
-      TENCENT_MAP_KEY: ""
       TEST_FAKE_MAP_ENABLED: "true"
       COS_BUCKET: ""
       COS_REGION: ""

@@ -112,6 +112,9 @@ func (*fakeStore) CreateOperationLog(context.Context, domain.OperationLog) error
 func (*fakeStore) ListOperationLogs(context.Context, int) ([]domain.OperationLog, error) {
 	return nil, nil
 }
+func (*fakeStore) ListOperationLogsPage(context.Context, string, string, string, int, int) ([]domain.OperationLog, int, error) {
+	return nil, 0, nil
+}
 func (f *fakeStore) ListFavoritePropertyIDs(_ context.Context, userID string) ([]string, error) {
 	return f.favorites[userID], nil
 }
@@ -715,7 +718,7 @@ func TestInvalidStatusTransitionReturnsConflict(t *testing.T) {
 	}
 }
 
-func TestPublishPropertyRequiresImage(t *testing.T) {
+func TestPublishPropertyAllowsNoImage(t *testing.T) {
 	dataStore := &fakeStore{properties: []domain.Property{{
 		ID:    "property-1",
 		Media: []domain.PropertyMedia{{Type: "video"}},
@@ -728,8 +731,8 @@ func TestPublishPropertyRequiresImage(t *testing.T) {
 	response := performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/properties/status", map[string]string{
 		"propertyId": "property-1", "status": string(domain.PropertyPublished),
 	}, adminToken)
-	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "至少上传一张实拍图片") {
-		t.Fatalf("expected missing-image rejection, got %d: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected publication without an image, got %d: %s", response.Code, response.Body.String())
 	}
 }
 

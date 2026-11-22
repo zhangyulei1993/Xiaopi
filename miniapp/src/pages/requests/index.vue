@@ -137,6 +137,7 @@ const submit = async () => {
   submitting.value = true;
   try {
 	const messageAccepted = areaMode.value ? await requestMessageSubscription(areaTemplateID.value) : false;
+	let messageSubscriptionError = "";
     await createRentalRequest({
       requestType: propertyID.value ? "appointment" : areaMode.value ? "area_subscription" : "general",
       propertyId: propertyID.value,
@@ -150,10 +151,19 @@ const submit = async () => {
       moveInDate: form.moveInDate,
       note: form.note,
     });
-	if (messageAccepted) await registerMessageSubscription(areaTemplateID.value, form.location).catch(() => null);
+	if (messageAccepted) {
+		try { await registerMessageSubscription(areaTemplateID.value, form.location); }
+		catch (error) { messageSubscriptionError = error instanceof Error ? error.message : "登记失败"; }
+	}
     uni.showModal({
       title: propertyID.value ? "预约已提交" : areaMode.value ? "片区预约已提交" : "需求已提交",
-      content: areaMode.value ? "管理员会补充该片区房源；微信新房通知需完成订阅授权。" : `${brandName.value}会根据你的条件匹配房源并联系你。`,
+      content: areaMode.value
+			? messageSubscriptionError
+				? `预约已提交，但新房提醒登记失败（${messageSubscriptionError}）。你仍可在“我的找房记录”查看进度。`
+				: messageAccepted
+					? "管理员会补充该片区房源；新房提醒已开启。"
+					: "管理员会补充该片区房源；本次未开启微信新房提醒。"
+			: `${brandName.value}会根据你的条件匹配房源并联系你。`,
       showCancel: false,
       success: () => uni.navigateBack(),
     });

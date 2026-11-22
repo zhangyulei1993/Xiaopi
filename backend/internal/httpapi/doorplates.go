@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -33,7 +34,58 @@ func (s *Server) doorplates(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "读取门牌库失败")
 		return
 	}
+	originalRows, _ := json.Marshal(rows)
 	rows = consolidateDoorplateRows(rows)
+	if r.Method == http.MethodGet {
+		consolidatedRows, _ := json.Marshal(rows)
+		if !bytes.Equal(originalRows, consolidatedRows) {
+			if err := store.UpsertAppConfig(r.Context(), key, consolidatedRows); err != nil {
+				writeError(w, 500, "归并重复小区名称失败")
+				return
+			}
+		}
+	}
+	if r.Method == http.MethodDelete {
+		community := strings.TrimSpace(r.URL.Query().Get("community"))
+		identity := normalizeCommunityName(community)
+		if identity == "" {
+			writeError(w, 400, "请指定要删除的小区")
+			return
+		}
+		filtered := make([]doorplate, 0, len(rows))
+		for _, row := range rows {
+			if normalizeCommunityName(row.Community) != identity {
+				filtered = append(filtered, row)
+			}
+		}
+		if len(filtered) != len(rows) {
+			payload, marshalErr := json.Marshal(filtered)
+			if marshalErr != nil || store.UpsertAppConfig(r.Context(), key, payload) != nil {
+				writeError(w, 500, "删除小区门牌数据失败")
+				return
+			}
+		}
+		plans, planErr := loadDoorplatePlans(r.Context(), store)
+		if planErr != nil {
+			writeError(w, 500, "读取采集计划失败")
+			return
+		}
+		plansChanged := false
+		for name, plan := range plans {
+			if normalizeCommunityName(name) == identity || normalizeCommunityName(plan.Community) == identity {
+				delete(plans, name)
+				plansChanged = true
+			}
+		}
+		if plansChanged {
+			payload, marshalErr := json.Marshal(plans)
+			if marshalErr != nil || store.UpsertAppConfig(r.Context(), "doorplate_collection_plans", payload) != nil {
+				writeError(w, 500, "删除小区采集计划失败")
+				return
+			}
+		}
+		rows = filtered
+	}
 	if r.Method == http.MethodPost {
 		var input []doorplate
 		if err := decodeJSONLimit(w, r, &input, 8<<20); err != nil {
@@ -124,6 +176,39 @@ func doorplateCommunities(rows []doorplate) []string {
 	return result
 }
 
+func resolveKnownCommunity(ctx context.Context, rawStore any, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	store, ok := rawStore.(appConfigStore)
+	if !ok || normalizeCommunityName(name) == "" {
+		return name, nil
+	}
+	known := []string{}
+	if raw, err := store.GetAppConfig(ctx, "doorplate_catalog"); err == nil {
+		var rows []doorplate
+		if json.Unmarshal(raw, &rows) != nil {
+			return "", errors.New("读取门牌库失败")
+		}
+		known = append(known, doorplateCommunities(consolidateDoorplateRows(rows))...)
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	locations, err := loadCommunityLocations(ctx, store)
+	if err != nil {
+		return "", err
+	}
+	for community := range locations {
+		known = append(known, community)
+	}
+	plans, err := loadDoorplatePlans(ctx, store)
+	if err != nil {
+		return "", err
+	}
+	for community := range plans {
+		known = append(known, community)
+	}
+	return resolveCommunityName(name, known)
+}
+
 func consolidateDoorplateRows(rows []doorplate) []doorplate {
 	canonical := map[string]string{}
 	for _, row := range rows {
@@ -179,7 +264,7 @@ type doorplatePlan struct {
 func (s *Server) ensureDoorplateCollectionPlan(ctx context.Context, community string, confirmedLocation ...communityLocation) error {
 	community = strings.TrimSpace(community)
 	store, ok := s.store.(appConfigStore)
-	if !ok || normalizeCommunityName(community) == "" {
+	if !ok || normalizeCommunityName(community) == "" || isBuildingPointName(community) {
 		return nil
 	}
 
@@ -220,21 +305,36 @@ func (s *Server) ensureDoorplateCollectionPlan(ctx context.Context, community st
 	if len(confirmedLocation) > 0 {
 		location := confirmedLocation[0]
 		location.Address = strings.TrimSpace(location.Address)
-		hasPosition := location.Address != "" &&
-			!strings.Contains(location.Address, "QA 地图占位地址") &&
-			!strings.Contains(location.Address, "测试环境") &&
-			location.Latitude != 0 && location.Longitude != 0 &&
-			location.Latitude >= -90 && location.Latitude <= 90 &&
-			location.Longitude >= -180 && location.Longitude <= 180
-		if hasPosition {
-			for name := range locations {
-				if normalizeCommunityName(name) == normalizeCommunityName(community) {
-					hasPosition = false
-					break
-				}
+		var existing *communityLocation
+		existingIsCanonical := false
+		matchingNames := make([]string, 0, 1)
+		for name, saved := range locations {
+			if normalizeCommunityName(name) != normalizeCommunityName(community) {
+				continue
 			}
-			if hasPosition {
-				locations[community] = location
+			matchingNames = append(matchingNames, name)
+			if !communityLocationHasPosition(saved) {
+				continue
+			}
+			if existing == nil || (name == community && !existingIsCanonical) {
+				copy := saved
+				existing = &copy
+				existingIsCanonical = name == community
+			}
+		}
+		// Keep an already valid community pin. Replace incomplete legacy entries
+		// with a valid position supplied by the property being saved.
+		if existing == nil && communityLocationHasPosition(location) {
+			copy := location
+			existing = &copy
+		}
+		if existing != nil {
+			changed := len(matchingNames) != 1 || matchingNames[0] != community || locations[community] != *existing
+			for _, name := range matchingNames {
+				delete(locations, name)
+			}
+			locations[community] = *existing
+			if changed {
 				payload, err := json.Marshal(locations)
 				if err != nil {
 					return err
@@ -283,6 +383,27 @@ func (s *Server) doorplatePlans(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "读取采集计划失败")
 		return
 	}
+	if plans == nil {
+		plans = map[string]doorplatePlan{}
+	}
+	if r.Method == http.MethodDelete {
+		community := strings.TrimSpace(r.URL.Query().Get("community"))
+		identity := normalizeCommunityName(community)
+		if identity == "" {
+			writeError(w, 400, "请指定要删除的小区采集计划")
+			return
+		}
+		for name, plan := range plans {
+			if normalizeCommunityName(name) == identity || normalizeCommunityName(plan.Community) == identity {
+				delete(plans, name)
+			}
+		}
+		payload, err := json.Marshal(plans)
+		if err != nil || store.UpsertAppConfig(r.Context(), key, payload) != nil {
+			writeError(w, 500, "删除采集计划失败")
+			return
+		}
+	}
 	if r.Method == http.MethodPut {
 		var plan doorplatePlan
 		if decodeJSON(w, r, &plan) != nil {
@@ -291,7 +412,7 @@ func (s *Server) doorplatePlans(w http.ResponseWriter, r *http.Request) {
 		}
 		plan.Community = strings.TrimSpace(plan.Community)
 		plan.Note = strings.TrimSpace(plan.Note)
-		if plan.Community == "" || len([]rune(plan.Community)) > 100 || len([]rune(plan.Note)) > 500 ||
+		if plan.Community == "" || isBuildingPointName(plan.Community) || len([]rune(plan.Community)) > 100 || len([]rune(plan.Note)) > 500 ||
 			(plan.Status != "pending" && plan.Status != "active" && plan.Status != "done") {
 			writeError(w, 400, "请填写有效的小区名称、状态和备注")
 			return
@@ -346,6 +467,18 @@ type communityLocation struct {
 	Longitude float64 `json:"longitude"`
 }
 
+func communityLocationHasPosition(location communityLocation) bool {
+	address := strings.TrimSpace(location.Address)
+	return address != "" &&
+		!strings.Contains(address, "待补充") &&
+		!strings.Contains(address, "未定位") &&
+		!strings.Contains(address, "QA 地图占位地址") &&
+		!strings.Contains(address, "测试环境") &&
+		location.Latitude != 0 && location.Longitude != 0 &&
+		location.Latitude >= -90 && location.Latitude <= 90 &&
+		location.Longitude >= -180 && location.Longitude <= 180
+}
+
 func (s *Server) communityLocations(w http.ResponseWriter, r *http.Request) {
 	store, ok := s.store.(appConfigStore)
 	if !ok {
@@ -355,7 +488,7 @@ func (s *Server) communityLocations(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		name := strings.TrimSpace(r.URL.Query().Get("community"))
 		var location communityLocation
-		if decodeJSON(w, r, &location) != nil || name == "" || len([]rune(name)) > 100 {
+		if decodeJSON(w, r, &location) != nil || name == "" || isBuildingPointName(name) || len([]rune(name)) > 100 {
 			writeError(w, 400, "小区位置格式不正确")
 			return
 		}

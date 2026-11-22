@@ -18,6 +18,7 @@ import filterIcon from "../../static/icons/filter.svg";
 import heartIcon from "../../static/icons/heart.svg";
 import propertyPlaceholderIcon from "../../static/icons/property-placeholder.svg";
 import { listingDoorplate, listingTagValue, publicListingTitle, uniqueListingTags } from "../../utils/listing-title";
+import { normalizeCommunityName } from "../../utils/community-name";
 
 const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
@@ -30,7 +31,7 @@ const selectedPrice = ref(0),
   showFavoritesOnly = ref(false),
   showMoreFilters = ref(false),
   configuredLocations = ref<{ label: string; keyword: string }[]>([]),
-  configuredChannels = ref<Array<{ title: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }>>([]),
+  configuredChannels = ref<Array<{ title: string; keyword: string; community?: string; latitude?: number; longitude?: number; radiusKm?: number }>>([]),
   pagePresentation = ref({ copy: {} as Record<string, string>, searchPlaceholder: "", operatorTitle: "", title: "找一处合适的家", subtitle: "按地区和预算筛选", backgroundImage: "" }),
   channelFilter = ref<{
     keyword: string;
@@ -38,6 +39,7 @@ const selectedPrice = ref(0),
     longitude: number;
     radiusKm: number;
     title?: string;
+    community?: string;
   } | null>(null),
   loading = ref(false),
   loadFailed = ref(false),
@@ -60,30 +62,30 @@ const areas = computed(() =>
     ? [{ label: "全部", keyword: "" }, ...configuredLocations.value]
     : [{ label: "全部", keyword: "" }],
 );
+const pinnedAreaChannels = (config: Awaited<ReturnType<typeof getPublicConfig>> | null) => {
+  const channels = config?.featuredChannels || [];
+  const flagged = channels.filter(channel => channel.showInAreaEntry);
+  if (flagged.length) return flagged.slice(0, 4);
+  const labels = new Set((config?.locations || []).map(location => location.label.trim()).filter(Boolean));
+  const matches = channels.filter(channel => labels.has(channel.title.trim()));
+  return (matches.length ? matches : channels.slice(0, 3)).slice(0, 4);
+};
 const isAdmin = computed(() => currentRole.value === "admin");
 const adminStatusOptions = [
   { value: "all", label: "全部" },
   { value: "draft", label: "草稿" },
-  { value: "todo", label: "待处理" },
-  { value: "online", label: "在租" },
+  { value: "pending_review", label: "待审核" },
+  { value: "available", label: "可租" },
+  { value: "published", label: "待设可租" },
   { value: "rented", label: "已租" },
   { value: "offline", label: "已下架" },
-  { value: "incomplete", label: "待补资料" },
 ];
-const statusLabel = (status: string) => configuredStatusLabels.value[status] || ({ draft: "草稿", pending_review: "待审核", published: "已发布", available: "可租", rented: "已租", offline: "已下架" }[status] || status);
-const propertyNeedsDetails = (item: Property) => !item.community || !item.location || !item.latitude || !item.longitude || !item.media?.length;
+const statusLabel = (status: string) => {
+  const adminLabel = adminStatusOptions.find(option => option.value === status)?.label;
+  return (isAdmin.value ? adminLabel : configuredStatusLabels.value[status] || adminLabel) || status;
+};
 const adminStatusMatched = (item: Property) =>
-  selectedStatus.value === "all"
-    ? true
-    : selectedStatus.value === "draft"
-    ? item.status === "draft"
-    : selectedStatus.value === "todo"
-    ? ["draft", "pending_review"].includes(item.status)
-    : selectedStatus.value === "online"
-      ? ["published", "available"].includes(item.status)
-      : selectedStatus.value === "incomplete"
-      ? propertyNeedsDetails(item)
-      : item.status === selectedStatus.value;
+  selectedStatus.value === "all" || item.status === selectedStatus.value;
 const kindOptions = ["整租", "合租", "一居", "两居", "三居+"];
 const roomCountOf = (item: Property) => {
   const match = `${item.layout || ""} ${item.title || ""}`.match(/(\d+)\s*室/);
@@ -124,15 +126,17 @@ const filteredProperties = computed(() => {
   const query = keyword.value.trim().toLowerCase(),
     price = priceRanges[selectedPrice.value];
   return properties.value.filter((item) => {
+    const selectedAreaChannel = configuredChannels.value.find(channel => channel.title === selectedArea.value);
     let areaMatched = selectedArea.value === "全部" || item.areaLabel === selectedArea.value;
-    if (!areaMatched && selectedArea.value !== "全部" && !item.areaLabel && item.latitude && item.longitude) {
+    if (!areaMatched && selectedAreaChannel?.community && normalizeCommunityName(item.community || "") === normalizeCommunityName(selectedAreaChannel.community)) areaMatched = true;
+    if (!areaMatched && selectedArea.value !== "全部" && item.latitude && item.longitude) {
       const candidates = configuredChannels.value.filter((area) => area.latitude && area.longitude);
       if (candidates.length) {
         const nearest = candidates.reduce((current, candidate) =>
           distanceKm(Number(candidate.latitude), Number(candidate.longitude), item.latitude!, item.longitude!) <
           distanceKm(Number(current.latitude), Number(current.longitude), item.latitude!, item.longitude!) ? candidate : current,
         );
-        areaMatched = nearest.title === selectedArea.value;
+        areaMatched = nearest.title === selectedArea.value && distanceKm(Number(nearest.latitude), Number(nearest.longitude), item.latitude, item.longitude) <= Number(nearest.radiusKm || 3);
       }
     }
     const channelDistance =
@@ -151,9 +155,10 @@ const filteredProperties = computed(() => {
     const channelMatched =
       !channelFilter.value ||
       (channelDistance !== null
-        ? channelDistance <= channelFilter.value.radiusKm
-        : !channelFilter.value.keyword ||
-          item.location?.includes(channelFilter.value.keyword));
+        ? (Boolean(channelFilter.value.community) && normalizeCommunityName(item.community || "") === normalizeCommunityName(channelFilter.value.community || "")) || channelDistance <= channelFilter.value.radiusKm
+        : channelFilter.value.community
+          ? normalizeCommunityName(item.community || "") === normalizeCommunityName(channelFilter.value.community)
+          : !channelFilter.value.keyword || item.location?.includes(channelFilter.value.keyword));
     return (
       (!isAdmin.value || adminStatusMatched(item)) &&
       channelMatched &&
@@ -218,8 +223,9 @@ const load = async () => {
       getPublicConfig().catch(() => null),
     ]);
     properties.value = items;
-    configuredLocations.value = config?.locations || [];
-    configuredChannels.value = config?.featuredChannels || [];
+    const areaChannels = pinnedAreaChannels(config);
+    configuredLocations.value = areaChannels.map(channel => ({ label: channel.title, keyword: channel.community || channel.keyword }));
+    configuredChannels.value = areaChannels;
     configuredStatusLabels.value = { ...(config?.statusLabels || {}), pending_review: config?.statusLabels?.pendingReview || "待审核" };
     // [] is an explicit configuration: do not restore hidden public labels.
     if (Array.isArray(config?.listingTitle?.enabledFields)) {
@@ -241,22 +247,24 @@ const load = async () => {
           const hasCoordinateFilter =
             typeof filter.latitude === "number" &&
             typeof filter.longitude === "number" &&
-            typeof filter.radiusKm === "number";
+            typeof filter.radiusKm === "number" && Number(filter.latitude) !== 0 && Number(filter.longitude) !== 0;
+          const hasCommunityFilter = typeof filter.community === "string" && Boolean(filter.community.trim());
           if (typeof filter.area === "string") selectedArea.value = filter.area;
           if (typeof filter.priceIndex === "number")
             selectedPrice.value = Math.max(0, Math.min(priceRanges.length - 1, filter.priceIndex));
           // A configured channel with coordinates is a radius filter. Keeping its
           // fallback keyword in the search box would apply a second, unrelated
           // text filter and incorrectly hide properties inside the circle.
-          if (!hasCoordinateFilter && typeof filter.keyword === "string") keyword.value = filter.keyword;
+          if (!hasCoordinateFilter && !hasCommunityFilter && typeof filter.keyword === "string") keyword.value = filter.keyword;
           if (typeof filter.kind === "string" && kindOptions.includes(filter.kind)) selectedKind.value = filter.kind;
-          if (hasCoordinateFilter) {
+          if (hasCoordinateFilter || hasCommunityFilter) {
             channelFilter.value = {
               keyword: typeof filter.keyword === "string" ? filter.keyword : "",
-              latitude: Number(filter.latitude),
-              longitude: Number(filter.longitude),
+              latitude: hasCoordinateFilter ? Number(filter.latitude) : 0,
+              longitude: hasCoordinateFilter ? Number(filter.longitude) : 0,
               radiusKm: Number(filter.radiusKm),
               title: typeof filter.title === "string" ? filter.title : undefined,
+              community: hasCommunityFilter ? String(filter.community) : undefined,
             };
           }
         } else keyword.value = pending;
@@ -399,14 +407,24 @@ const copyProperty = async (property: Property) => {
 };
 const changeStatus = async (property: Property, status: string) => {
   if (workingID.value) return;
-  workingID.value = property.id;
-  try {
-    await request("/v1/properties/status", { method: "PATCH", data: { propertyId: property.id, status, note: "房源管理操作" } });
-    uni.showToast({ title: status === "published" || status === "available" ? "已设为可租" : status === "rented" ? "已标记已租" : status === "offline" ? "已下架" : "状态已更新" });
-    await load();
-  } catch (error) {
-    uni.showToast({ title: error instanceof Error ? error.message : "操作失败", icon: "none" });
-  } finally { workingID.value = ""; }
+  const current = statusLabel(property.status);
+  const target = statusLabel(status);
+  uni.showModal({
+    title: `${current} → ${target}`,
+    content: `确认将房源状态从「${current}」改为「${target}」吗？${status === "rented" ? "确认后将从可租房源中移除，并归入已租。" : status === "available" ? "确认后将作为可租房源展示给用户。" : status === "offline" ? "下架后，用户端将不再展示该房源。" : ""}`,
+    confirmText: `确认${target}`,
+    success: async (result) => {
+      if (!result.confirm) return;
+      workingID.value = property.id;
+      try {
+        await request("/v1/properties/status", { method: "PATCH", data: { propertyId: property.id, status, note: `房源管理：${current}改为${target}` } });
+        uni.showToast({ title: `已改为${target}` });
+        await load();
+      } catch (error) {
+        uni.showToast({ title: error instanceof Error ? error.message : "操作失败", icon: "none" });
+      } finally { workingID.value = ""; }
+    },
+  });
 };
 const removeProperty = (property: Property) => {
   const isLiveListing = ["published", "available", "rented"].includes(property.status);
@@ -549,7 +567,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
           ></view
         ></view
         ><view v-if="isAdmin" class="admin-card-actions" @click.stop
-          ><view class="admin-inline-actions"><template v-if="['draft', 'pending_review'].includes(item.status)"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">发布并设为可租</button></template><template v-else-if="item.status === 'published'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">设为可租</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'available'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'rented'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">可租</button></template><template v-else><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">上架</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">已租</button></template><button class="action-copy" :loading="workingID === item.id" @click.stop="copyProperty(item)">复制</button><button class="action-delete-inline" @click.stop="removeProperty(item)">删除</button></view></view
+          ><view class="admin-inline-actions"><template v-if="['draft', 'pending_review'].includes(item.status)"><button class="action-primary" @click.stop="editProperty(item.id)">编辑并发布</button></template><template v-else-if="item.status === 'published'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">改为可租</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">改为已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'available'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">改为已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'rented'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">改为可租</button></template><template v-else><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">改为可租</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">改为已租</button></template><button class="action-copy" :loading="workingID === item.id" @click.stop="copyProperty(item)">复制</button><button class="action-delete-inline" @click.stop="removeProperty(item)">删除</button></view></view
         ></view
       ></view
     ><view v-if="!loading && !loadFailed && !filteredProperties.length" class="empty-match card" :class="{ 'favorites-empty': showFavoritesOnly }"

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict'
+import {build} from 'esbuild'
+const b=await build({entryPoints:['admin/src/config/tagRestore.ts'],bundle:true,platform:'node',format:'esm',write:false})
+const {captureDisabledTag,restoreDisabledTag}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'))
+const base={listingTitle:{customerAllowedFields:['community','area','floor'],enabledFields:['community','area','floor'],customerDetailFields:['community','area','floor'],customerShareFields:['community','area','floor'],customerPosterFields:['community','area','floor']},shareCard:{titleFields:['community','areaSqm'],posterFields:['community','areaSqm','floorInfo']}}
+function suspend(c,key,prior){const s=captureDisabledTag(c,prior);for(const k of ['customerAllowedFields','enabledFields','customerDetailFields','customerShareFields','customerPosterFields'])c.listingTitle[k]=c.listingTitle[k].filter(v=>v!==key);const f=key==='area'?'areaSqm':'floorInfo';c.shareCard.titleFields=c.shareCard.titleFields.filter(v=>v!==f);c.shareCard.posterFields=c.shareCard.posterFields.filter(v=>v!==f);for(const fallback of ['rentMonthly','depositPayment','community']){if(c.shareCard.posterFields.length>=3)break;if(!c.shareCard.posterFields.includes(fallback))c.shareCard.posterFields.push(fallback)}s.generatedPoster=c.shareCard.posterFields.filter(v=>!s.poster.includes(v));return s}
+let c=structuredClone(base),a=suspend(c,'area');restoreDisabledTag(c,'area',a);assert.deepEqual(c,base)
+for(const order of [['area','floor'],['floor','area']]){c=structuredClone(base);a=suspend(c,'area');const f=suspend(c,'floor',a);a.generatedPoster=f.generatedPoster=[...new Set([...a.generatedPoster,...f.generatedPoster])];for(const k of order)restoreDisabledTag(c,k,k==='area'?a:f);assert.deepEqual(c,base)}
+c=structuredClone(base);a=suspend(c,'area');c.shareCard.titleFields.push('availableDate');restoreDisabledTag(c,'area',a);assert.deepEqual(c.shareCard.titleFields,['community','areaSqm','availableDate'])
+console.log('PASS: exact roundtrip, multi-tag restore in both orders, generated fallback cleanup, unrelated edits preserved')

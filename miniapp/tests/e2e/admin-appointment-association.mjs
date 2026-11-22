@@ -50,7 +50,9 @@ try {
   assert.equal(run('api-binding', 'docker', ['port', api, '8080/tcp']).trim(), '127.0.0.1:18083')
   run('api-environment', 'docker', ['exec', api, 'sh', '-ec', '[ "$APP_ENV" = test ] && [ "$MYSQL_HOST" = mysql-test ] && [ "$MYSQL_DATABASE" = xiaopi_miniapp_test ]'])
   const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
-  const sql = "SELECT JSON_OBJECT('id',r.id,'userId',r.user_id,'propertyId',r.property_id,'propertyTitle',r.property_title,'contactName',r.contact_name,'phone',r.phone,'preferredTime',r.preferred_time,'status',r.status,'livePropertyTitle',p.title) FROM rental_requests r LEFT JOIN properties p ON p.id=r.property_id WHERE r.request_type='appointment' ORDER BY r.id;"
+  // The local test database may contain manually created smoke rows. This case
+  // must inspect only the two deterministic synthetic appointments it owns.
+  const sql = "SELECT JSON_OBJECT('id',r.id,'userId',r.user_id,'propertyId',r.property_id,'propertyTitle',r.property_title,'contactName',r.contact_name,'phone',r.phone,'preferredTime',r.preferred_time,'status',r.status,'livePropertyTitle',p.title) FROM rental_requests r LEFT JOIN properties p ON p.id=r.property_id WHERE r.request_type='appointment' AND r.id IN ('qa-history-e2e-a','qa-history-e2e-b') ORDER BY r.id;"
   const before = mysql('appointments-before', sql)
   const records = before.trim().split('\n').filter(Boolean).map(JSON.parse)
   assert.ok(records.some(r => r.id === 'qa-history-e2e-a') && records.some(r => r.id === 'qa-history-e2e-b'))
@@ -91,7 +93,7 @@ try {
   const dom = fs.readFileSync(path.join(out,'appointments-dom.log'),'utf8')
   assert.ok(network,'Missing admin appointments response')
   const payload = typeof network.detail.response==='string' ? JSON.parse(network.detail.response) : network.detail.response
-  const appointments = payload.data.filter(r=>r.requestType==='appointment')
+  const appointments = payload.data.filter(r=>r.requestType==='appointment' && ['qa-history-e2e-a','qa-history-e2e-b'].includes(r.id))
   assert.equal(appointments.length,records.length)
   const cards = dom.split(/class=\?"card item\b/)
   for (const record of records) {

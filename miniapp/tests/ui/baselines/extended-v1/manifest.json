@@ -1,0 +1,587 @@
+{
+  "version": "extended-v1",
+  "runId": "2026-11-11T01:22:51.411Z",
+  "reason": "审核十二个状态，排除原生键盘阻塞，并确认 DevTools 设备边缘像素波动",
+  "createdAt": "2026-11-11T01:28:06.512Z",
+  "device": {
+    "model": "iPhone 17",
+    "screenWidth": 402,
+    "screenHeight": 874,
+    "pixelRatio": 3,
+    "SDKVersion": "3.17.6"
+  },
+  "masks": [
+    {
+      "x": 14,
+      "y": 35,
+      "width": 65,
+      "height": 19,
+      "reason": "Simulator status-bar clock only"
+    }
+  ],
+  "blockedCases": [
+    {
+      "name": "keyboard-focused",
+      "findings": [
+        {
+          "category": "AUTOMATOR_OR_INTERACTION",
+          "message": "No native keyboard height event"
+        }
+      ]
+    }
+  ],
+  "images": [
+    {
+      "name": "horizontal-home",
+      "route": "pages/home/index",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "4a9173bbb521cb4739854ab01bc4ef82615bb6ee04c6be62c46e459c9bb7a8f3"
+    },
+    {
+      "name": "horizontal-list",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "57ed9bfa705417da57aa6b265f01e39bf436e93422923f5c27dba697e31a2fb0"
+    },
+    {
+      "name": "horizontal-detail",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 874
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "822710cf8b990b239ee03584d51972ac64ff752bcddedbf95e195ae8da691769"
+    },
+    {
+      "name": "horizontal-form",
+      "route": "pages/requests/index",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "0ddd852510db8815df5ce2e3f66dc9d5b1c96484796fe131377d1ea73099b626"
+    },
+    {
+      "name": "detail-with-image",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 874
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "e62dfda5e6bfae7c86154c0ba95a4b26a77888b84810292784a73e54f32dacef"
+    },
+    {
+      "name": "favorite-added",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "11107a51ed92d522e5b5fef02a3572adc04cc95dbbf457fda5227478a87ed3ba"
+    },
+    {
+      "name": "favorite-list",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "22fc24e6e6a8e48acc77b6c4cdc1d021f69fe4977968792baa801dd5c8a1bb03"
+    },
+    {
+      "name": "favorite-removed",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "810f15912c37f7e4921a36c7b566b07c1aac1a9713c5872a2f4805edc3d2225d"
+    },
+    {
+      "name": "guest-login-prompt",
+      "route": "pages/requests/history",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "b240c6a261dabc53a93dbaac2d28b552ba0f5028cc807ff43a9544abeb05c252"
+    },
+    {
+      "name": "guest-login-destination",
+      "route": "pages/auth/login",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "b28ccdd18da06d5da5f86f27527a8b3bfbb6c069a407b37804a2d18fd3fef4a3"
+    },
+    {
+      "name": "admin-appointment-list",
+      "route": "pages/admin/index",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "845d7c45fb612d38a190d15ec9e5125ce72836338d1723168b4d794a250540ff"
+    },
+    {
+      "name": "admin-appointment-scroll",
+      "route": "pages/admin/index",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "width": 636,
+          "height": 2,
+          "reason": "DevTools top capture seam"
+        },
+        {
+          "x": 14,
+          "y": 2,
+          "width": 2,
+          "height": 12,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 34,
+          "y": 2,
+          "width": 2,
+          "height": 1,
+          "reason": "DevTools top-left rounded-frame seam"
+        },
+        {
+          "x": 0,
+          "y": 1360,
+          "width": 30,
+          "height": 21,
+          "reason": "DevTools text visible outside the lower rounded frame"
+        }
+      ],
+      "sha256": "9aa0d3c3ae194e0b95d8272074d35cb9e5b7c44abd93c54e45badb19cd9df1d6"
+    }
+  ]
+}

@@ -31,6 +31,7 @@ import { captureDisabledTag, restoreDisabledTag, type DisabledTagState } from '.
 import { configChanges, restoreChange, changeValue, changeScope, registerCopyScope, type ConfigChange, type ConfigPublication, type ConfigState } from '../config/configChanges'
 import DoorplatesPage from './DoorplatesPage.vue'
 import { pageCopyGroups } from '../config/pageCopyGroups'
+import { normalizeCommunityIdentity } from '../utils/communityName'
 
 type TabKey = '小区门牌数据' | '运营总览' | '房源列表' | '线索管理' | '租客需求' | '用户意向' | '微信用户' | '小程序基础配置' | '小程序页面配置' | '后台管理员' | '小程序管理员' | '临时访问码'
 
@@ -116,14 +117,16 @@ const detailModuleOptions: { key: DetailSectionTab; label: string; helper: strin
 const configAudience = ref<ConfigAudience>('customer')
 type CanvasDataState = 'normal' | 'loading' | 'error' | 'empty'
 const canvasIdentityState = ref<'guest' | 'user' | 'admin'>('user')
-const canvasEditSteps = ['位置门牌', '户型出租', '环境配套', '租金入住', '素材发布']
+const canvasEditSteps = ['位置与概况', '环境配套', '租金入住', '素材发布']
 const canvasEditStep = ref(0)
+const canvasQuickSettingsOpen = ref(false)
 const canvasWorkbenchActivities = ref<{id:string;action:string;detail:string}[]>([])
 const canvasWorkbenchContacts = ref<{id:string;propertyName?:string;nickname?:string;phone?:string;type:string;source?:string;createdAt?:string}[]>([])
 const canvasWorkbenchError = ref('')
 const canvasReviewPerspective = ref<'customer' | 'admin'>('customer')
 const canvasPageHistory = ref<string[]>([])
 const canvasHomeSearchQuery = ref('')
+const canvasAllChannelsOpen = ref(false)
 const canvasSearchQuery = ref('')
 const canvasAreaFilter = ref('全部')
 const canvasChannelFilter = ref('')
@@ -162,12 +165,11 @@ const selectedCanvasNodeID = ref('home.title')
 const selectedCanvasNode = computed(() => canvasNodes[selectedCanvasNodeID.value])
 const listingTagTabs = [
   { key: 'allowed', label: '可用标签' },
-  { key: 'phrases', label: '广告短语' },
   { key: 'admin', label: '管理员标签' },
 ] as const
 const sharePreviewType = ref<'friend' | 'timeline'>('friend')
 const listingTagTab = ref<(typeof listingTagTabs)[number]['key']>('allowed')
-const visibleListingTagTabs = computed(() => listingTagTabs.filter(item => !['admin', 'phrases'].includes(item.key) || canvasIdentityState.value === 'admin'))
+const visibleListingTagTabs = computed(() => listingTagTabs.filter(item => item.key !== 'admin' || canvasIdentityState.value === 'admin'))
 const activeListingTagTab = computed(() => visibleListingTagTabs.value.some(item => item.key === listingTagTab.value) ? listingTagTab.value : 'allowed')
 const canvasRoleLabel = computed(() => ({ guest: '游客', user: '微信用户', admin: '小程序管理员' })[canvasIdentityState.value])
 const basicConfigTab = ref<BasicConfigTab>('tags')
@@ -176,7 +178,7 @@ const configPageMeta = computed(() => pagePresentationOptions.find(page => page.
 const miniappNativeTitles: Record<string, string> = {
   home: '小皮租房', properties: '房源', requests: '找房需求', publish: '发布房源', me: '我的',
   footprints: '浏览足迹', requestHistory: '我的找房记录', authLogin: '微信登录',
-  adminWorkbench: '小皮工作台', adminPropertyEdit: '编辑房源',
+  adminWorkbench: '小皮工作台', adminPropertyEdit: '编辑房源', adminMaterialLibrary: '房源素材库',
 }
 const canvasNativeTitle = computed(() => miniappNativeTitles[configPage.value] || '房源详情')
 function selectDetailConfigTab(value: DetailConfigTab) {
@@ -214,10 +216,6 @@ function previewHomeRecommendation() {
 function selectListingTagTab(value: typeof listingTagTab.value) {
   listingTagTab.value = value
   switch (value) {
-    case 'phrases':
-      selectConfigPage('adminPropertyEdit')
-      void nextTick(() => document.querySelector('.canvas-marketing-field')?.scrollIntoView({ block: 'nearest' }))
-      break
     case 'admin':
       selectConfigPage('properties')
       break
@@ -264,6 +262,7 @@ function selectCanvasNodeForPage(page: string) {
 const selectConfigPage = (key: string) => {
   const target = pagePresentationOptions.find(page => page.key === key)
   if (!target) return
+  canvasAllChannelsOpen.value = false
   canvasPageHistory.value = []
   if (target.audience !== 'both' && target.audience !== configAudience.value) configAudience.value = target.audience as ConfigAudience
   configPage.value = target.key
@@ -389,7 +388,7 @@ function previewPageCopyField(field: string) {
     return
   }
   if (page === 'properties' && field.includes('{area}')) {
-    canvasAreaFilter.value = publicConfig.locations[0]?.label || '片区'
+    canvasAreaFilter.value = areaEntryChannels.value[0]?.title || '片区'
   }
   if (page === 'properties' && field.includes('{keyword}')) canvasSearchQuery.value = '示例关键词'
   if (page === 'requests' && field === '登录后才能保存并跟进你的找房需求') {
@@ -420,10 +419,10 @@ function previewPageCopyField(field: string) {
   }
   if (configPage.value !== 'properties' || !['properties-empty', 'display-guidance'].includes(pageEditorSection.value)) return
   canvasPageFilterReset()
-  if (field.includes('{area}')) canvasAreaFilter.value = publicConfig.locations[0]?.label || '片区'
+  if (field.includes('{area}')) canvasAreaFilter.value = areaEntryChannels.value[0]?.title || '片区'
   if (field.includes('{keyword}')) canvasSearchQuery.value = '示例关键词'
   if (field === '关注该片区新房') {
-    canvasAreaFilter.value = publicConfig.locations[0]?.label || '片区'
+    canvasAreaFilter.value = areaEntryChannels.value[0]?.title || '片区'
   }
   revealPropertyEmptyCard()
 }
@@ -497,13 +496,17 @@ const channelMapCache = ref<Record<string, string>>({})
 const channelMapRequest = ref<Record<number, number>>({})
 const channelMapActiveMarker = ref<Record<number, string>>({})
 const channelSelectedLocation = ref<Partial<Record<number, LocationSearchItem>>>({})
+const channelLocationRepairOpen = ref<Record<number, boolean>>({})
+const doorplateCommunityCounts = ref<Record<string, number>>({})
+const savedCommunityLocations = ref<Record<string, { address: string; latitude: number; longitude: number }>>({})
+const channelCommunityOptions = computed(() => Object.entries(doorplateCommunityCounts.value).sort(([left], [right]) => left.localeCompare(right, 'zh-CN')))
 const activeChannelIndex = ref(0)
-const coverageDataTab = ref<'locations' | 'channels'>('locations')
+const areaEntryChannels = computed(() => publicConfig.featuredChannels.filter(item => item.showInAreaEntry))
 const activeChannel = computed(() => publicConfig.featuredChannels[activeChannelIndex.value])
 function channelSetupStatus(item: ChannelConfig) {
   if (!item.title.trim()) return '待填写'
-  if (!item.latitude || !item.longitude) return '待选点'
-  return '已定位'
+  if (!item.community) return '待选小区'
+  return item.latitude && item.longitude ? '已关联位置' : '已选小区'
 }
 const facilityCatalog = [
   { key: 'refrigerator', label: '冰箱', group: '家具家电', icon: '▥' }, { key: 'washer', label: '洗衣机', group: '家具家电', icon: '◉' },
@@ -609,7 +612,7 @@ const previewListFields = computed(() => [
 const previewOperatorDoorplate = computed(() => {
   if (configAudience.value !== 'operator' || !publicConfig.listingTitle.adminEnabledFields.includes('unit')) return ''
   const item = previewPrimaryProperty.value
-  return [item?.buildingNo, item?.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item?.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('')
+  return previewDoorplate(item)
 })
 const previewListingTags = computed(() => previewListFields.value
   .filter(key => key !== 'community')
@@ -765,6 +768,12 @@ function searchFromCanvasHome() {
   canvasSearchQuery.value = canvasHomeSearchQuery.value.trim()
   switchCanvasTab('properties')
 }
+function selectCanvasChannel(item: ChannelConfig) {
+  canvasPageFilterReset()
+  canvasChannelFilter.value = item.title
+  canvasAllChannelsOpen.value = false
+  switchCanvasTab('properties')
+}
 function switchCanvasTab(key: string) {
   canvasPageHistory.value = []
   selectConfigPage(key)
@@ -828,6 +837,14 @@ function confirmCanvasDate() {
   canvasForm.value.moveInDate = canvasDatePickerValue.value
   canvasDatePickerOpen.value = false
 }
+function updateCanvasCommunity(event: Event) {
+  const community = String((event.target as HTMLInputElement).value || '')
+  const previousCommunity = canvasPropertyDraft.value.community || ''
+  const currentTitle = canvasPropertyDraft.value.title || ''
+  canvasPropertyDraft.value.community = community
+  if (!currentTitle || currentTitle === previousCommunity) canvasPropertyDraft.value.title = community
+}
+
 function startCanvasPropertyEdit(item?: Property) {
   previewSelectedPropertyID.value = item?.id || ''
   canvasEditingExistingProperty.value = Boolean(item)
@@ -838,8 +855,9 @@ function startCanvasPropertyEdit(item?: Property) {
   const bathroomCount = defaultLayout.match(/(\d+)卫/)?.[1] || '1'
   const balconyCount = defaultLayout.match(/(\d+)阳台/)?.[1] || '0'
   const savedAmenities = item?.description?.match(/^配套设施：([^\n]*)/)?.[1]?.split('、').filter(Boolean)
+  canvasQuickSettingsOpen.value = false
   Object.assign(canvasPropertyDraft.value, {
-    community: item?.community || '', location: item?.location || '', latitude: item?.latitude ? String(item.latitude) : '', longitude: item?.longitude ? String(item.longitude) : '', buildingNo: item?.buildingNo || '', unitNo: item?.unitNo || '', roomNo: item?.roomNo || '', rentType: item?.rentType || '整租', listingSource: item?.listingSource || '直租', layout: defaultLayout, rooms: roomCount, halls: hallCount, kitchens: kitchenCount === '0' ? '无' : '有', bathrooms: bathroomCount, balconies: balconyCount === '0' ? '无' : balconyCount, roomType: defaultLayout.split(/[·・|｜]/)[0] || '主卧', privateBathroom: defaultLayout.includes('独卫') ? 'true' : '', hasBayWindow: defaultLayout.includes('有飘窗') ? 'true' : '', areaSqm: item?.areaSqm ? String(item.areaSqm) : '', floorInfo: item?.floorInfo || '', orientation: item?.orientation || '', elevator: item?.elevator || '', rentMonthly: item?.rentMonthly ? String(item.rentMonthly) : '', feeText: item?.feeText || '无中介费', depositPayment: item?.depositPayment || '押一付一', availableDate: item?.availableDate || '拎包入住', utilitiesText: item?.utilitiesText || '民水民电', description: item?.description?.replace(/^配套设施：[^\n]*\n?/, '') || '', rulesText: item?.rulesText || '', marketingPhrase: item?.marketingPhrase || '', coverFocusX: String(item?.coverFocusX ?? 50), coverFocusY: String(item?.coverFocusY ?? 50), imageCount: String(item?.media?.filter(media => media.type === 'image').length || 0), videoCount: String(item?.media?.filter(media => media.type === 'video').length || 0), channel: item?.areaLabel || publicConfig.locations[0]?.label || '', media: '',
+    title: item?.title || item?.community || '', community: item?.community || '', location: item?.location || '', latitude: item?.latitude ? String(item.latitude) : '', longitude: item?.longitude ? String(item.longitude) : '', buildingNo: item?.buildingNo || '', unitNo: item?.unitNo || '', roomNo: item?.roomNo || '', roomSequence: item?.roomSequence ? String(item.roomSequence) : '0', rentType: item?.rentType || '整租', listingSource: item?.listingSource || '直租', layout: defaultLayout, wholeLayout: item?.wholeLayout || defaultLayout, wholeAreaSqm: item?.wholeAreaSqm ? String(item.wholeAreaSqm) : '', layoutChosen: item ? 'true' : '', roomCountChosen: item ? 'true' : '', rooms: roomCount, halls: hallCount, kitchens: kitchenCount === '0' ? '无' : '有', bathrooms: bathroomCount, balconies: balconyCount === '0' ? '无' : balconyCount, roomType: defaultLayout.split(/[·・|｜]/)[0] || '主卧', privateBathroom: defaultLayout.includes('独卫') ? 'true' : '', hasBayWindow: defaultLayout.includes('有飘窗') ? 'true' : '', areaSqm: item?.areaSqm ? String(item.areaSqm) : '', floorInfo: item?.floorInfo || '', orientation: item?.orientation || '', elevator: item?.elevator || '', rentMonthly: item?.rentMonthly != null ? String(item.rentMonthly) : '', feeText: item?.feeText || '无中介费', depositPayment: item?.depositPayment || '押一付一', availableDate: item?.availableDate || '拎包入住', utilitiesText: item?.utilitiesText || '民水民电', description: item?.description?.replace(/^配套设施：[^\n]*\n?/, '') || '', rulesText: item?.rulesText || '', coverFocusX: String(item?.coverFocusX ?? 50), coverFocusY: String(item?.coverFocusY ?? 50), imageCount: String(item?.media?.filter(media => media.type === 'image').length || 0), videoCount: String(item?.media?.filter(media => media.type === 'video').length || 0), channel: item?.areaLabel || areaEntryChannels.value[0]?.title || '', media: '',
   })
   canvasPropertyFacilities.value = savedAmenities || (item ? [] : publicConfig.propertyDetail.facilities.filter(facility => facility.enabled).slice(0, 4).map(facility => facility.label))
   canvasEditStep.value = 0
@@ -847,24 +865,41 @@ function startCanvasPropertyEdit(item?: Property) {
 }
 function updateCanvasWholeLayout(key: string, value: string) {
   canvasPropertyDraft.value[key] = value
+  canvasPropertyDraft.value.layoutChosen = 'true'
+  if (key === 'rooms') canvasPropertyDraft.value.roomCountChosen = 'true'
   const rooms = canvasPropertyDraft.value.rooms === '手动' ? (canvasPropertyDraft.value.customRooms || '1') : (canvasPropertyDraft.value.rooms || '1')
   const halls = canvasPropertyDraft.value.halls || '0'
   const kitchen = canvasPropertyDraft.value.kitchens === '无' ? '0' : '1'
   const bathrooms = canvasPropertyDraft.value.bathrooms || '1'
   const balconies = canvasPropertyDraft.value.balconies === '无' ? '0' : (canvasPropertyDraft.value.balconies || '0')
-  canvasPropertyDraft.value.layout = [
+  const wholeLayout = [
     `${Math.max(1, Number(rooms) || 1)}室`,
     Number(halls) ? `${halls}厅` : '',
     Number(kitchen) ? `${kitchen}厨` : '',
     Number(bathrooms) ? `${bathrooms}卫` : '',
     Number(balconies) ? `${balconies}阳台` : '',
   ].filter(Boolean).join('')
+  canvasPropertyDraft.value.wholeLayout = wholeLayout
+  canvasPropertyDraft.value.layout = canvasPropertyDraft.value.rentType === '合租'
+    ? [canvasPropertyDraft.value.roomType || '主卧', canvasPropertyDraft.value.privateBathroom ? '独卫' : '', canvasPropertyDraft.value.hasBayWindow ? '有飘窗' : ''].filter(Boolean).join(' · ')
+    : wholeLayout
+  const selectedRoomCount = Number(rooms) || 1
+  if (Number(canvasPropertyDraft.value.roomSequence) > selectedRoomCount) canvasPropertyDraft.value.roomSequence = '0'
 }
 function toggleCanvasPropertyFacility(label: string) {
   canvasPropertyFacilities.value = canvasPropertyFacilities.value.includes(label)
     ? canvasPropertyFacilities.value.filter(item => item !== label)
     : [...canvasPropertyFacilities.value, label]
 }
+const canvasSelectedRoomCount = computed(() => Math.min(9, Math.max(1,
+  Number(canvasPropertyDraft.value.rooms === '手动' ? canvasPropertyDraft.value.customRooms : canvasPropertyDraft.value.rooms) || 1,
+)))
+const canvasLayoutReady = computed(() => Boolean(
+  canvasPropertyDraft.value.layoutChosen
+  && canvasPropertyDraft.value.roomCountChosen
+  && canvasPropertyDraft.value.layout?.trim()
+  && (canvasPropertyDraft.value.rooms !== '手动' || /^[1-9]$/.test(canvasPropertyDraft.value.customRooms || '')),
+))
 const canvasDraftProperty = computed(() => ({
   id: 'current', community: canvasPropertyDraft.value.community, title: canvasPropertyDraft.value.community,
   rentMonthly: Number(canvasPropertyDraft.value.rentMonthly) || 0,
@@ -873,31 +908,37 @@ const canvasDraftProperty = computed(() => ({
   listingSource: canvasPropertyDraft.value.listingSource, feeText: canvasPropertyDraft.value.feeText,
   floorInfo: canvasPropertyDraft.value.floorInfo, buildingNo: canvasPropertyDraft.value.buildingNo,
   unitNo: canvasPropertyDraft.value.unitNo, roomNo: canvasPropertyDraft.value.roomNo,
+  roomSequence: Number(canvasPropertyDraft.value.roomSequence) || 0,
+  wholeLayout: canvasPropertyDraft.value.wholeLayout,
+  wholeAreaSqm: Number(canvasPropertyDraft.value.wholeAreaSqm) || 0,
   media: canvasEditingExistingProperty.value ? previewPrimaryProperty.value?.media || [] : [],
   coverFocusX: Number(canvasPropertyDraft.value.coverFocusX ?? 50),
   coverFocusY: Number(canvasPropertyDraft.value.coverFocusY ?? 50),
 } as Property))
+function previewDoorplate(item?: Property) {
+  const base = [item?.buildingNo, item?.unitNo, item?.roomNo].filter(Boolean).join('') || '待补充'
+  return item?.rentType === '合租' && item.roomSequence ? base + ' · ' + item.roomSequence + '号房' : base
+}
 const canvasReviewCards = computed(() => [{
   id: 'current', title: canvasPropertyDraft.value.community || '选择小区后自动生成',
-  doorplate: [canvasPropertyDraft.value.buildingNo, canvasPropertyDraft.value.unitNo, canvasPropertyDraft.value.roomNo].filter(Boolean).join('') || '待补充',
+  doorplate: previewDoorplate(canvasDraftProperty.value),
   location: canvasPropertyDraft.value.channel || '位置待补充', rent: canvasPropertyDraft.value.rentMonthly || 0,
   tags: previewTagGroups(canvasDraftProperty.value).all, cover: canvasEditingExistingProperty.value ? previewCoverStyle(canvasDraftProperty.value, 0, true) : {}, hasCover: Boolean(canvasDraftProperty.value.media?.length),
 }, ...properties.value
   .filter(item => item.id !== previewSelectedPropertyID.value && ['published', 'available', 'rented'].includes(item.status) && item.media?.some(media => media.type === 'image'))
   .sort((left, right) => Number(right.areaLabel === canvasPropertyDraft.value.channel) - Number(left.areaLabel === canvasPropertyDraft.value.channel))
   .slice(0, 2).map(item => ({
-  id: item.id, title: item.community || item.title || '房源',
-  doorplate: [item.buildingNo, item.unitNo, item.roomNo].filter(Boolean).join('') || '待补充',
+  id: item.id, title: item.title || item.community || '房源',
+  doorplate: previewDoorplate(item),
   location: previewChannelLabel(item), rent: item.rentMonthly,
   tags: previewTagGroups(item).all, cover: previewCoverStyle(item, 0, true), hasCover: true,
 }))])
-const canvasDraftTitle = computed(() => [canvasPropertyDraft.value.community || '房源小区', canvasPropertyDraft.value.marketingPhrase].filter(Boolean).join(' · '))
+const canvasDraftTitle = computed(() => canvasPropertyDraft.value.title || canvasPropertyDraft.value.community || '房源小区')
 const canvasPropertyStepReady = computed(() => [
-  Boolean(canvasPropertyDraft.value.community && canvasPropertyDraft.value.location && canvasPropertyDraft.value.latitude && canvasPropertyDraft.value.longitude),
-  Boolean(canvasPropertyDraft.value.layout),
+  Boolean(canvasPropertyDraft.value.community && canvasPropertyDraft.value.location && canvasPropertyDraft.value.latitude && canvasPropertyDraft.value.longitude && canvasLayoutReady.value),
   !detailModuleEnabled('facilities') || canvasPropertyFacilities.value.length > 0,
-  Boolean(Number(canvasPropertyDraft.value.rentMonthly) > 0 && canvasPropertyDraft.value.depositPayment),
-  Number(canvasPropertyDraft.value.imageCount || 0) > 0,
+  Boolean(Number.isFinite(Number(canvasPropertyDraft.value.rentMonthly)) && Number(canvasPropertyDraft.value.rentMonthly) >= 0 && canvasPropertyDraft.value.depositPayment),
+  true,
 ])
 const canvasPropertyCompletionCount = computed(() => canvasPropertyStepReady.value.filter(Boolean).length)
 const canvasDetailScrolled = ref(false)
@@ -905,10 +946,36 @@ const canvasFootprintClearOpen = ref(false)
 const canvasFootprints = ref<{ property: Property; count: number; viewedAt: Date }[]>([])
 const canvasEditorRequiredReady = computed(() =>
   canvasPropertyStepReady.value[0]
-  && Boolean(canvasPropertyDraft.value.community?.trim() && canvasPropertyDraft.value.location?.trim() && canvasPropertyDraft.value.layout?.trim())
-  && canvasPropertyStepReady.value[3]
+  && Boolean(canvasPropertyDraft.value.community?.trim() && canvasPropertyDraft.value.location?.trim() && canvasLayoutReady.value)
+  && canvasPropertyStepReady.value[2]
+  && (canvasPropertyDraft.value.rentType !== '合租' || !canvasPropertyDraft.value.roomSequence || Number(canvasPropertyDraft.value.roomSequence) <= canvasSelectedRoomCount.value)
   && (canvasPropertyDraft.value.listingSource !== '转租' || Number(canvasPropertyDraft.value.remainingLeaseMonths) > 0),
 )
+const canvasPublishValidationIssues = computed(() => {
+  const issues: string[] = []
+  if (!canvasPropertyDraft.value.community?.trim()) issues.push('请选择小区')
+  if (!canvasPropertyDraft.value.location?.trim() || !canvasPropertyDraft.value.latitude || !canvasPropertyDraft.value.longitude) issues.push('完成位置选择并获取地图坐标')
+  if (!canvasLayoutReady.value) issues.push('完成房屋户型选择')
+  if (canvasPropertyDraft.value.rentType === '合租' && !canvasPropertyDraft.value.wholeLayout?.trim()) issues.push('选择合租房源的整套户型')
+  if (canvasPropertyDraft.value.rentType === '合租' && Number(canvasPropertyDraft.value.roomSequence) > canvasSelectedRoomCount.value) issues.push('出租房间序号不能超过整套室数')
+  if (!Number.isFinite(Number(canvasPropertyDraft.value.rentMonthly)) || Number(canvasPropertyDraft.value.rentMonthly) < 0) issues.push('填写有效月租')
+  if (!canvasPropertyDraft.value.depositPayment?.trim()) issues.push('选择押付方式')
+  if (canvasPropertyDraft.value.listingSource === '转租' && Number(canvasPropertyDraft.value.remainingLeaseMonths) <= 0) issues.push('填写转租剩余租期')
+  return issues
+})
+function attemptCanvasPublish() {
+  if (canvasPublishValidationIssues.value.length) {
+    const issues = canvasPublishValidationIssues.value
+    if (issues.some(issue => issue.includes('小区') || issue.includes('地图位置'))) canvasEditStep.value = 0
+    else if (issues.some(issue => issue.includes('户型') || issue.includes('房间序号'))) {
+      canvasEditStep.value = 0
+      canvasQuickSettingsOpen.value = true
+    } else canvasEditStep.value = 2
+    setCanvasNotice('发布前还需要：' + issues.join('、'))
+    return
+  }
+  setCanvasNotice('预览模式不会提交、修改或创建业务数据；当前信息已通过发布校验。')
+}
 function openPreviewProperty(item?: Property) {
   if (!item) return
   if (canvasIdentityState.value === 'user') {
@@ -986,9 +1053,7 @@ function previewPosterTags(item?: Property) {
 // Keep the configuration canvas honest: these are the same presentation rules
 // as the miniapp cards (stable community heading, short address, then two tag rows).
 function previewListingTitle(item?: Property) {
-  const base = String(item?.community || item?.title || '房源').trim()
-  const phrase = configAudience.value === 'customer' ? String(item?.marketingPhrase || '').trim() : ''
-  return phrase ? `${base} · ${phrase}` : base
+  return String(item?.title || item?.community || '房源').trim()
 }
 function previewListingAddress(item?: Property) {
   const raw = String(item?.location || '').trim()
@@ -1123,6 +1188,13 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
   next.listingTitle.marketingPhrases = (next.listingTitle.marketingPhrases || []).map(item => String(item || '').trim()).filter(Boolean)
   next.locations = (next.locations || []).map(item => ({ ...item, id: item.id || createConfigId('loc') }))
   next.featuredChannels = (next.featuredChannels || []).map((item, index) => ({ ...item, id: item.id || createConfigId('channel'), latitude: item.latitude || 0, longitude: item.longitude || 0, icon: normalizeChannelStyle(item.icon, index), radiusKm: item.radiusKm || 3 }))
+  // Upgrade old configs: locations used to mirror channel titles by position.
+  if (!next.featuredChannels.some(item => item.showInAreaEntry)) {
+    const labels = new Set((next.locations || []).map(item => item.label.trim()).filter(Boolean))
+    const matched = next.featuredChannels.filter(item => labels.has(item.title.trim()))
+    ;(matched.length ? matched : next.featuredChannels.slice(0, 3)).slice(0, 4).forEach(item => { item.showInAreaEntry = true })
+  }
+  next.locations = next.featuredChannels.filter(item => item.showInAreaEntry).map(item => ({ id: item.id, label: item.title, keyword: item.community || item.keyword }))
   const savedPresentations = next.pagePresentations || {}
   next.pagePresentations = { ...savedPresentations }
   for (const [key, defaults] of Object.entries(defaultPagePresentations())) {
@@ -1159,9 +1231,6 @@ const applyConfig = (value: PublicConfig, markSaved = false) => {
   next.propertyDetail.nearby = { ...defaultPropertyDetail().nearby, ...(next.propertyDetail.nearby || {}) }
   disabledCustomerTagPlacements.clear()
   Object.assign(publicConfig, next)
-  // Keep a map visible as soon as the configuration view is opened. Existing
-  // channel coordinates are used when present; otherwise this is the Wuhan
-  // overview until the operator searches for a POI.
   preloadChannelMaps()
   if (markSaved) savedConfigJSON.value = JSON.stringify(publicConfig)
 }
@@ -1191,6 +1260,17 @@ async function load() {
     temporaryAccess.value = temporaryData || []
     applyConfig(configData.config, true)
     configRevision.value = configData.revision
+    const [doorplateResult, locationsResult] = await Promise.allSettled([
+      api<Record<string, number>>('/v1/admin/doorplates'),
+      api<Record<string, { address: string; latitude: number; longitude: number }>>('/v1/admin/community-locations'),
+    ])
+    doorplateCommunityCounts.value = doorplateResult.status === 'fulfilled' ? doorplateResult.value || {} : {}
+    savedCommunityLocations.value = locationsResult.status === 'fulfilled' ? locationsResult.value || {} : {}
+    for (const [index, channel] of publicConfig.featuredChannels.entries()) {
+      const requested = channel.community || channel.keyword
+      const canonical = channelCommunityOptions.value.find(([name]) => normalizeCommunityIdentity(name) === normalizeCommunityIdentity(requested))?.[0]
+      if (canonical) selectChannelCommunity(channel, index, canonical)
+    }
     overviewState.value = 'ready'
   } catch (error) {
     overviewState.value = 'error'
@@ -1359,26 +1439,16 @@ const configErrors = computed(() => {
   for (const [key, presentation] of Object.entries(publicConfig.pagePresentations)) if (!presentation.title.trim()) errors.push(`${pagePresentationOptions.find(page=>page.key===key)?.label || key}页面标题不能为空`)
   if (publicConfig.contactPhone && !/^\+?\d{6,20}$/.test(publicConfig.contactPhone.trim())) errors.push('联系电话格式不正确')
   if (!publicConfig.relatedPropertyRadiusKm || publicConfig.relatedPropertyRadiusKm < 0.5 || publicConfig.relatedPropertyRadiusKm > 20) errors.push('附近房源关联距离需在 0.5 到 20 公里之间')
-  if (!publicConfig.locations.length) errors.push('至少配置一个地理位置')
-  if (publicConfig.locations.length > 20) errors.push('地理位置不能超过 20 个')
-  publicConfig.locations.forEach((item, index) => {
-    if (!item.label.trim() || !item.keyword.trim()) errors.push(`第 ${index + 1} 个地理位置缺少名称或搜索关键词`)
-  })
-  const locationKeywords = publicConfig.locations.map((item) => item.keyword.trim()).filter(Boolean)
-  if (new Set(locationKeywords).size !== locationKeywords.length) errors.push('地理位置搜索关键词不能重复')
   if (!publicConfig.featuredChannels.length) errors.push('至少配置一个精选频道')
   if (publicConfig.featuredChannels.length > 12) errors.push('精选频道不能超过 12 个')
+  if (areaEntryChannels.value.length < 3 || areaEntryChannels.value.length > 4) errors.push('请置顶 3 到 4 个精选频道作为地区入口')
   publicConfig.featuredChannels.forEach((item, index) => {
-    if (!item.title.trim() || !item.subtitle.trim() || !item.keyword.trim()) errors.push(`第 ${index + 1} 个精选频道信息不完整`)
+    if (!item.title.trim() || !item.subtitle.trim() || !item.community || !item.keyword.trim()) errors.push(`第 ${index + 1} 个精选频道需要填写名称、副标题并选择门牌库小区`)
     if (!item.radiusKm || item.radiusKm <= 0 || item.radiusKm > 100) errors.push(`第 ${index + 1} 个精选频道关联半径需在 0 到 100 公里之间`)
     if ((item.latitude === 0) !== (item.longitude === 0) || item.latitude < -90 || item.latitude > 90 || item.longitude < -180 || item.longitude > 180) errors.push(`第 ${index + 1} 个精选频道中心坐标不正确`)
   })
   const channelKeywords = publicConfig.featuredChannels.map((item) => item.keyword.trim()).filter(Boolean)
   if (new Set(channelKeywords).size !== channelKeywords.length) errors.push('精选频道搜索关键词不能重复')
-  const marketingPhrases = publicConfig.listingTitle.marketingPhrases.map(item => item.trim())
-  if (marketingPhrases.length > 20) errors.push('广告短语不能超过 20 条')
-  if (marketingPhrases.some(item => !item || [...item].length > 16)) errors.push('每条广告短语需为 1 到 16 个字')
-  if (new Set(marketingPhrases).size !== marketingPhrases.length) errors.push('广告短语不能重复')
   if (!publicConfig.shareCard.titleFields.length || publicConfig.shareCard.titleFields.length > 4) errors.push('分享标题需选择 1 到 4 个字段')
   if (invalidShareTitleFields.value.length) errors.push('分享标题含有未在客户标签中启用的字段')
   if (publicConfig.shareCard.posterFields.length < 3 || publicConfig.shareCard.posterFields.length > 8) errors.push('分享海报需选择 3 到 8 个字段')
@@ -1528,62 +1598,59 @@ function toggleAdminDoorplate(enabled: boolean) {
   publicConfig.listingTitle.adminEnabledFields = enabled ? ['unit'] : []
 }
 
-function addLocation() {
-  if (publicConfig.locations.length >= 12 || publicConfig.featuredChannels.length >= 12) return
-  publicConfig.locations.push({ id: createConfigId('loc'), label: '', keyword: '' })
-  publicConfig.featuredChannels.push({ id: createConfigId('channel'), icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
-  activeChannelIndex.value = publicConfig.featuredChannels.length - 1
-}
-
-function removeLocation(index: number) {
-  publicConfig.locations.splice(index, 1)
-  if (publicConfig.featuredChannels[index]) publicConfig.featuredChannels.splice(index, 1)
-  activeChannelIndex.value = Math.max(0, Math.min(activeChannelIndex.value, publicConfig.featuredChannels.length - 1))
-}
-
 function addChannel() {
-  if (publicConfig.locations.length >= 12 || publicConfig.featuredChannels.length >= 12) return
-  publicConfig.locations.push({ id: createConfigId('loc'), label: '', keyword: '' })
-  publicConfig.featuredChannels.push({ id: createConfigId('channel'), icon: 'commute', title: '', subtitle: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3 })
+  if (publicConfig.featuredChannels.length >= 12) return
+  publicConfig.featuredChannels.push({ id: createConfigId('channel'), icon: 'commute', title: '', subtitle: '', community: '', keyword: '', latitude: 0, longitude: 0, radiusKm: 3, showInAreaEntry: false })
   activeChannelIndex.value = publicConfig.featuredChannels.length - 1
 }
 
-function addMarketingPhrase() {
-  if (publicConfig.listingTitle.marketingPhrases.length < 20) publicConfig.listingTitle.marketingPhrases.push('')
+function toggleChannelAreaEntry(item: ChannelConfig, enabled: boolean) {
+  if (enabled && areaEntryChannels.value.length >= 4) {
+    item.showInAreaEntry = false
+    configMessage.value = '地区入口最多置顶 4 个精选频道。'
+    return
+  }
+  item.showInAreaEntry = enabled
+  publicConfig.locations = publicConfig.featuredChannels.filter(channel => channel.showInAreaEntry).map(channel => ({ id: channel.id, label: channel.title, keyword: channel.community || channel.keyword }))
 }
 
-function removeMarketingPhrase(index: number) {
-  publicConfig.listingTitle.marketingPhrases.splice(index, 1)
+function syncLocationFromChannel(_index?: number) {
+  publicConfig.locations = publicConfig.featuredChannels.filter(item => item.showInAreaEntry).map(item => ({ id: item.id, label: item.title, keyword: item.community || item.keyword }))
 }
 
 function moveCoverageItem(index: number, offset: -1 | 1) {
-  moveItem(publicConfig.locations, index, offset)
   moveItem(publicConfig.featuredChannels, index, offset)
+  publicConfig.locations = publicConfig.featuredChannels.filter(channel => channel.showInAreaEntry).map(channel => ({ id: channel.id, label: channel.title, keyword: channel.community || channel.keyword }))
   activeChannelIndex.value = Math.max(0, Math.min(activeChannelIndex.value, publicConfig.featuredChannels.length - 1))
 }
 
-function syncChannelFromLocation(index: number) {
-  const location = publicConfig.locations[index]
-  const channel = publicConfig.featuredChannels[index]
-  if (!location || !channel) return
-  channel.title = location.label
-  channel.keyword = location.keyword
-}
-
-function syncLocationFromChannel(index: number) {
-  const channel = publicConfig.featuredChannels[index]
-  const location = publicConfig.locations[index]
-  if (!channel || !location) return
-  location.label = channel.title
-  location.keyword = channel.keyword
+function selectChannelCommunity(item: ChannelConfig, index: number, community: string) {
+  const selected = community.trim()
+  item.community = selected
+  item.keyword = selected
+  const location = savedCommunityLocations.value[selected]
+  item.latitude = location?.latitude || 0
+  item.longitude = location?.longitude || 0
+  channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
+  channelLocationRepairOpen.value = { ...channelLocationRepairOpen.value, [index]: false }
+  channelMapPreview.value = { ...channelMapPreview.value, [index]: '' }
+  channelSelectedLocation.value = {
+    ...channelSelectedLocation.value,
+    [index]: selected ? {
+      id: `community:${selected}`, title: selected, address: location?.address || '尚未补充小区地址', district: '门牌库小区',
+      latitude: item.latitude, longitude: item.longitude,
+    } : undefined,
+  }
+  if (item.latitude && item.longitude) void loadChannelMapPreview(index, item.latitude, item.longitude)
 }
 
 function clearChannelLocation(item: ChannelConfig, index: number) {
   item.latitude = 0
   item.longitude = 0
   channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
-  channelSelectedLocation.value = { ...channelSelectedLocation.value, [index]: undefined }
-  void loadChannelMapPreview(index, 30.45604, 114.425337)
+  const community = item.community || ''
+  channelSelectedLocation.value = { ...channelSelectedLocation.value, [index]: community ? { id: `community:${community}`, title: community, address: savedCommunityLocations.value[community]?.address || '尚未补充小区地址', district: '门牌库小区', latitude: 0, longitude: 0 } : undefined }
+  channelMapPreview.value = { ...channelMapPreview.value, [index]: '' }
 }
 
 function invalidateChannelLocation(item: ChannelConfig, index: number) {
@@ -1591,7 +1658,7 @@ function invalidateChannelLocation(item: ChannelConfig, index: number) {
 }
 
 async function searchChannelLocation(item: ChannelConfig, index: number) {
-  const keyword = (item.keyword || item.title).trim()
+  const keyword = (item.community || item.keyword || item.title).trim()
   if (keyword.length < 2) {
     pageError.value = '请先填写至少两个字的频道标题或搜索关键词'
     return
@@ -1605,6 +1672,36 @@ async function searchChannelLocation(item: ChannelConfig, index: number) {
     pageError.value = error instanceof Error ? error.message : '地点搜索失败'
   } finally {
     channelLocationLoading.value = { ...channelLocationLoading.value, [index]: false }
+  }
+}
+
+async function openChannelLocationRepair(item: ChannelConfig, index: number) {
+  channelLocationRepairOpen.value = { ...channelLocationRepairOpen.value, [index]: true }
+  if (!channelLocationResults.value[index]?.length) await searchChannelLocation(item, index)
+}
+
+async function saveChannelCommunityLocation(item: ChannelConfig, index: number, location: LocationSearchItem) {
+  const community = item.community.trim()
+  if (!community || !location.address || !Number(location.latitude) || !Number(location.longitude)) {
+    pageError.value = '地图结果缺少地址或坐标，无法补充小区位置'
+    return
+  }
+  try {
+    const saved = await api<Record<string, { address: string; latitude: number; longitude: number }>>(
+      `/v1/admin/community-locations?community=${encodeURIComponent(community)}`,
+      { method: 'PUT', body: JSON.stringify({ address: location.address, latitude: Number(location.latitude), longitude: Number(location.longitude) }) },
+    )
+    savedCommunityLocations.value = saved || { ...savedCommunityLocations.value, [community]: { address: location.address, latitude: Number(location.latitude), longitude: Number(location.longitude) } }
+    item.latitude = Number(location.latitude.toFixed(7))
+    item.longitude = Number(location.longitude.toFixed(7))
+    channelLocationResults.value = { ...channelLocationResults.value, [index]: [] }
+    channelLocationRepairOpen.value = { ...channelLocationRepairOpen.value, [index]: false }
+    channelSelectedLocation.value = { ...channelSelectedLocation.value, [index]: location }
+    channelMapPreview.value = { ...channelMapPreview.value, [index]: '' }
+    void loadChannelMapPreview(index, item.latitude, item.longitude)
+    configMessage.value = `已补充「${community}」的位置，地址和坐标已写入小区门牌数据。`
+  } catch (error) {
+    pageError.value = error instanceof Error ? error.message : '小区位置保存失败'
   }
 }
 
@@ -1714,13 +1811,13 @@ async function loadChannelMapPreview(index: number, latitude: number, longitude:
 
 function preloadChannelMaps() {
   publicConfig.featuredChannels.forEach((item, index) => {
-    void loadChannelMapPreview(index, item.latitude || 30.45604, item.longitude || 114.425337)
+    if (item.latitude && item.longitude) void loadChannelMapPreview(index, item.latitude, item.longitude)
   })
 }
 
 function removeChannel(index: number) {
   publicConfig.featuredChannels.splice(index, 1)
-  if (publicConfig.locations[index]) publicConfig.locations.splice(index, 1)
+  publicConfig.locations = publicConfig.featuredChannels.filter(item => item.showInAreaEntry).map(item => ({ id: item.id, label: item.title, keyword: item.community || item.keyword }))
   activeChannelIndex.value = Math.max(0, Math.min(activeChannelIndex.value, publicConfig.featuredChannels.length - 1))
 }
 
@@ -1782,6 +1879,7 @@ function saveConfig() { confirmationError.value = ''; configConfirmOpen.value = 
 async function confirmPublishConfig() {
   if (configErrors.value.length || !pendingConfigChanges.value.length || configConflict.value) return
   savingConfig.value = true; confirmationError.value = ''; configFailed.value = false
+  publicConfig.locations = publicConfig.featuredChannels.filter(item => item.showInAreaEntry).map(item => ({ id: item.id, label: item.title, keyword: item.community || item.keyword }))
   const snapshot = JSON.parse(JSON.stringify(publicConfig)) as PublicConfig
   let receipt: ConfigPublication | undefined
   try {
@@ -2235,20 +2333,13 @@ function setPageCopy(field: string, value: string) {
             <el-form data-config-field="brand-name" label-position="top" class="basic-config-form"><div class="form-row two-columns"><el-form-item label="品牌名称" required><el-input v-model="publicConfig.heroTitle" maxlength="20" show-word-limit placeholder="例如：小皮租房" /><div class="form-tip">统一用于小程序顶部导航、微信登录、房源详情服务入口与分享落款。</div></el-form-item><el-form-item label="服务联系电话"><el-input v-model.trim="publicConfig.contactPhone" maxlength="20" placeholder="用于房源详情联系" /><div class="form-tip">统一用于房源详情“打电话”和找房需求页的电话入口；不影响在线客服。</div></el-form-item></div></el-form>
           </section>
           <section v-else-if="basicConfigTab === 'tags'" data-config-field="tags" class="surface form-section basic-config-panel">
-            <div class="section-heading"><div><h2>房源标签规则</h2><p>管理公开标签范围、管理员门牌和广告短语。卡片排版与分享标签在对应页面编辑。</p></div></div>
+            <div class="section-heading"><div><h2>房源标签规则</h2><p>管理公开标签范围与管理员门牌。卡片排版和分享标签在对应页面编辑。</p></div></div>
             <nav class="basic-config-tabs listing-tag-tabs" aria-label="房源标签设置分类">
               <button v-for="item in visibleListingTagTabs" :key="item.key" type="button"
                 :class="{ active: activeListingTagTab === item.key }" :aria-pressed="activeListingTagTab === item.key"
                 @click="selectListingTagTab(item.key)">{{ item.label }}</button>
             </nav>
-            <div v-if="activeListingTagTab === 'phrases'" class="share-field-editor listing-title-editor marketing-phrase-editor">
-              <header><strong>客户广告短语库</strong><span>客户标题为“小区名 · 广告词”。管理员在录入或编辑房源时选用，客户在房源标题中看到。</span></header>
-              <div class="marketing-phrase-list">
-                <label v-for="(phrase, index) in publicConfig.listingTitle.marketingPhrases" :key="`marketing-phrase-${index}`"><el-input v-model="publicConfig.listingTitle.marketingPhrases[index]" maxlength="16" placeholder="例如：好房快抢" /><el-button text type="danger" @click="removeMarketingPhrase(index)">删除</el-button></label>
-              </div>
-              <el-button text type="primary" :disabled="publicConfig.listingTitle.marketingPhrases.length >= 20" @click="addMarketingPhrase">＋ 添加广告短语</el-button>
-            </div>
-            <div v-if="activeListingTagTab === 'allowed'" class="share-field-editor listing-title-editor">
+                        <div v-if="activeListingTagTab === 'allowed'" class="share-field-editor listing-title-editor">
               <header><strong>客户可用标签</strong><span>重新勾选会恢复本次编辑中取消前的展示位置。首次开放的普通标签默认显示在列表；管理员门牌可在「管理员标签」中设置。</span></header>
               <div class="share-field-options"><button v-for="field in listingTitleFieldOptions.filter(item => item.key !== 'community')" :key="`basic-customer-allowed-${field.key}`" type="button" class="field-check" :class="{ checked: publicConfig.listingTitle.customerAllowedFields.includes(field.key) }" :aria-pressed="publicConfig.listingTitle.customerAllowedFields.includes(field.key)" @click="toggleCustomerAllowedListingField(field.key, !publicConfig.listingTitle.customerAllowedFields.includes(field.key))"><i>{{ publicConfig.listingTitle.customerAllowedFields.includes(field.key) ? '✓' : '' }}</i><span>{{ field.label }}</span></button></div>
             </div>
@@ -2361,25 +2452,18 @@ function setPageCopy(field: string, value: string) {
             </el-form>
             <el-form label-position="top" class="basic-config-form"><el-form-item label="房源关联默认距离"><el-select v-model="publicConfig.relatedPropertyRadiusKm" style="width:100%"><el-option v-for="distance in [1, 2, 3, 5, 10]" :key="distance" :label="`${distance} 公里`" :value="distance" /></el-select><div class="form-tip">只作为首页“附近”的默认范围；频道地图和详情页推荐各自有独立范围，不会被这里覆盖。</div></el-form-item></el-form>
             <div class="basic-config-note"><b>距离的作用范围</b><span>默认距离用于录入时的地区关联，也用作详情附近推荐的备用距离。精选频道使用各自的地图半径。</span></div>
-            <div class="coverage-data-tabs" role="tablist" aria-label="地区与频道数据切换"><button type="button" :class="{ active: coverageDataTab === 'locations' }" @click="coverageDataTab = 'locations'">地区入口数据 <small>{{ publicConfig.locations.length }} 项</small></button><button type="button" :class="{ active: coverageDataTab === 'channels' }" @click="coverageDataTab = 'channels'">精选频道数据 <small>{{ publicConfig.featuredChannels.length }} 项</small></button></div>
-            <div v-if="coverageDataTab === 'locations'" class="basic-coverage-editor">
-              <div class="section-heading config-section-heading"><div><h2>地区入口数据</h2><p>与下方精选频道共用名称、关键词和排序；新增、删除、上移、下移会同步处理。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.locations.length >= 12" @click="addLocation">新增地区</el-button></div>
-              <div v-if="publicConfig.locations.length" class="structured-list">
-                <article v-for="(item, index) in publicConfig.locations" :key="`basic-location-${index}`" class="config-list-item"><div class="item-index">{{ String(index + 1).padStart(2, '0') }}</div><div class="item-fields location-fields"><label><span>显示名称</span><el-input v-model="item.label" maxlength="12" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label><label><span>搜索关键词</span><el-input v-model="item.keyword" maxlength="20" placeholder="例如：光谷" @input="syncChannelFromLocation(index)" /></label></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="上移" @click="moveCoverageItem(index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.locations.length - 1" aria-label="下移" @click="moveCoverageItem(index, 1)" /><el-popconfirm title="确认删除这个地区入口和对应频道？" @confirm="removeLocation(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></article>
-              </div>
-              <div v-else class="config-empty"><strong>还没有地理位置</strong><span>至少添加一个地区，用户才能从首页快速筛选房源。</span><el-button type="primary" plain :icon="Plus" @click="addLocation">添加第一个地区</el-button></div>
-            </div>
-            <div v-else class="basic-coverage-editor">
-              <div class="section-heading config-section-heading"><div><h2>精选频道数据</h2><p>与地区入口共用名称、关键词和排序；这里维护当前频道的地图中心、专属半径、卡片样式和副标题。</p></div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
-              <div v-if="publicConfig.featuredChannels.length" class="channel-editor-tabs"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`basic-channel-tab-${index}`" type="button" :class="{ active: activeChannelIndex === index, configured: item.latitude && item.longitude }" @click="activeChannelIndex = index"><span>{{ index + 1 }}</span><strong>{{ item.title || `频道 ${index + 1}` }}</strong><small>{{ channelSetupStatus(item) }}</small></button></div>
+            <div class="basic-coverage-editor">
+              <div class="section-heading config-section-heading"><div><h2>精选频道与地区入口</h2><p>频道是唯一配置来源；勾选置顶即可加入首页地区入口和房源列表筛选。选择 3–4 个置顶频道。</p></div><div class="channel-entry-count">地区入口 {{ areaEntryChannels.length }}/4</div><el-button type="primary" plain :icon="Plus" :disabled="publicConfig.featuredChannels.length >= 12" @click="addChannel">新增频道</el-button></div>
+              <div v-if="publicConfig.featuredChannels.length" class="channel-editor-tabs"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`basic-channel-tab-${index}`" type="button" :class="{ active: activeChannelIndex === index, configured: item.community, pinned: item.showInAreaEntry }" @click="activeChannelIndex = index"><strong>{{ item.title || '未命名频道' }}</strong><small>{{ item.community || '待选小区' }}</small><em v-if="item.showInAreaEntry">置顶</em></button></div>
               <div v-if="publicConfig.featuredChannels.length" class="channel-editor-grid">
                 <article v-for="(item, index) in publicConfig.featuredChannels" v-show="activeChannelIndex === index" :key="`basic-channel-${index}`" class="channel-editor-card active">
-                  <header><div class="channel-order"><span>频道数据</span><div><strong>频道 {{ index + 1 }}</strong><small>按“基础信息 → 地点 → 范围”完成配置</small></div></div><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="频道上移" @click="moveCoverageItem(index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="频道下移" @click="moveCoverageItem(index, 1)" /><el-popconfirm title="确认删除这个精选频道和对应地区？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
-                  <div class="channel-flow"><span class="active">1 基础信息</span><i>→</i><span :class="{ active: item.latitude && item.longitude }">2 地点定位</span><i>→</i><span :class="{ active: item.latitude && item.longitude && item.radiusKm > 0 }">3 关联范围</span></div>
-                  <div class="channel-fields"><label><span>频道名称</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="syncLocationFromChannel(index); invalidateChannelLocation(item, index)" /></label><label><span>搜索关键词（未选地点时使用）</span><el-input v-model="item.keyword" maxlength="20" placeholder="点击后筛选的关键词" @input="syncLocationFromChannel(index); invalidateChannelLocation(item, index)" /></label><label class="icon-field"><span>卡片样式</span><el-select v-model="item.icon"><el-option v-for="style in channelStyleOptions" :key="style.value" :label="style.label" :value="style.value" /></el-select></label><label><span>卡片副标题</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤优选" /></label></div>
+                  <header class="channel-editor-toolbar"><span>当前频道</span><div class="item-actions"><el-button text :icon="ArrowUp" :disabled="index === 0" aria-label="频道上移" @click="moveCoverageItem(index, -1)" /><el-button text :icon="ArrowDown" :disabled="index === publicConfig.featuredChannels.length - 1" aria-label="频道下移" @click="moveCoverageItem(index, 1)" /><el-popconfirm title="确认删除这个精选频道？" @confirm="removeChannel(index)"><template #reference><el-button text type="danger" :icon="Delete" aria-label="删除" /></template></el-popconfirm></div></header>
+                  <div class="channel-pin-promotion" :class="{ selected: item.showInAreaEntry }"><span class="channel-pin-icon">⌖</span><div><strong>置顶为地区入口</strong><small>置顶后同时显示在首页快捷入口和房源列表筛选中</small></div><el-switch :model-value="Boolean(item.showInAreaEntry)" :disabled="!item.showInAreaEntry && areaEntryChannels.length >= 4" aria-label="置顶为地区入口" @update:model-value="toggleChannelAreaEntry(item, Boolean($event))" /></div>
+
+                  <div class="channel-fields channel-fields-simple"><label><span>频道名称</span><el-input v-model="item.title" maxlength="12" placeholder="例如：金融港" @input="syncLocationFromChannel(index)" /></label><label><span>简短说明</span><el-input v-model="item.subtitle" maxlength="20" placeholder="例如：通勤方便" /></label></div>
                 </article>
               </div>
-              <section v-if="activeChannel" class="channel-map-workbench"><header><div><strong>{{ activeChannel.title || `频道 ${activeChannelIndex + 1}` }} · 地图定位</strong><span>搜索结果、地图选点与中心坐标集中在这里处理。</span></div><div class="channel-location-action"><el-button :loading="channelLocationLoading[activeChannelIndex]" @click="searchChannelLocation(activeChannel, activeChannelIndex)">{{ activeChannel.latitude && activeChannel.longitude ? '重新搜索地点' : '搜索地点' }}</el-button><el-button v-if="activeChannel.latitude && activeChannel.longitude" text type="danger" @click="clearChannelLocation(activeChannel, activeChannelIndex)">清除位置</el-button></div></header><div v-if="channelMapLoading[activeChannelIndex]" class="channel-map-loading">正在加载已选地点…</div><div v-else-if="channelMapPreview[activeChannelIndex]" class="channel-map-picker" title="点击地图设置频道中心" @click="selectChannelMapPoint(activeChannel, activeChannelIndex, $event)"><img class="channel-map-preview" :src="channelMapPreview[activeChannelIndex]" alt="频道范围地图预览，点击可选点" /><div v-if="activeChannel.latitude && activeChannel.longitude && !channelLocationResults[activeChannelIndex]?.length" class="channel-radius-ring" :style="selectedRadiusStyle(activeChannel)"></div><button v-if="activeChannel.latitude && activeChannel.longitude && !channelLocationResults[activeChannelIndex]?.length" class="channel-selected-map-pin" type="button" :aria-label="`${channelSelectedLocation[activeChannelIndex]?.title || '频道中心'}，已选`" @click.stop><span>●</span></button><template v-for="marker in mapMarkerPositions(activeChannel, activeChannelIndex)" :key="marker.location.id"><button class="channel-map-marker" :class="{ active: channelMapActiveMarker[activeChannelIndex] === marker.location.id }" type="button" :style="{ left: `${marker.left}%`, top: `${marker.top}%` }" :aria-label="marker.location.title" @click.stop="toggleChannelMapMarker(activeChannelIndex, marker.location.id)"><span>{{ marker.label }}</span></button><div v-if="channelMapActiveMarker[activeChannelIndex] === marker.location.id" class="channel-map-callout" :style="{ left: `${marker.left}%`, top: `${marker.top}%` }" @click.stop><strong>{{ marker.location.title }}</strong><span>{{ marker.location.district }} · {{ marker.location.address }}</span><button type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, marker.location)">设为频道中心</button></div></template></div><small v-if="activeChannel.latitude && activeChannel.longitude">已选中心：{{ channelSelectedLocation[activeChannelIndex]?.title || '地图选点' }} · {{ activeChannel.latitude.toFixed(6) }}, {{ activeChannel.longitude.toFixed(6) }} · 半径 {{ activeChannel.radiusKm }} 公里</small><small v-else>点击地图可直接选点；搜索结果会以大头钉显示在图上。</small><div v-if="channelLocationResults[activeChannelIndex]?.length" class="admin-search-results channel-location-results"><button v-for="(location, locationIndex) in channelLocationResults[activeChannelIndex]" :key="location.id" type="button" @click="selectChannelLocation(activeChannel, activeChannelIndex, location)"><span><strong>{{ String.fromCharCode(65 + locationIndex) }} · {{ location.title }}</strong><small>{{ location.district }} · {{ location.address }}</small></span><em>{{ location.distance ? `${(location.distance / 1000).toFixed(1)}km` : '选用' }}</em></button></div><label class="channel-radius-field"><span>地图关联半径</span><el-input-number v-model="activeChannel.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /><small>保存后，中心点半径内的房源会自动关联到此频道。</small></label></section>
+              <section v-if="activeChannel" class="channel-map-workbench channel-community-workbench"><header><div><strong>关联小区</strong><span>选择门牌库已有小区；缺少地址时可直接地图补充。</span></div></header><label class="channel-community-field"><span>小区门牌库</span><el-select :model-value="activeChannel.community || ''" filterable clearable :disabled="!channelCommunityOptions.length" placeholder="搜索并选择已有小区" @change="selectChannelCommunity(activeChannel, activeChannelIndex, String($event || ''))"><el-option v-for="[community, count] in channelCommunityOptions" :key="community" :label="`${community} · ${count} 个门牌`" :value="community" /></el-select><small v-if="!channelCommunityOptions.length">门牌库暂无小区数据，请先在“小区门牌数据”中添加。</small></label><div v-if="activeChannel.community" class="channel-community-summary"><div><strong>{{ activeChannel.community }}</strong><span>{{ savedCommunityLocations[activeChannel.community]?.address || '地址待补充' }}</span><small v-if="activeChannel.latitude && activeChannel.longitude">{{ activeChannel.latitude.toFixed(6) }}, {{ activeChannel.longitude.toFixed(6) }}</small></div><el-button size="small" :type="savedCommunityLocations[activeChannel.community]?.address ? 'default' : 'primary'" @click="openChannelLocationRepair(activeChannel, activeChannelIndex)">{{ savedCommunityLocations[activeChannel.community]?.address ? '地图校准' : '地图补地址' }}</el-button></div><div v-if="channelLocationRepairOpen[activeChannelIndex]" class="channel-location-repair"><div class="channel-location-repair-head"><strong>地图搜索「{{ activeChannel.community }}」</strong><el-button link @click="channelLocationRepairOpen[activeChannelIndex] = false; channelLocationResults[activeChannelIndex] = []">收起</el-button></div><div v-if="channelLocationLoading[activeChannelIndex]" class="channel-location-loading">正在搜索地图地点…</div><div v-else-if="channelLocationResults[activeChannelIndex]?.length" class="channel-location-results"><button v-for="location in channelLocationResults[activeChannelIndex]" :key="location.id" type="button" @click="saveChannelCommunityLocation(activeChannel, activeChannelIndex, location)"><strong>{{ location.title }}</strong><span>{{ location.address || '地址信息待补充' }}</span><small>{{ location.district }}<template v-if="location.distance != null"> · {{ location.distance.toFixed(1) }} km</template></small></button></div><div v-else class="channel-location-empty"><span>没有找到地点，检查小区名称后重试。</span><el-button size="small" @click="searchChannelLocation(activeChannel, activeChannelIndex)">重新搜索</el-button></div></div><div v-if="channelMapLoading[activeChannelIndex]" class="channel-map-loading">正在加载位置预览…</div><img v-else-if="channelMapPreview[activeChannelIndex] && activeChannel.community" class="channel-map-preview channel-map-preview-compact" :src="channelMapPreview[activeChannelIndex]" alt="关联小区地图预览" /><details class="channel-advanced"><summary>卡片样式与关联范围</summary><div class="channel-fields"><label class="icon-field"><span>卡片样式</span><el-select v-model="activeChannel.icon"><el-option v-for="style in channelStyleOptions" :key="style.value" :label="style.label" :value="style.value" /></el-select></label><label class="channel-radius-field"><span>关联半径（公里）</span><el-input-number v-model="activeChannel.radiusKm" :min="0.1" :max="100" :precision="1" :step="0.5" controls-position="right" /></label></div></details></section>
               <div v-else class="config-empty"><strong>还没有精选频道</strong><span>添加频道后，用户可以从首页直接进入对应房源列表。</span><el-button type="primary" plain :icon="Plus" @click="addChannel">添加第一个频道</el-button></div>
             </div>
           </section>
@@ -2488,12 +2572,17 @@ function setPageCopy(field: string, value: string) {
                 <div class="phone-status"><span>22:18</span><span>4G ▰</span></div>
                 <div class="mini-navigation">{{ publicConfig.heroTitle || '小皮租房' }}</div>
                 <div class="mini-content" :style="publicConfig.pagePresentations.home.backgroundImage ? { backgroundImage: `linear-gradient(rgba(247,246,241,.88),rgba(247,246,241,.96)), url(${publicConfig.pagePresentations.home.backgroundImage})` } : {}">
+                  <section v-if="canvasAllChannelsOpen" class="canvas-all-channels">
+                    <header><button type="button" aria-label="返回首页" @click="canvasAllChannelsOpen = false">‹</button><div><strong>精选频道</strong><small>选择一个频道，查看对应范围内的房源</small></div></header>
+                    <div class="canvas-all-channel-grid"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`all-preview-channel-${index}`" type="button" :class="`preview-tone-${item.icon || index}`" @click="selectCanvasChannel(item)"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span><em>查看房源 ›</em></button><div v-if="!publicConfig.featuredChannels.length" class="canvas-all-channels-empty">暂时还没有精选频道</div></div>
+                  </section>
+                  <template v-else>
                   <div v-if="canvasNotice" class="canvas-preview-notice" role="status">{{ canvasNotice }}</div>
-                  <section class="mini-hero" :style="{ backgroundImage: `linear-gradient(90deg, #f9e9d7 0%, #f9e9d7a3 57%, #f9e9d729 100%), url(${publicConfig.pagePresentations.home.backgroundImage || homeHeroFallback}), url(${homeHeroFallback})` }"><span class="mini-city" @click="canvasAreaFilter = canvasAreaFilter === '全部' ? (publicConfig.locations[0]?.label || '全部') : '全部'"><i class="canvas-city-pin" aria-hidden="true">⌖</i><span>武汉</span><small>⌄</small></span><strong class="canvas-editable-copy" title="首页主标题" @click="canPickHomeCopy && openCanvasNode('home.title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search"><span class="canvas-search-icon" aria-hidden="true">⌕</span><input v-model="canvasHomeSearchQuery" class="canvas-search-input" :placeholder="publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈'" @keyup.enter="searchFromCanvasHome()"><button type="button" @click="searchFromCanvasHome()">{{ canvasPageCopy("搜索") }}</button></div></section>
-                  <div class="mini-locations"><button type="button" :class="{ active: canvasAreaFilter === '全部' }" @click="canvasAreaFilter = '全部'; switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.nearbyLabel || '附近' }}</button><button v-for="(item, index) in publicConfig.locations" :key="`preview-location-${index}`" type="button" :class="{ active: canvasAreaFilter === item.label }" @click="canvasAreaFilter = item.label; switchCanvasTab('properties')">{{ item.label || '未命名' }}</button><em v-if="!publicConfig.locations.length">尚未配置</em></div>
+                  <section class="mini-hero" :style="{ backgroundImage: `linear-gradient(90deg, #f9e9d7 0%, #f9e9d7a3 57%, #f9e9d729 100%), url(${publicConfig.pagePresentations.home.backgroundImage || homeHeroFallback}), url(${homeHeroFallback})` }"><span class="mini-city" @click="canvasAreaFilter = canvasAreaFilter === '全部' ? (areaEntryChannels[0]?.title || '全部') : '全部'"><i class="canvas-city-pin" aria-hidden="true">⌖</i><span>武汉</span><small>⌄</small></span><strong class="canvas-editable-copy" title="首页主标题" @click="canPickHomeCopy && openCanvasNode('home.title')">{{ publicConfig.pagePresentations.home.title || '今天想住哪里？' }}</strong><i></i><div class="mini-search"><span class="canvas-search-icon" aria-hidden="true">⌕</span><input v-model="canvasHomeSearchQuery" class="canvas-search-input" :placeholder="publicConfig.pagePresentations.home.subtitle || '搜索小区、地铁或商圈'" @keyup.enter="searchFromCanvasHome()"><button type="button" @click="searchFromCanvasHome()">{{ canvasPageCopy("搜索") }}</button></div></section>
+                  <div class="mini-locations"><button type="button" :class="{ active: canvasAreaFilter === '全部' }" @click="canvasAreaFilter = '全部'; switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.nearbyLabel || '附近' }}</button><button v-for="(item, index) in areaEntryChannels" :key="`preview-location-${index}`" type="button" :class="{ active: canvasAreaFilter === item.title }" @click="canvasAreaFilter = item.title; switchCanvasTab('properties')">{{ item.title || '未命名' }}</button><em v-if="!areaEntryChannels.length">尚未配置</em></div>
                   <div class="mini-budget"><b>租金预算</b><button v-for="budget in ['≤1500', '1500–2500', '2500–3500', '≥3500']" :key="budget" type="button" :class="{ selected: canvasHomeBudget === budget }" @click="canvasHomeBudget = canvasHomeBudget === budget ? '不限' : budget">{{ budget }}</button></div>
                   <div class="mini-budget mini-kind"><b>住法</b><button v-for="kind in ['整租', '合租', '一居', '两居', '三居+']" :key="kind" type="button" :class="{ selected: canvasHomeKind === kind }" @click="canvasHomeKind = canvasHomeKind === kind ? '全部' : kind">{{ kind }}</button></div>
-                  <div class="mini-section-title"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="canPickHomeCopy && openCanvasNode('home.channelTitle')">{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</strong><b role="button" tabindex="0" @click="canvasPageFilterReset(); switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.allChannelsText || '全部频道' }}</b></div>
+                  <div class="mini-section-title"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="canPickHomeCopy && openCanvasNode('home.channelTitle')">{{ publicConfig.pagePresentations.home.channelTitle || '精选频道' }}</strong><b role="button" tabindex="0" @click="canvasPageFilterReset(); canvasAllChannelsOpen = true">{{ publicConfig.pagePresentations.home.allChannelsText || '全部频道' }}</b></div>
                   <div class="mini-channels"><button v-for="(item, index) in publicConfig.featuredChannels" :key="`preview-channel-${index}`" type="button" :class="`preview-tone-${item.icon || index}`" @click="canvasChannelFilter = item.title; switchCanvasTab('properties')"><b><i :class="`preview-mark-${item.icon || index}`"></i></b><strong>{{ item.title || '未命名' }}</strong><span>{{ item.subtitle || '频道说明' }}</span></button><em v-if="!publicConfig.featuredChannels.length">尚未配置</em></div>
                 <div class="mini-recommend"><strong class="canvas-editable-copy" title="点击编辑首页分区文案" @click="canPickHomeCopy && openCanvasNode('home.recommendationTitle')">{{ publicConfig.pagePresentations.home.recommendationTitle || '推荐房源' }}</strong><b @click="canvasPageFilterReset(); switchCanvasTab('properties')">{{ publicConfig.pagePresentations.home.viewAllText || '查看房源' }}</b></div>
                   <div v-if="pageEditorSection === 'display-guidance' && previewCopyScenario" class="canvas-home-empty-state"><strong>{{ canvasPageCopy(previewCopyScenario === '新房源正在整理中，稍后再来看看' ? '暂时没有可租房源' : '没有找到符合条件的房源') }}</strong><small>{{ canvasPageCopy(previewCopyScenario === '新房源正在整理中，稍后再来看看' ? '新房源正在整理中，稍后再来看看' : '试试放宽筛选条件，看看更多房源') }}</small><button v-if="previewCopyScenario !== '新房源正在整理中，稍后再来看看'" type="button" @click="previewCopyScenario = ''">{{ canvasPageCopy('清除筛选') }}</button></div>
@@ -2502,8 +2591,9 @@ function setPageCopy(field: string, value: string) {
                   <div v-if="canvasDataState === 'normal' && !previewCopyScenario && configAudience === 'customer' && previewHomeProperties.length" class="preview-home-masonry">
                     <div v-for="(column, index) in previewHomeMasonryColumns" :key="index" class="preview-home-column"><article v-for="item in column" :key="item.id" class="preview-property-card preview-masonry-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item, 0, true)"><span v-if="!item.media?.length" class="canvas-home-placeholder-initials">{{ (item.community || '小皮').slice(0, 2) }}</span><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small><button type="button" class="canvas-favorite-toggle" :class="{ active: canvasPreviewFavorites.includes(item.id) }" @click.stop="toggleCanvasFavorite(item.id)">{{ canvasPreviewFavorites.includes(item.id) ? '♥' : '♡' }}</button></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in [...new Set(previewTagGroups(item).all)]" :key="tag">{{ tag }}</i></small><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article></div>
                   </div>
-                  <article v-else-if="canvasDataState === 'normal' && !previewCopyScenario && configAudience !== 'customer' && previewHomeProperties.length" class="preview-operator-home-list"><div v-for="item in previewHomeProperties.slice(0, 4)" :key="item.id" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item, 0, true)"><span v-if="!item.media?.length" class="canvas-home-placeholder-initials">{{ (item.community || '小皮').slice(0, 2) }}</span><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="publicConfig.listingTitle.adminEnabledFields.includes('unit')" class="preview-operator-doorplate">门牌 · {{ [item.buildingNo, item.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('') || '待补充' }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></div></article>
+                  <article v-else-if="canvasDataState === 'normal' && !previewCopyScenario && configAudience !== 'customer' && previewHomeProperties.length" class="preview-operator-home-list"><div v-for="item in previewHomeProperties.slice(0, 4)" :key="item.id" class="preview-property-card preview-home-property-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :style="previewCoverStyle(item, 0, true)"><span v-if="!item.media?.length" class="canvas-home-placeholder-initials">{{ (item.community || '小皮').slice(0, 2) }}</span><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="publicConfig.listingTitle.adminEnabledFields.includes('unit') && (item.buildingNo || item.unitNo || item.roomNo || item.roomSequence)" class="preview-operator-doorplate">门牌 · {{ previewDoorplate(item) }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></div></article>
                   <div v-else-if="canvasDataState === 'normal' && !previewCopyScenario" class="preview-empty">{{ canvasPageCopy("暂时没有可租房源") }}</div>
+                  </template>
                 </div>
                 <button v-if="configPage === 'home' && configAudience === 'customer'" type="button" class="canvas-request-fab" @click="navigateCanvasPage('requests')">✎ <span>{{ canvasPageCopy("说说找房需求") }}</span></button>
                 <div class="mini-tabbar"><button :class="{ active: isCanvasTabActive('home') }" @click="switchCanvasTab('home')"><img :src="isCanvasTabActive('home') ? homeTabActiveIcon : homeTabIcon" alt=""><small>首页</small></button><button :class="{ active: isCanvasTabActive('properties') }" @click="switchCanvasTab('properties')"><img :src="isCanvasTabActive('properties') ? propertyTabActiveIcon : propertyTabIcon" alt=""><small>房源</small></button><button :class="{ active: isCanvasTabActive('me') }" @click="switchCanvasTab('me')"><img :src="isCanvasTabActive('me') ? meTabActiveIcon : meTabIcon" alt=""><small>我的</small></button></div>
@@ -2520,21 +2610,21 @@ function setPageCopy(field: string, value: string) {
                   <div v-else-if="canvasDataState === 'empty' && !previewPropertyEmpty" class="preview-empty"><b>当前没有可展示记录</b><small>清除筛选条件或稍后再试。</small></div>
                   <template v-else-if="configPage === 'properties'">
                     <div class="preview-search canvas-list-search"><span class="canvas-search-icon" aria-hidden="true">⌕</span><input v-model="canvasSearchQuery" :placeholder="publicConfig.pagePresentations.properties.searchPlaceholder || '搜索小区、位置或户型'"><button v-if="canvasSearchQuery" type="button" @click="canvasSearchQuery = ''">×</button></div>
-                    <template v-if="configAudience === 'operator'"><button class="canvas-admin-add" @click="startCanvasPropertyEdit()">＋ 录入新房源 <small>保存为草稿后继续完善</small></button><strong class="canvas-admin-filter-label">状态</strong><div class="preview-filter canvas-filter-row"><button v-for="status in canvasAdminPropertyFilters" :key="status.key" type="button" :class="{ active: canvasStatusFilter === status.key }" @click="canvasStatusFilter = status.key">{{ status.label }}</button></div><strong class="canvas-admin-filter-label">地区</strong><div class="preview-filter canvas-filter-row"><button v-for="area in ['全部', ...publicConfig.locations.map(item => item.label)]" :key="area" :class="{ active: canvasAreaFilter === area }" @click="canvasAreaFilter = area">{{ area }}</button></div><details class="canvas-admin-more">
+                    <template v-if="configAudience === 'operator'"><button class="canvas-admin-add" @click="startCanvasPropertyEdit()">＋ 录入新房源 <small>保存为草稿后继续完善</small></button><strong class="canvas-admin-filter-label">状态</strong><div class="preview-filter canvas-filter-row"><button v-for="status in canvasAdminPropertyFilters" :key="status.key" type="button" :class="{ active: canvasStatusFilter === status.key }" @click="canvasStatusFilter = status.key">{{ status.label }}</button></div><strong class="canvas-admin-filter-label">地区</strong><div class="preview-filter canvas-filter-row"><button v-for="area in ['全部', ...areaEntryChannels.map(item => item.title)]" :key="area" :class="{ active: canvasAreaFilter === area }" @click="canvasAreaFilter = area">{{ area }}</button></div><details class="canvas-admin-more">
                       <summary>☷ 更多筛选 <small>预算{{ canvasBudgetFilter }} · 住法{{ canvasRentTypeFilter === '全部' ? '不限' : canvasRentTypeFilter }}</small></summary>
                       <strong class="canvas-admin-filter-label">月租预算</strong>
                       <div class="preview-filter canvas-filter-row"><button v-for="budget in ['不限', '≤1500', '1500–2500', '2500–3500', '≥3500']" :key="budget" :class="{ active: canvasBudgetFilter === budget }" @click="canvasBudgetFilter = budget">{{ budget === '不限' ? '不限价格' : budget }}</button></div>
                       <strong class="canvas-admin-filter-label">住法</strong>
                       <div class="preview-filter canvas-filter-row"><button v-for="kind in ['全部', '整租', '合租', '一居', '两居', '三居+']" :key="kind" :class="{ active: canvasRentTypeFilter === kind }" @click="canvasRentTypeFilter = kind">{{ kind === '全部' ? '不限' : kind }}</button></div>
                     </details></template>
-                    <template v-else><button type="button" class="canvas-favorite-filter" :class="{ active: canvasFavoriteOnly }" @click="canvasFavoriteOnly = !canvasFavoriteOnly"><span aria-hidden="true">♡</span>{{ canvasFavoriteOnly ? '只看已关注' : '只看关注' }}</button><div class="canvas-area-filter"><strong>地区</strong><div class="preview-filter canvas-filter-row"><button type="button" :class="{ active: canvasAreaFilter === '全部' }" @click="canvasAreaFilter = '全部'">全部</button><button v-for="area in publicConfig.locations" :key="area.id || area.label" type="button" :class="{ active: canvasAreaFilter === area.label }" @click="canvasAreaFilter = area.label">{{ area.label }}</button></div></div><button type="button" class="canvas-property-filter-toggle" :aria-expanded="canvasPropertyFiltersOpen" @click="canvasPropertyFiltersOpen = !canvasPropertyFiltersOpen"><span><i aria-hidden="true">☷</i> 更多筛选</span><small>{{ canvasBudgetFilter === '不限' ? '预算不限' : canvasBudgetFilter }} · {{ canvasRentTypeFilter === '全部' ? '住法不限' : canvasRentTypeFilter }}</small><b :class="{ expanded: canvasPropertyFiltersOpen }">⌄</b></button><div v-if="canvasPropertyFiltersOpen" class="canvas-property-extra-filters"><div><strong>月租预算</strong><div class="preview-filter canvas-filter-row"><button v-for="budget in ['不限', '≤1500', '1500–2500', '2500–3500', '≥3500']" :key="budget" type="button" :class="{ active: canvasBudgetFilter === budget }" @click="canvasBudgetFilter = budget">{{ budget === '不限' ? '不限价格' : budget }}</button></div></div><div><strong>住法</strong><div class="preview-filter canvas-filter-row"><button v-for="kind in ['全部', '整租', '合租', '一居', '两居', '三居+']" :key="kind" type="button" :class="{ active: canvasRentTypeFilter === kind }" @click="canvasRentTypeFilter = kind">{{ kind === '全部' ? '不限' : kind }}</button></div></div></div></template>
+                    <template v-else><button type="button" class="canvas-favorite-filter" :class="{ active: canvasFavoriteOnly }" @click="canvasFavoriteOnly = !canvasFavoriteOnly"><span aria-hidden="true">♡</span>{{ canvasFavoriteOnly ? '只看已关注' : '只看关注' }}</button><div class="canvas-area-filter"><strong>地区</strong><div class="preview-filter canvas-filter-row"><button type="button" :class="{ active: canvasAreaFilter === '全部' }" @click="canvasAreaFilter = '全部'">全部</button><button v-for="area in areaEntryChannels" :key="area.id || area.title" type="button" :class="{ active: canvasAreaFilter === area.title }" @click="canvasAreaFilter = area.title">{{ area.title }}</button></div></div><button type="button" class="canvas-property-filter-toggle" :aria-expanded="canvasPropertyFiltersOpen" @click="canvasPropertyFiltersOpen = !canvasPropertyFiltersOpen"><span><i aria-hidden="true">☷</i> 更多筛选</span><small>{{ canvasBudgetFilter === '不限' ? '预算不限' : canvasBudgetFilter }} · {{ canvasRentTypeFilter === '全部' ? '住法不限' : canvasRentTypeFilter }}</small><b :class="{ expanded: canvasPropertyFiltersOpen }">⌄</b></button><div v-if="canvasPropertyFiltersOpen" class="canvas-property-extra-filters"><div><strong>月租预算</strong><div class="preview-filter canvas-filter-row"><button v-for="budget in ['不限', '≤1500', '1500–2500', '2500–3500', '≥3500']" :key="budget" type="button" :class="{ active: canvasBudgetFilter === budget }" @click="canvasBudgetFilter = budget">{{ budget === '不限' ? '不限价格' : budget }}</button></div></div><div><strong>住法</strong><div class="preview-filter canvas-filter-row"><button v-for="kind in ['全部', '整租', '合租', '一居', '两居', '三居+']" :key="kind" type="button" :class="{ active: canvasRentTypeFilter === kind }" @click="canvasRentTypeFilter = kind">{{ kind === '全部' ? '不限' : kind }}</button></div></div></div></template>
                     <div v-if="configAudience === 'customer'" class="preview-masonry-flow">
                       <div v-for="(column, columnIndex) in previewCustomerMasonryColumns" :key="`property-column-${columnIndex}`" class="preview-masonry-column">
                         <article v-for="item in column" :key="item.id" class="preview-property-card preview-masonry-card" @click="openPreviewProperty(item)"><div class="preview-card-cover" :class="{ 'preview-cover-placeholder': !item.media?.length }" :style="previewCoverStyle(item)"><template v-if="!item.media?.length"><img class="canvas-property-placeholder" :src="propertyPlaceholderIcon" alt=""><small class="preview-placeholder-label">{{ canvasPageCopy("暂无实拍图") }}</small></template><em>{{ previewStatusLabel(item.status) }}</em><i v-if="item.media?.some(media => media.type === 'video')" class="preview-video-play">▶</i><small v-if="previewChannelLabel(item)" class="preview-cover-location">⌖ {{ previewChannelLabel(item) }}</small><button type="button" class="canvas-favorite-toggle" :class="{ active: canvasPreviewFavorites.includes(item.id) }" @click.stop="toggleCanvasFavorite(item.id)">{{ canvasPreviewFavorites.includes(item.id) ? '♥' : '♡' }}</button></div><section><b>{{ previewListingTitle(item) }}</b><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section></article>
                       </div>
                     </div>
                     <div v-else class="preview-property-flow">
-                      <article v-for="item in previewProperties" :key="item.id" class="preview-property-card canvas-admin-listing" @click="openPreviewProperty(item)"><div class="preview-card-cover" :class="{ 'preview-cover-placeholder': !item.media?.length }" :style="previewCoverStyle(item)"><template v-if="!item.media?.length"><img class="canvas-property-placeholder" :src="propertyPlaceholderIcon" alt=""><small class="preview-placeholder-label">{{ canvasPageCopy("暂无实拍图") }}</small></template><em>{{ previewStatusLabel(item.status) }}</em></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit') && (item.buildingNo || item.unitNo || item.roomNo)" class="preview-operator-doorplate">门牌 · {{ [item.buildingNo, item.unitNo && `${String(item.unitNo).replace(/单元$/, '')}单元`, item.roomNo && `${String(item.roomNo).replace(/室$/, '')}室`].filter(Boolean).join('') || '待补充' }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section><footer class="canvas-admin-list-actions"><button @click.stop="startCanvasPropertyEdit(item)">编辑</button><button v-for="action in ['已租', '下架', '复制', '删除']" :key="action" @click.stop="submitCanvasPreview">{{ action }}</button></footer></article>
+                      <article v-for="item in previewProperties" :key="item.id" class="preview-property-card canvas-admin-listing" @click="openPreviewProperty(item)"><div class="preview-card-cover" :class="{ 'preview-cover-placeholder': !item.media?.length }" :style="previewCoverStyle(item)"><template v-if="!item.media?.length"><img class="canvas-property-placeholder" :src="propertyPlaceholderIcon" alt=""><small class="preview-placeholder-label">{{ canvasPageCopy("暂无实拍图") }}</small></template><em>{{ previewStatusLabel(item.status) }}</em></div><section><b>{{ previewListingTitle(item) }}</b><small v-if="configAudience === 'operator' && publicConfig.listingTitle.adminEnabledFields.includes('unit') && (item.buildingNo || item.unitNo || item.roomNo || item.roomSequence)" class="preview-operator-doorplate">门牌 · {{ previewDoorplate(item) }}</small><div class="preview-tag-stack" :class="`preview-tag-layout-${publicConfig.listingTitle.listTagLayout}`"><template v-if="publicConfig.listingTitle.listTagLayout === 'grouped'"><small v-if="previewTagGroups(item).primary.length" class="preview-tag-row primary"><i v-for="tag in previewTagGroups(item).primary" :key="tag">{{ tag }}</i></small><small v-if="previewTagGroups(item).secondary.length" class="preview-tag-row secondary"><i v-for="tag in previewTagGroups(item).secondary" :key="tag">{{ tag }}</i></small></template><small v-else-if="previewTagGroups(item).all.length" class="preview-tag-row all"><i v-for="tag in previewTagGroups(item).all" :key="tag">{{ tag }}</i></small></div><strong>¥ {{ item.rentMonthly }}<em>/月</em></strong></section><footer class="canvas-admin-list-actions"><button @click.stop="startCanvasPropertyEdit(item)">编辑</button><button v-for="action in ['已租', '下架', '复制', '删除']" :key="action" @click.stop="submitCanvasPreview">{{ action }}</button></footer></article>
                     </div>
                     <div v-if="!previewProperties.length || previewPropertyEmpty" class="canvas-properties-empty"><span class="canvas-properties-empty-icon">⌕</span><strong>{{ canvasPropertyEmptyTitle }}</strong><small>{{ configAudience === 'operator' ? canvasPageCopy('调整地区、预算或关键词，继续查看房源。') : (canvasFavoriteOnly || previewFavoritesEmpty) ? canvasPageCopy('先浏览房源并点亮爱心，关注的房源会集中保存在这里。') : canvasPageCopy('可以调整筛选条件，或告诉小皮你的预算和入住要求。') }}</small><button type="button" @click="previewFavoritesEmpty ? locatePageEditor('page-copy') : configAudience === 'operator' ? canvasPageFilterReset() : handleCanvasPropertyEmptyAction()">{{ configAudience === 'operator' ? canvasPageCopy('重置筛选') : canvasPropertyEmptyAction }}</button><a v-if="(canvasHasPropertyFilters || pageEditorSection === 'properties-empty') && configAudience === 'customer' && !canvasFavoriteOnly" href="#" @click.prevent="canvasPageFilterReset">{{ canvasPageCopy('清除筛选条件') }}</a></div>
                   </template>
@@ -2542,7 +2632,7 @@ function setPageCopy(field: string, value: string) {
                     <div class="detail-canvas" :class="{ operator: configAudience === 'operator' }">
                       <div v-if="canvasDetailScrolled" class="canvas-detail-sticky"><i class="canvas-detail-sticky-capsule" aria-hidden="true">•••　⊙</i><button type="button" aria-label="返回" @click="backCanvasPage">‹</button><span class="canvas-editable-copy" @click="focusConfigField('bottom-title')">{{ publicConfig.pagePresentations.propertyDetail.title || '房源详情' }}</span></div>
                       <div class="detail-canvas-scroll" @scroll.passive="canvasDetailScrolled = ($event.currentTarget as HTMLElement).scrollTop > 65">
-                        <div class="detail-canvas-cover" :class="{ 'is-placeholder': !previewPrimaryProperty?.media?.length }" :style="previewCoverStyle(previewPrimaryProperty, canvasMediaIndex)"><div class="detail-canvas-media-nav"><button type="button" @click="backCanvasPage">‹</button><i>•••　⊙</i></div><div v-if="!previewPrimaryProperty?.media?.length" class="detail-canvas-empty-media"><img :src="propertyPlaceholderIcon" alt=""><b>{{ canvasPageCopy("暂无实拍图") }}</b><small>{{ canvasPageCopy('联系小皮了解房源详情') }}</small></div><small v-else>实拍 {{ previewPrimaryProperty.media.length }} 张</small><div v-if="previewPrimaryProperty?.media?.length && previewPrimaryProperty.media.length > 1" class="detail-canvas-media-tabs"><button v-for="(media, index) in previewPrimaryProperty.media" :key="`${media.url}-${index}`" type="button" :class="{ video: media.type === 'video', active: index === canvasMediaIndex }" @click="canvasMediaIndex = index; media.type === 'video' && setCanvasNotice('预览显示视频封面，无法播放原视频。')">{{ media.type === 'video' ? '视频' : `${index + 1}` }}</button></div></div>
+                        <div class="detail-canvas-cover" :class="{ 'is-placeholder': !previewPrimaryProperty?.media?.length }" :style="previewCoverStyle(previewPrimaryProperty, canvasMediaIndex)"><div class="detail-canvas-media-nav"><button type="button" @click="backCanvasPage">‹</button><i>•••　⊙</i></div><div v-if="!previewPrimaryProperty?.media?.length" class="detail-canvas-empty-media"><img :src="propertyPlaceholderIcon" alt=""><b>{{ canvasPageCopy("暂无实拍图") }}</b><small>{{ canvasPageCopy('联系小皮了解房源详情') }}</small></div><div v-if="previewPrimaryProperty?.media?.length" class="detail-canvas-media-tabs"><button v-if="previewPrimaryProperty.media.some(media => media.type === 'video')" type="button" :class="{ active: previewPrimaryProperty.media[canvasMediaIndex]?.type === 'video' }" @click="canvasMediaIndex = previewPrimaryProperty.media.findIndex(media => media.type === 'video')">视频</button><button v-if="previewPrimaryProperty.media.some(media => media.type === 'image')" type="button" :class="{ active: previewPrimaryProperty.media[canvasMediaIndex]?.type === 'image' }" @click="canvasMediaIndex = previewPrimaryProperty.media.findIndex(media => media.type === 'image')">照片 {{ previewPrimaryProperty.media[canvasMediaIndex]?.type === 'image' ? previewPrimaryProperty.media.slice(0, canvasMediaIndex + 1).filter(media => media.type === 'image').length : 1 }}/{{ previewPrimaryProperty.media.filter(media => media.type === 'image').length }}</button></div></div>
                         <section v-if="detailModuleEnabled('overview')" data-canvas-area="overview" class="detail-canvas-card overview-card" @click="focusCanvasArea('overview')">
                           <em v-if="configAudience === 'operator' && previewAdminStatusLabel" class="detail-canvas-status-preview">{{ previewAdminStatusLabel }}</em>
                           <div class="detail-canvas-price">{{ previewPrimaryProperty?.rentMonthly || 0 }}<small>元/月</small><button v-if="configAudience === 'customer'" type="button" :class="{ active: canvasPreviewFavorites.includes(previewPrimaryProperty?.id || '') }" @click="previewPrimaryProperty && toggleCanvasFavorite(previewPrimaryProperty.id)">{{ canvasPreviewFavorites.includes(previewPrimaryProperty?.id || '') ? '♥' : '♡' }} <span>{{ canvasPreviewFavorites.includes(previewPrimaryProperty?.id || '') ? '已关注' : '关注' }}</span></button></div>
@@ -2599,6 +2689,7 @@ function setPageCopy(field: string, value: string) {
                       <div class="canvas-admin-shortcuts">
                         <button @click="startCanvasPropertyEdit()"><i>＋</i>录入房源<small>{{ canvasPageCopy("发布可租房源") }}</small></button>
                         <button @click="canvasStatusFilter = 'all'; navigateCanvasPage('properties')"><i>▦</i>房源管理<small>{{ canvasPageCopy("查看和编辑房源") }}</small></button>
+                        <button @click="navigateCanvasPage('adminMaterialLibrary')"><i>▧</i>房源素材库<small>快速保存与整理素材</small></button>
                         <button @click="canvasAdminWorkbenchTab = 'requests'; navigateCanvasPage('adminWorkbench')"><i>◌</i>客户需求<small>{{ canvasPageCopy("预约与找房需求") }}</small></button>
                         <button @click="canvasAdminWorkbenchTab = 'interests'; navigateCanvasPage('adminWorkbench')"><i>♡</i>用户意向<small>{{ favoriteContacts.length }} 条关注记录</small></button>
                       </div>
@@ -2653,8 +2744,15 @@ function setPageCopy(field: string, value: string) {
                     </section>
                     <article v-if="canvasWorkbenchActivities.length" class="canvas-work-activity"><strong>最近操作</strong><div v-for="item in canvasWorkbenchActivities.slice(0,5)" :key="item.id">{{ item.action }} · {{ item.detail }}</div></article>
                   </template>
+                  <template v-else-if="canvasDataState === 'normal' && configPage === 'adminMaterialLibrary'">
+                    <nav class="canvas-material-toolbar"><button type="button" class="active">全部</button><button type="button">藏龙·星天地</button><button type="button">凤凰花园三期</button><button type="button">中建康城</button></nav>
+                    <button type="button" class="canvas-material-add"><b>＋ 快速保存素材</b><small>先选定小区分类，素材会自动继承该小区地址</small></button>
+                    <article class="canvas-material-card"><div class="canvas-material-cover">图片 · 视频</div><section><b>藏龙·星天地</b><small>藏龙·星天地 · 2室1厅 · 1800元/月</small><footer><button type="button">转为正式房源</button><button type="button">删除</button></footer></section></article>
+                    <article class="canvas-material-card"><div class="canvas-material-cover muted">待整理素材</div><section><b>房源资料待完善</b><small>凤凰花园三期 · 先保存素材，之后继续编辑</small><footer><button type="button">转为正式房源</button><button type="button">删除</button></footer></section></article>
+                  </template>
                   <template v-else-if="canvasDataState === 'normal' && configPage === 'adminPropertyEdit'">
-                    <div class="canvas-editor-hero"><div><b>{{ canvasEditingExistingProperty ? canvasPageCopy("完善房源信息") : canvasPageCopy("开始录入房源") }}</b></div><strong>{{ canvasPropertyCompletionCount }}/5<small>已完成</small></strong></div>
+                    <div v-if="canvasNotice" class="canvas-preview-notice" role="status">{{ canvasNotice }}</div>
+                    <div class="canvas-editor-hero"><div><b>{{ canvasEditingExistingProperty ? canvasPageCopy("完善房源信息") : canvasPageCopy("开始录入房源") }}</b></div><strong>{{ canvasPropertyCompletionCount }}/4<small>已完成</small></strong></div>
                     <nav class="preview-steps" aria-label="房源编辑步骤">
                       <button v-for="(step, index) in canvasEditSteps" :key="step" type="button" :class="{ active: canvasEditStep === index, done: canvasPropertyStepReady[index] }" @click="canvasEditStep = index"><i>{{ canvasPropertyStepReady[index] ? '✓' : index + 1 }}</i><span>{{ step }}</span></button>
                     </nav>
@@ -2663,31 +2761,23 @@ function setPageCopy(field: string, value: string) {
                         <div class="canvas-section-head"><b>01</b><span><strong>基础信息</strong></span></div>
                         <div class="canvas-edit-community-heading"><label>小区名称 *</label><button type="button" @click="submitCanvasPreview">地图选点</button></div>
                         <small>搜索并选择小区，自动获取地图坐标</small>
-                        <input v-model="canvasPropertyDraft.community" :placeholder='canvasPageCopy("输入小区名称、街道或写字楼")'>
-                        <div class="canvas-edit-field canvas-marketing-field"><label>客户广告词</label><div class="canvas-marketing-select"><span>{{ canvasPropertyDraft.marketingPhrase || '不使用广告词' }}<small>仅用于客户标题；管理员仅显示房源原始数据</small></span><b>选择 ›</b><select v-model="canvasPropertyDraft.marketingPhrase" class="canvas-marketing-choice" aria-label="客户广告词"><option value="">不使用广告词</option><option v-for="phrase in publicConfig.listingTitle.marketingPhrases.filter(Boolean)" :key="phrase" :value="phrase">{{ phrase }}</option></select></div></div>
+                        <input :value="canvasPropertyDraft.community" :placeholder='canvasPageCopy("输入小区名称、街道或写字楼")' @input="updateCanvasCommunity">
+                        <div class="canvas-edit-field canvas-property-title-field"><label>房源名称</label><input v-model="canvasPropertyDraft.title" maxlength="40" placeholder="默认使用小区名称，可自定义"></div>
                         <div class="canvas-edit-field canvas-address-field"><label>详细地址补充</label><input v-model="canvasPropertyDraft.location" maxlength="60" :placeholder='canvasPageCopy("选择小区后自动回填，可补充门牌信息")'></div>
                         <div class="canvas-area-heading"><b>归属地区</b><small>保存后按当前选择归类</small></div>
-                        <button type="button" class="canvas-area-choice" @click="canvasPropertyDraft.channel = canvasPropertyDraft.channel ? '' : (publicConfig.locations[0]?.label || '')"><span>{{ canvasPropertyDraft.channel || publicConfig.locations[0]?.label || '选择归属地区' }}<small>选择小区后推荐最近地区</small></span><strong>调整 ›</strong></button>
-                        <div class="canvas-map-preview"><img src="../assets/editor-map-preview.png" alt="地图位置预览"><div class="canvas-map-footer"><span><strong>请先选择小区位置</strong><small>地图以当前位置显示，也可以搜索小区或直接点击落点</small></span><small>轻触地图调整位置</small></div></div>
+                        <button type="button" class="canvas-area-choice" @click="canvasPropertyDraft.channel = canvasPropertyDraft.channel ? '' : (areaEntryChannels[0]?.title || '')"><span>{{ canvasPropertyDraft.channel || areaEntryChannels[0]?.title || '选择归属地区' }}<small>选择小区后推荐最近地区</small></span><strong>调整 ›</strong></button>
+                        <div class="canvas-map-preview"><img src="../assets/editor-map-preview.png" alt="地图位置预览"><div class="canvas-map-footer"><span><strong>{{ canvasPropertyDraft.latitude && canvasPropertyDraft.longitude ? '位置已获取' : '请先选择小区位置' }}</strong><small>{{ canvasPropertyDraft.location || '地图以当前位置显示，也可以搜索小区或直接点击落点' }}</small></span><small>轻触地图调整位置</small></div></div>
+                        <button type="button" class="canvas-area-choice" @click="canvasQuickSettingsOpen = !canvasQuickSettingsOpen"><span><b>房屋与出租信息</b><small>{{ canvasPropertyDraft.layout || '设置户型、出租方式和房间序号' }}</small></span><strong>{{ canvasQuickSettingsOpen ? '收起' : '快捷设置 ›' }}</strong></button>
+                        <div v-if="canvasQuickSettingsOpen" class="canvas-quick-settings">
+                          <div class="canvas-rent-type-tabs"><button v-for="kind in ['整租', '合租']" :key="kind" :class="{ active: canvasPropertyDraft.rentType === kind }" @click="canvasPropertyDraft.rentType = kind; canvasPropertyDraft.layoutChosen = ''">{{ kind }}<small>{{ kind === '整租' ? '发布整套房源' : '发布单个房间' }}</small></button></div>
+                          <div class="canvas-listing-source"><span>出租来源</span><div class="canvas-editor-options"><button v-for="source in ['直租', '转租']" :key="source" :class="{ active: canvasPropertyDraft.listingSource === source }" @click="canvasPropertyDraft.listingSource = source">{{ source }}</button></div></div>
+                          <div class="canvas-layout-options"><div v-for="row in [{ key:'rooms', label:canvasPropertyDraft.rentType === '合租' ? '整套室数' : '房间', values:['1','2','3','4','手动'] },{key:'halls',label:'客厅',values:['0','1','2','3']},{key:'kitchens',label:'厨房',values:['有','无']},{key:'bathrooms',label:'卫生间',values:['1','2','3','4']},{key:'balconies',label:'阳台',values:['无','1','2','3','4']} ]" :key="row.key" class="canvas-editor-option-row"><label>{{ row.label }}</label><div class="canvas-editor-options"><button v-for="value in row.values" :key="value" :class="{ active: canvasPropertyDraft[row.key] === value }" @click="updateCanvasWholeLayout(row.key, value)">{{ value === '0' || value === '无' ? '无' : value === '手动' ? '自定义' : row.key === 'rooms' ? `${value}室` : row.key === 'halls' ? `${value}厅` : row.key === 'bathrooms' ? `${value}卫` : row.key === 'balconies' ? `${value}个` : value }}</button><input v-if="row.key === 'rooms' && canvasPropertyDraft.rooms === '手动'" v-model="canvasPropertyDraft.customRooms" type="number" min="1" max="9" placeholder="1–9室" @input="updateCanvasWholeLayout('customRooms', canvasPropertyDraft.customRooms)"></div></div></div>
+                          <div v-if="canvasPropertyDraft.rentType === '合租'" class="canvas-shared-room"><small>本次出租房型与房间序号</small><div class="canvas-editor-options"><button v-for="room in ['主卧','次卧','单间','床位']" :key="room" :class="{ active: canvasPropertyDraft.roomType === room }" @click="canvasPropertyDraft.roomType = room; canvasPropertyDraft.layout = [room, canvasPropertyDraft.privateBathroom ? '独卫' : '', canvasPropertyDraft.hasBayWindow ? '有飘窗' : ''].filter(Boolean).join(' · ')">{{ room }}</button></div><div v-if="canvasLayoutReady" class="canvas-editor-options"><button :class="{ active: !Number(canvasPropertyDraft.roomSequence) }" @click="canvasPropertyDraft.roomSequence = '0'">不指定</button><button v-for="number in canvasSelectedRoomCount" :key="number" :class="{ active: Number(canvasPropertyDraft.roomSequence) === number }" @click="canvasPropertyDraft.roomSequence = String(number)">{{ number }}号房</button></div></div>
+                          <div class="canvas-editor-details"><label>面积（㎡）<input v-model="canvasPropertyDraft.areaSqm" type="number" placeholder="平方米"></label><label>楼层<input v-model="canvasPropertyDraft.floorInfo" placeholder="如：33楼"></label><label>朝向<input v-model="canvasPropertyDraft.orientation" placeholder="如：南"></label><label>步行至地铁（分钟）<input v-model="canvasPropertyDraft.metroMinutes" type="number" placeholder="分钟"></label></div>
+                        </div>
                       </template>
                       <template v-else-if="canvasEditStep === 1">
-                        <div class="canvas-section-head"><b>02</b><span><strong>出租方式与户型</strong></span></div>
-                        <div class="canvas-rent-type-tabs"><button v-for="kind in ['整租', '合租']" :key="kind" :class="{ active: canvasPropertyDraft.rentType === kind }" @click="canvasPropertyDraft.rentType = kind">{{ kind }}<small>{{ kind === '整租' ? '发布整套房源' : '发布单个房间' }}</small></button></div>
-                        <div class="canvas-listing-source"><span>出租来源</span><div class="canvas-editor-options"><button v-for="source in ['直租', '转租']" :key="source" :class="{ active: canvasPropertyDraft.listingSource === source }" @click="canvasPropertyDraft.listingSource = source">{{ canvasPropertyDraft.listingSource === source ? '✓ ' : '' }}{{ source }}</button></div></div>
-                        <p class="canvas-layout-guidance">{{ canvasPropertyDraft.rentType === '合租' ? '户型与面积填写本次出租房间的使用空间，会同步到列表标签；整套参数仅用于详情概况。' : '户型与面积就是整套房源的使用空间，会同步到列表标签。' }}</p>
-                        <template v-if="canvasPropertyDraft.rentType !== '合租'">
-                          <div class="canvas-layout-options"><div v-for="row in [{ key:'rooms', label:'房间', values:['1','2','3','手动'] },{key:'halls',label:'客厅',values:['0','1','2','3']},{key:'kitchens',label:'厨房',values:['有','无']},{key:'bathrooms',label:'卫生间',values:['1','2','3']},{key:'balconies',label:'阳台',values:['无','1','2']} ]" :key="row.key" class="canvas-editor-option-row"><label>{{ row.label }}</label><div class="canvas-editor-options"><button v-for="value in row.values" :key="value" :class="{ active: canvasPropertyDraft[row.key] === value }" @click="updateCanvasWholeLayout(row.key, value)">{{ value === '0' ? '−' : value }}</button><input v-if="row.key === 'rooms' && canvasPropertyDraft.rooms === '手动'" v-model="canvasPropertyDraft.customRooms" type="number" placeholder="数" @input="updateCanvasWholeLayout('customRooms', canvasPropertyDraft.customRooms)"></div></div></div>
-                        </template>
-                        <template v-else>
-                          <div class="canvas-shared-room"><small>本次出租 · 房型</small><div class="canvas-editor-options"><button v-for="room in ['主卧','次卧','单间','床位']" :key="room" :class="{ active: canvasPropertyDraft.roomType === room }" @click="canvasPropertyDraft.roomType = room; canvasPropertyDraft.layout = [room, canvasPropertyDraft.privateBathroom ? '独卫' : '', canvasPropertyDraft.hasBayWindow ? '有飘窗' : ''].filter(Boolean).join(' · ')">{{ room }}</button></div></div>
-                          <div class="canvas-shared-feature"><label><small>卫生间</small><span><input type="checkbox" v-model="canvasPropertyDraft.privateBathroom" true-value="true" false-value="" @change="canvasPropertyDraft.layout = [canvasPropertyDraft.roomType || '主卧', canvasPropertyDraft.privateBathroom ? '独卫' : '', canvasPropertyDraft.hasBayWindow ? '有飘窗' : ''].filter(Boolean).join(' · ')">独立卫生间</span></label><label><small>飘窗（凸出窗台）</small><span><input type="checkbox" v-model="canvasPropertyDraft.hasBayWindow" true-value="true" false-value="" @change="canvasPropertyDraft.layout = [canvasPropertyDraft.roomType || '主卧', canvasPropertyDraft.privateBathroom ? '独卫' : '', canvasPropertyDraft.hasBayWindow ? '有飘窗' : ''].filter(Boolean).join(' · ')">有飘窗</span></label></div>
-                          <label class="canvas-room-overview">整套户型（概况）<input v-model="canvasPropertyDraft.wholeLayout" placeholder="如：3室2厅2卫1阳台"></label><label class="canvas-room-overview">整套面积（㎡）<input v-model="canvasPropertyDraft.wholeAreaSqm" type="number" placeholder="如：105"></label>
-                        </template>
-                        <div class="canvas-layout-summary"><small>房源摘要</small><strong>{{ canvasPropertyDraft.layout || '待填写' }}</strong></div>
-                        <div class="canvas-editor-details"><label v-if="canvasPropertyDraft.rentType !== '合租'">面积（㎡）<input v-model="canvasPropertyDraft.areaSqm" type="number" placeholder="如：55"></label><label>楼层<input v-model="canvasPropertyDraft.floorInfo" placeholder="选择门牌后自动生成"></label><label>朝向<input v-model="canvasPropertyDraft.orientation" placeholder="如：南"></label><label class="canvas-checkbox-field"><span>楼内配置</span><input type="checkbox" v-model="canvasPropertyDraft.elevator" true-value="有电梯" false-value="">有电梯</label><label>步行至地铁（分钟）<input v-model="canvasPropertyDraft.metroMinutes" type="number" placeholder="如：8"></label></div>
-                      </template>
-                      <template v-else-if="canvasEditStep === 2">
-                        <div class="canvas-section-head"><b>03</b><span><strong>配套与描述</strong></span></div>
+                        <div class="canvas-section-head"><b>02</b><span><strong>配套与描述</strong></span></div>
                         <div v-if="detailModuleEnabled('facilities')" class="canvas-facility-grid">
                           <label v-for="facility in publicConfig.propertyDetail.facilities.filter(item => item.enabled)" :key="facility.key" :class="{active:canvasPropertyFacilities.includes(facility.label)}">
                             <input type="checkbox" :checked="canvasPropertyFacilities.includes(facility.label)" @change="toggleCanvasPropertyFacility(facility.label)">
@@ -2700,8 +2790,8 @@ function setPageCopy(field: string, value: string) {
                         </template>
                         <div v-if="!detailModuleEnabled('facilities') && !detailModuleEnabled('description')" class="canvas-module-entry-disabled">当前后台未启用“房屋设施”或“房源简介”，此步无需填写。</div>
                       </template>
-                      <template v-else-if="canvasEditStep === 3">
-                        <div class="canvas-section-head"><b>04</b><span><strong>租金与入住</strong><small>把价格、付款与入住条件集中填写</small></span></div>
+                      <template v-else-if="canvasEditStep === 2">
+                        <div class="canvas-section-head"><b>03</b><span><strong>租金与入住</strong><small>把价格、付款与入住条件集中填写</small></span></div>
                         <div class="canvas-rent-row"><label class="canvas-rent-field"><span>月租 *</span><span class="canvas-rent-input"><input v-model="canvasPropertyDraft.rentMonthly" inputmode="numeric" placeholder="如：2600"><small>元/月</small></span></label><div class="canvas-rent-field"><span>中介费</span><label class="canvas-fee-toggle"><input type="checkbox" v-model="canvasPropertyDraft.feeText" true-value="无中介费" false-value="有中介费">无中介费</label></div></div>
                         <div class="canvas-term-block"><b>押付方式 *</b><div class="canvas-payment-options"><span class="fixed">押一</span><button v-for="cycle in ['付一','付二','付三','付六']" :key="cycle" :class="{ active: canvasPropertyDraft.depositPayment === '押一' + cycle }" @click="canvasPropertyDraft.depositPayment = '押一' + cycle">{{ cycle }}</button></div></div>
                         <template v-if="canvasPropertyDraft.rentType === '合租'"><div class="canvas-shared-rent-fields"><label>使用空间<input v-model="canvasPropertyDraft.layout" maxlength="32" placeholder="如：次卧 · 独卫 · 有飘窗"></label><label>使用面积（㎡）<input v-model="canvasPropertyDraft.areaSqm" type="number" placeholder="如：21"></label></div></template>
@@ -2710,25 +2800,25 @@ function setPageCopy(field: string, value: string) {
                         <div class="canvas-rent-summary"><span>对外展示</span><strong>{{ Number(canvasPropertyDraft.rentMonthly) || 0 }}/月</strong><small>{{ canvasPropertyDraft.depositPayment || '待填写押付方式' }}</small></div>
                       </template>
                       <template v-else>
-                        <div class="canvas-section-head"><b>05</b><span><strong>图片与视频</strong></span></div>
+                        <div class="canvas-section-head"><b>04</b><span><strong>图片与视频</strong></span></div>
                         <div class="canvas-media-card"><div class="canvas-media-guidance"><b>封面素材</b><span>上传一次即可：列表横向裁切、瀑布流竖向裁切；详情保持原比例。</span></div>
                           <div class="canvas-cover-focus"><b>封面焦点（可选）</b><small>默认居中；仅在主体靠边时调整，横图和竖图会共用。</small><div class="canvas-focus-options"><label>水平<select v-model="canvasPropertyDraft.coverFocusX"><option value="0">靠左</option><option value="50">居中</option><option value="100">靠右</option></select></label><label>垂直<select v-model="canvasPropertyDraft.coverFocusY"><option value="0">靠上</option><option value="50">居中</option><option value="100">靠下</option></select></label></div></div>
                           <div class="canvas-media-actions"><button type="button" @click="setCanvasNotice('画布预览不选择或上传本地媒体文件。')"><b>＋ 图片</b><span>{{ canvasPropertyDraft.imageCount || 0 }}/9</span></button><button type="button" @click="setCanvasNotice('画布预览不选择或上传本地媒体文件。')"><b>＋ 视频</b><span>{{ canvasPropertyDraft.videoCount || 0 }}/1</span></button></div>
                         </div>
-                        <p class="canvas-media-limit-hint">图片 ≥640px / ≤10MB · 视频 ≤20MB / 60秒</p>
-                        <div class="canvas-title-composer"><b>列表展示规则</b><span>由后台“小程序配置”的客户与非客户视角统一控制，录入时无需单独选择</span><strong>客户标题预览</strong><em>{{ canvasDraftTitle }}</em></div>
-                        <div class="canvas-final-review"><header><span><b>发布前核对</b><small>可点上方步骤返回修改</small></span><strong>{{ canvasPropertyCompletionCount }}/5</strong></header><div class="canvas-review-grid"><article><b>位置门牌</b><small>{{ canvasPropertyDraft.community || '待选择' }}</small></article><article><b>户型出租</b><small>{{ canvasPropertyDraft.layout || '待填写' }}</small></article><article><b>租金入住</b><small>{{ canvasPropertyDraft.rentMonthly || 0 }}/月 {{ canvasPropertyDraft.depositPayment || '' }}</small></article><article><b>图片素材</b><small>{{ canvasPropertyDraft.imageCount || 0 }}/9 张图片 · {{ canvasPropertyDraft.videoCount || 0 }} 个视频</small></article></div>
+                        <p class="canvas-media-limit-hint">图片 ≥640px / ≤10MB · 视频 ≤40MB / 60秒</p>
+                        <div class="canvas-title-composer"><b>房源名称</b><span>默认使用小区名称，可自定义；客户与管理员看到同一名称</span><strong>列表标题预览</strong><em>{{ canvasDraftTitle }}</em></div>
+                        <div class="canvas-final-review"><header><span><b>发布前核对</b><small>可点上方步骤返回修改；图片和视频为选填</small></span><strong>{{ canvasPropertyCompletionCount }}/4</strong></header><p v-if="canvasPublishValidationIssues.length" class="canvas-publish-validation">发布前还需要：{{ canvasPublishValidationIssues.join('、') }}</p><p v-else class="canvas-publish-validation ready">房源信息已满足发布条件</p><div class="canvas-review-grid"><article><b>位置门牌</b><small>{{ canvasPropertyDraft.community || '待选择' }}</small></article><article><b>户型出租</b><small>{{ canvasPropertyDraft.layout || '待填写' }}</small></article><article><b>租金入住</b><small>{{ canvasPropertyDraft.rentMonthly || 0 }}/月 {{ canvasPropertyDraft.depositPayment || '' }}</small></article><article><b>图片素材</b><small>{{ canvasPropertyDraft.imageCount || 0 }}/9 张图片 · {{ canvasPropertyDraft.videoCount || 0 }} 个视频</small></article></div>
                           <div class="canvas-listing-review"><b>{{ canvasPageCopy("列表效果核对") }}</b><small>以下为保存后首页与“房源”页的真实卡片布局</small><nav><button type="button" :class="{active:canvasReviewPerspective==='customer'}" @click="canvasReviewPerspective='customer'">普通用户 · 瀑布流</button><button type="button" :class="{active:canvasReviewPerspective==='admin'}" @click="canvasReviewPerspective='admin'">管理员 · 列表</button></nav><div class="canvas-listing-stage" :class="canvasReviewPerspective"><div v-for="columnIndex in (canvasReviewPerspective === 'customer' ? 2 : 1)" :key="columnIndex" class="canvas-review-column"><article v-for="item in canvasReviewCards.filter((_, index) => canvasReviewPerspective === 'admin' || index % 2 === columnIndex - 1)" :key="item.id" class="canvas-listing-preview" :class="{current:item.id==='current'}"><div class="canvas-listing-cover" :style="item.cover"><b v-if="item.id==='current' && !item.hasCover">小皮</b><span>可租</span><i v-if="item.id==='current'">当前编辑</i><small>⌖ {{ item.location }}</small></div><div class="canvas-listing-copy"><strong>{{ item.title }}</strong><small v-if="canvasReviewPerspective==='admin'">门牌 · {{ item.doorplate }}</small><div class="canvas-review-tags"><span v-for="(tag,index) in item.tags" :key="index">{{ tag }}</span></div><em>¥ {{ item.rent }}<small>/月</small></em></div></article></div></div></div>
                         </div>
                       </template>
                     </div>
                     <div class="preview-step-actions">
-                      <button v-if="canvasEditStep > 0 && canvasEditStep < 4" type="button" @click="canvasEditStep--">上一步</button>
+                      <button v-if="canvasEditStep > 0 && canvasEditStep < 3" type="button" @click="canvasEditStep--">上一步</button>
                       <button type="button" @click="submitCanvasPreview">{{ canvasEditingExistingProperty ? '保存修改' : '保存草稿' }}</button>
-                      <button v-if="canvasEditStep < 4" type="button" @click="canvasEditStep++">下一步 · {{ canvasEditSteps[canvasEditStep + 1] }}</button>
+                      <button v-if="canvasEditStep < 3" type="button" @click="canvasEditStep++">下一步 · {{ canvasEditSteps[canvasEditStep + 1] }}</button>
                       <template v-else>
-                        <button type="button" :disabled="!canvasEditorRequiredReady" @click="submitCanvasPreview">{{ canvasEditingExistingProperty ? '查看公开效果' : '预览草稿' }}</button>
-                        <button v-if="!canvasEditingExistingProperty" type="button" :disabled="!canvasEditorRequiredReady" @click="submitCanvasPreview">直接发布</button>
+                        <button type="button" @click="attemptCanvasPublish">{{ canvasEditingExistingProperty ? '查看公开效果' : '预览草稿' }}</button>
+                        <button v-if="!canvasEditingExistingProperty" type="button" @click="attemptCanvasPublish">直接发布</button>
                       </template>
                     </div>
                   </template>

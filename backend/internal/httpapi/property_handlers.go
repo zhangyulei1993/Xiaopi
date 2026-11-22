@@ -11,6 +11,16 @@ import (
 	"xiaopi/backend/internal/domain"
 )
 
+func withoutMaterials(items []domain.Property) []domain.Property {
+	result := make([]domain.Property, 0, len(items))
+	for _, item := range items {
+		if !item.IsMaterial {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
 func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 	showAll := false
 	if claims, ok := s.optionalClaims(r); ok && s.effectiveRole(r.Context(), claims) == roleAdmin {
@@ -23,7 +33,7 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if showAll {
-			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": withoutMaterials(items)})
 			return
 		}
 		config, err := s.loadPublicConfig(r.Context())
@@ -35,7 +45,7 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if showAll {
-		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": s.properties})
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": withoutMaterials(s.properties)})
 		return
 	}
 	config, err := s.loadPublicConfig(r.Context())
@@ -119,13 +129,14 @@ func publicProperties(items []domain.Property, config domain.PublicConfig) []pub
 	}
 	result := make([]publicProperty, 0, len(items))
 	for _, item := range items {
-		if item.Status != domain.PropertyAvailable {
+		if item.IsMaterial || item.Status != domain.PropertyAvailable {
 			continue
 		}
 		property := publicProperty{
 			ID: item.ID, Title: publicListingTitle(item), MarketingPhrase: item.MarketingPhrase, Community: item.Community, Location: item.Location, AreaLabel: item.AreaLabel, CoverFocusX: item.CoverFocusX, CoverFocusY: item.CoverFocusY,
 			Latitude: item.Latitude, Longitude: item.Longitude, Layout: item.Layout, ActualLayout: item.ActualLayout, WholeLayout: item.WholeLayout,
-			RentMonthly: item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType, ListingSource: item.ListingSource, RemainingLeaseMonths: item.RemainingLeaseMonths, TransferDeposit: item.TransferDeposit,
+			RoomSequence: item.RoomSequence,
+			RentMonthly:  item.RentMonthly, FeeText: item.FeeText, RentType: item.RentType, ListingSource: item.ListingSource, RemainingLeaseMonths: item.RemainingLeaseMonths, TransferDeposit: item.TransferDeposit,
 			AvailableDate: item.AvailableDate, DepositPayment: item.DepositPayment,
 			UtilitiesText: item.UtilitiesText, AreaSqm: item.AreaSqm, ActualAreaSqm: item.ActualAreaSqm, WholeAreaSqm: item.WholeAreaSqm, FloorInfo: item.FloorInfo,
 			Orientation: item.Orientation, Elevator: item.Elevator, MetroMinutes: item.MetroMinutes,
@@ -205,6 +216,12 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Title, p.Community, p.MarketingPhrase = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community), strings.TrimSpace(p.MarketingPhrase)
+	canonicalCommunity, communityErr := resolveKnownCommunity(r.Context(), s.store, p.Community)
+	if communityErr != nil {
+		writeError(w, http.StatusInternalServerError, "读取小区库失败，房源未保存")
+		return
+	}
+	p.Community = canonicalCommunity
 	p.CoverFocusX, p.CoverFocusY = normalizeCoverFocus(p.CoverFocusX), normalizeCoverFocus(p.CoverFocusY)
 	if utf8.RuneCountInString(p.MarketingPhrase) > 16 {
 		writeError(w, http.StatusBadRequest, "marketingPhrase must not exceed 16 characters")
@@ -238,6 +255,7 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 	if err := s.ensureDoorplateCollectionPlan(r.Context(), p.Community, communityLocation{Address: p.Location, Latitude: p.Latitude, Longitude: p.Longitude}); err != nil {
 		log.Printf("save community catalog data for %q: %v", p.Community, err)
 	}
+	s.logOperation(r.Context(), claims.Subject, "property", p.ID, "录入房源草稿", fmt.Sprintf("%s · %s", p.Community, p.Title))
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": p})
 }
 
@@ -248,6 +266,12 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Title, p.Community, p.MarketingPhrase = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community), strings.TrimSpace(p.MarketingPhrase)
+	canonicalCommunity, communityErr := resolveKnownCommunity(r.Context(), s.store, p.Community)
+	if communityErr != nil {
+		writeError(w, http.StatusInternalServerError, "读取小区库失败，房源未保存")
+		return
+	}
+	p.Community = canonicalCommunity
 	p.CoverFocusX, p.CoverFocusY = normalizeCoverFocus(p.CoverFocusX), normalizeCoverFocus(p.CoverFocusY)
 	missing := make([]string, 0, 5)
 	if strings.TrimSpace(p.ID) == "" {
@@ -280,6 +304,7 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 	if err := s.ensureDoorplateCollectionPlan(r.Context(), p.Community, communityLocation{Address: p.Location, Latitude: p.Latitude, Longitude: p.Longitude}); err != nil {
 		log.Printf("save community catalog data for %q: %v", p.Community, err)
 	}
+	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", p.ID, "编辑房源信息", fmt.Sprintf("%s · %s", p.Community, p.Title))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": p})
 }
 

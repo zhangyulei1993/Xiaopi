@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { API_ORIGIN, safeUploadUrl, request, resolveAssetUrl } from "../../api/client";
+import { API_ORIGIN, safeUploadUrl, resolveAssetUrl } from "../../api/client";
 import {
   clearSession,
   getSession,
@@ -15,7 +15,6 @@ import {
   updateWechatUserProfile,
   wechatLogin,
 } from "../../api/properties";
-import type { Property, PropertyLead, RentalRequest, FavoriteContact } from "../../api/properties";
 import { usePagePresentation } from "../../utils/presentation";
 
 const role = ref<SessionRole | null>(null);
@@ -27,7 +26,6 @@ const avatarUrl = ref("");
 const isUploadingAvatar = ref(false);
 const isSavingProfile = ref(false);
 const isLoggingIn = ref(false);
-const adminOverview = ref({ draft: 0, pending: 0, incomplete: 0, interests: 0 });
 const isLoggedIn = computed(() => role.value !== null);
 const isAdmin = computed(() => role.value === "admin");
 const canUseAccessCode = computed(() => role.value !== null && role.value !== "user");
@@ -55,20 +53,6 @@ onShow(async () => {
     if (croppedAvatar) {
       uni.removeStorageSync("xiaopi-avatar-crop-result");
       uploadAvatar(croppedAvatar);
-    }
-    if (refreshed.role === "admin") {
-      const [properties, leads, requests, interests] = await Promise.all([
-        request<Property[]>("/v1/properties"),
-        request<PropertyLead[]>("/v1/property-leads"),
-        request<RentalRequest[]>("/v1/admin/rental-requests"),
-        request<FavoriteContact[]>("/v1/admin/favorite-contacts"),
-      ]);
-      adminOverview.value = {
-        draft: properties.filter((item) => item.status === "draft").length,
-        pending: leads.filter((item) => item.status !== "converted" && item.status !== "closed").length + requests.filter((item) => !item.status || item.status === "new").length,
-        incomplete: properties.filter((item) => !item.community || !item.location || !item.latitude || !item.longitude || !item.media?.length).length,
-        interests: interests.length,
-      };
     }
   } catch {
 	role.value = getSession()?.role || null;
@@ -146,16 +130,12 @@ const favorites = () => requireLogin(copyText("登录后查看关注"), copyText
 const openFootprints = () => uni.navigateTo({ url: "/pages/footprints/index" });
 const footprints = () => requireLogin(copyText("登录后查看足迹"), copyText("登录后可查看最近浏览过的房源"), openFootprints);
 const workbench = () => uni.navigateTo({ url: "/pages/admin/index" });
-const openAdminTab = (tab: "properties" | "leads" | "requests" | "interests") => {
-  uni.setStorageSync("xiaopi_admin_tab", tab);
-  workbench();
-};
 const openPropertyManagement = (filter = "") => {
   uni.setStorageSync("xiaopi_admin_property_status", filter || "all");
   uni.switchTab({ url: "/pages/properties/index" });
 };
-const editProperty = () =>
-  uni.navigateTo({ url: "/pages/admin/property-edit" });
+const openMaterialLibrary = () =>
+  uni.navigateTo({ url: "/pages/admin/material-library" });
 
 const uploadAvatar = (path: string) => {
   if (!path || isUploadingAvatar.value) return;
@@ -264,9 +244,8 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       <view class="profile-bottom"><text>{{ isLoggedIn ? (phone ? "点头像或昵称即可修改资料" : "绑定手机号，方便联系与身份识别") : (isLoggingIn ? "正在登录…" : "点击直接微信登录") }}</text><button v-if="isLoggedIn && !phone" open-type="getPhoneNumber" :loading="isBindingPhone" :disabled="isBindingPhone" @getphonenumber.stop="bindPhone">绑定手机号</button><text v-else class="profile-action">{{ isLoggedIn ? "已登录" : "进入" }}</text></view>
     </view>
 
-    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>{{ copyText("我的找房") }}</strong><text>{{ copyText("常用服务") }}</text></view><view class="shortcut-grid"><view @click="browse"><i class="shortcut-icon home"></i><view class="shortcut-copy"><strong>全部房源</strong><text>{{ copyText("无需登录") }}</text></view></view><view @click="favorites"><i class="shortcut-icon favorite"></i><view class="shortcut-copy"><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : copyText("登录后查看") }}</text></view></view><view @click="footprints"><i class="shortcut-icon footprint"></i><view class="shortcut-copy"><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : copyText("登录后查看") }}</text></view></view><view @click="requestHome"><i class="shortcut-icon request"></i><view class="shortcut-copy"><strong>找房需求</strong><text>{{ copyText("提交时登录") }}</text></view></view></view>
+    <view v-if="!isAdmin" class="shortcut-section"><view class="section-heading"><strong>{{ copyText("我的找房") }}</strong><text>关注、记录与需求</text></view><view class="shortcut-grid"><view @click="favorites"><i class="shortcut-icon favorite"></i><view class="shortcut-copy"><strong>我的关注</strong><text>{{ isLoggedIn ? "收藏的房源" : copyText("登录后查看") }}</text></view></view><view @click="footprints"><i class="shortcut-icon footprint"></i><view class="shortcut-copy"><strong>浏览足迹</strong><text>{{ isLoggedIn ? "最近看过" : copyText("登录后查看") }}</text></view></view><view @click="requestHome"><i class="shortcut-icon request"></i><view class="shortcut-copy"><strong>找房需求</strong><text>{{ copyText("提交时登录") }}</text></view></view><view @click="openRequestHistory"><i class="shortcut-icon history"></i><view class="shortcut-copy"><strong>预约与需求记录</strong><text>{{ isLoggedIn ? "查看预约和跟进进度" : copyText("登录后查看") }}</text></view></view></view>
     </view>
-    <view v-if="!isAdmin" class="card secondary-entry request-history-entry" @click="openRequestHistory"><view><strong>{{ copyText("我的预约与找房记录") }}</strong><text>{{ isLoggedIn ? "查看预约、订阅和跟进进度" : "登录后可查看" }}</text></view><text>›</text></view>
     <view v-if="!isAdmin" class="card secondary-entry" @click="publish"><view><strong>{{ copyText("有房源想推荐？") }}</strong><text>{{ copyText("无需登录") }}，提交后电话核验</text></view><text>›</text></view>
 
     <view v-if="isAdmin" class="admin-identity">
@@ -274,15 +253,9 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       <view class="admin-identity-copy"><view><input v-model="nickname" class="admin-name" type="nickname" maxlength="32" placeholder="填写昵称" confirm-type="done" @confirm="saveNickname" @blur="saveNickname" /><text class="admin-role">管理员</text></view><small>{{ phone ? `已绑定 ${phone.slice(0, 3)}****${phone.slice(-4)}` : "运营身份已启用" }}</small></view>
       <text class="admin-edit">可编辑</text>
     </view>
-    <view v-if="isAdmin" class="admin-overview">
-      <view class="section-heading"><strong>运营工作台</strong><text @click="workbench">查看全部 ›</text></view>
-      <view class="admin-summary"><view @click="openPropertyManagement('draft')"><strong>{{ adminOverview.draft }}</strong><text>房源草稿</text></view><view @click="openAdminTab('requests')"><strong>{{ adminOverview.pending }}</strong><text>待联系</text></view><view @click="openPropertyManagement('incomplete')"><strong>{{ adminOverview.incomplete }}</strong><text>待补资料</text></view></view>
-    </view>
     <view v-if="isAdmin" class="admin-actions">
-      <view @click="editProperty"><view class="action-icon publish-icon">＋</view><strong>录入房源</strong><text>{{ copyText("发布可租房源") }}</text></view>
-      <view @click="openPropertyManagement()"><view class="action-icon workspace-icon">▦</view><strong>房源管理</strong><text>{{ copyText("查看和编辑房源") }}</text></view>
-      <view @click="openAdminTab('requests')"><view class="action-icon request-icon">◌</view><strong>客户需求</strong><text>{{ copyText("预约与找房需求") }}</text></view>
-      <view @click="openAdminTab('interests')"><view class="action-icon interest-icon">♡</view><strong>用户意向</strong><text>{{ adminOverview.interests }} 条关注记录</text></view>
+      <view class="admin-entry-group property-entry"><view class="admin-entry-heading"><view class="action-icon workspace-icon">▦</view><view><strong>房源管理</strong><text>浏览、筛选和编辑房源</text></view></view><view class="admin-entry-links single"><button @click="openPropertyManagement()"><text>▤</text>房源列表<text class="entry-arrow">›</text></button></view></view>
+      <view class="admin-entry-group"><view class="admin-entry-heading"><view class="action-icon request-icon">◌</view><view><strong>运营工作台</strong><text>素材、客户与操作记录</text></view></view><view class="admin-entry-links"><button @click="openMaterialLibrary"><text>▧</text>素材管理</button><button @click="workbench"><text>▤</text>运营管理</button></view></view>
     </view>
 
     <view v-if="isLoggedIn" class="session-actions"><text v-if="canUseAccessCode" class="role-access-code" @click="openAccessCodeLogin">访问码登录</text><button class="logout" @click="logout">退出登录</button></view>
@@ -300,15 +273,6 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
   align-items: center;
   flex-wrap: wrap;
   gap: 12rpx;
-}
-.role-badge {
-  padding: 6rpx 12rpx;border-radius:8rpx;background:rgba(231,237,207,.14);color:#e7edcf;
-  font-size: 20rpx;
-  font-weight: 600;
-}
-.avatar {
-  width: 104rpx;height:104rpx;border-radius:28rpx 28rpx 12rpx;background:#e7edcf;color:#354b35;
-  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -321,7 +285,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
   color: #9bbab4;
   font-size: 54rpx;
 }
-.shortcut-section{margin:34rpx 0 24rpx}.section-heading{display:flex;align-items:baseline;justify-content:space-between;margin:0 4rpx 18rpx}.section-heading strong{font-size:32rpx}.section-heading text{color:#929b91;font-size:21rpx}.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.shortcut-grid>view{display:grid;min-width:0;grid-template-columns:64rpx minmax(0,1fr);align-items:center;column-gap:18rpx;padding:24rpx;border-radius:22rpx;background:#fff}.shortcut-grid>view:active{transform:scale(.98);background:#f0f2e9}.shortcut-grid i{position:relative;display:grid;place-items:center;width:64rpx;height:64rpx;border-radius:18rpx 18rpx 8rpx;background:#e9eedc;color:#4d623e;font-style:normal}.shortcut-copy{display:flex;min-width:0;flex-direction:column;gap:6rpx}.shortcut-icon::before{font-size:30rpx;font-weight:500;line-height:1}.shortcut-icon.home::before{content:"⌂"}.shortcut-icon.favorite::before{content:"♡";font-size:38rpx}.shortcut-icon.footprint::before{content:"◴"}.shortcut-icon.request::before{content:"✦"}.shortcut-grid strong{overflow:hidden;font-size:27rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.shortcut-grid text{overflow:hidden;color:#899287;font-size:21rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.secondary-entry{display:flex;align-items:center;justify-content:space-between;border:0;background:#efeee7}.secondary-entry view{display:flex;flex-direction:column;gap:7rpx}.secondary-entry strong{font-size:27rpx}.secondary-entry view text{color:#899287;font-size:21rpx}.secondary-entry>text{color:#74806f;font-size:40rpx}
+.shortcut-section{margin:34rpx 0 24rpx}.section-heading{display:flex;align-items:baseline;justify-content:space-between;margin:0 4rpx 18rpx}.section-heading strong{font-size:32rpx}.section-heading text{color:#929b91;font-size:21rpx}.shortcut-grid{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.shortcut-grid>view{display:grid;min-width:0;grid-template-columns:64rpx minmax(0,1fr);align-items:center;column-gap:18rpx;padding:24rpx;border-radius:22rpx;background:#fff}.shortcut-grid>view:active{transform:scale(.98);background:#f0f2e9}.shortcut-grid i{position:relative;display:grid;place-items:center;width:64rpx;height:64rpx;border-radius:18rpx 18rpx 8rpx;background:#e9eedc;color:#4d623e;font-style:normal}.shortcut-copy{display:flex;min-width:0;flex-direction:column;gap:6rpx}.shortcut-icon::before{font-size:30rpx;font-weight:500;line-height:1}.shortcut-icon.home::before{content:"⌂"}.shortcut-icon.favorite::before{content:"♡";font-size:38rpx}.shortcut-icon.footprint::before{content:"◴"}.shortcut-icon.request::before{content:"✦"}.shortcut-icon.history::before{content:"☷"}.shortcut-grid strong{overflow:hidden;font-size:27rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}.shortcut-grid text{overflow:hidden;color:#899287;font-size:21rpx;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.secondary-entry{display:flex;align-items:center;justify-content:space-between;border:0;background:#efeee7}.secondary-entry view{display:flex;flex-direction:column;gap:7rpx}.secondary-entry strong{font-size:27rpx}.secondary-entry view text{color:#899287;font-size:21rpx}.secondary-entry>text{color:#74806f;font-size:40rpx}
 .menu view:last-child {
   border-bottom: 0;
 }
@@ -378,10 +342,8 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .logout{margin-top:24rpx;padding-bottom:14rpx;color:#a2695b}
 .profile-copy{min-width:0}.profile .title{line-height:1.3}.role-badge{line-height:1.35}.menu .group-title{padding-bottom:10rpx;font-size:22rpx;letter-spacing:.5rpx}.menu view:not(.group-title){font-size:29rpx;line-height:1.35}.phone-title{font-size:29rpx;line-height:1.3}.phone-card .muted{margin-top:7rpx;line-height:1.5}.logout{font-size:27rpx}.session-actions{display:flex;align-items:center;justify-content:center;gap:28rpx;margin-top:24rpx}.session-actions .logout{width:auto;margin:0;padding:0 12rpx}.role-access-code{padding:8rpx 12rpx;color:#8b9488;font-size:20rpx;line-height:44rpx}
 
-/* The admin state deliberately keeps the same "我的" rhythm as a tenant,
-   while surfacing the workspace queues instead of hiding them behind a hero. */
+/* Admin shortcuts are grouped by task to keep the page clear and scannable. */
 .admin-identity{display:flex;align-items:center;gap:18rpx;margin-bottom:26rpx;padding:24rpx;border-radius:24rpx;background:#40543f;color:#fff}.admin-avatar{width:88rpx;height:88rpx;min-width:88rpx;flex:none;border-radius:24rpx;background:#e7edcf;color:#40543f;font-size:38rpx;line-height:88rpx}.admin-identity-copy{min-width:0;flex:1}.admin-identity-copy>view{display:flex;align-items:center;gap:10rpx}.admin-name{width:220rpx;height:42rpx;padding:0;border:0;background:transparent;color:#fff;font-size:30rpx;font-weight:750;line-height:42rpx}.admin-name::placeholder{color:rgba(255,255,255,.7)}.admin-role{padding:5rpx 10rpx;border-radius:8rpx;background:rgba(231,237,207,.16);color:#e7edcf;font-size:18rpx;font-weight:700}.admin-identity-copy small{display:block;overflow:hidden;margin-top:7rpx;color:rgba(255,255,255,.66);font-size:20rpx;text-overflow:ellipsis;white-space:nowrap}.admin-edit{flex:none;color:#e7edcf;font-size:19rpx}
-.admin-overview{margin:0 0 22rpx}.admin-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12rpx}.admin-summary>view{padding:22rpx 14rpx;border-radius:18rpx;background:#fff;text-align:center;box-shadow:0 8rpx 22rpx rgba(55,72,51,.05)}.admin-summary strong,.admin-summary text{display:block}.admin-summary strong{color:#40543f;font-size:38rpx;line-height:1.1}.admin-summary text{margin-top:8rpx;color:#7c887a;font-size:20rpx;line-height:1.2}
-.admin-actions{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.admin-actions>view{position:relative;min-height:136rpx;padding:22rpx;box-sizing:border-box;border-radius:20rpx;background:#fff}.admin-actions>view:active,.admin-summary>view:active{transform:scale(.98);background:#f1f4e9}.action-icon{display:grid;width:48rpx;height:48rpx;place-items:center;border-radius:14rpx;background:#e9eedc;color:#40543f;font-size:28rpx;font-weight:700}.workspace-icon{background:#e7efe9;color:#4f715e}.request-icon{background:#f8ede2;color:#b86b4e}.interest-icon{background:#f7e9eb;color:#bd6772}.admin-actions strong,.admin-actions text{display:block}.admin-actions strong{margin-top:14rpx;color:#354535;font-size:26rpx;line-height:1.25}.admin-actions text{margin-top:6rpx;color:#899287;font-size:19rpx;line-height:1.35}
+.admin-actions{display:grid;grid-template-columns:1fr;gap:16rpx}.admin-entry-group{position:relative;min-height:0;padding:24rpx;box-sizing:border-box;border:1rpx solid #e7e8dd;border-radius:24rpx;background:linear-gradient(145deg,#fff 0%,#fdfdf9 100%);box-shadow:0 8rpx 24rpx rgba(52,75,53,.045)}.admin-entry-heading{display:flex;align-items:center;gap:16rpx}.admin-entry-heading>view:last-child{min-width:0}.admin-entry-heading strong,.admin-entry-heading text{display:block}.admin-entry-heading strong{color:#354535;font-size:28rpx;font-weight:700;line-height:1.25}.admin-entry-heading text{margin-top:6rpx;color:#899287;font-size:21rpx;line-height:1.35}.admin-entry-links{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-top:20rpx}.admin-entry-links.single{grid-template-columns:1fr}.admin-entry-links button{display:flex;align-items:center;justify-content:center;gap:10rpx;min-width:0;height:72rpx;margin:0;padding:0 16rpx;border:1rpx solid #e0e6da;border-radius:14rpx;background:#f7f9f4;color:#4b6048;font-size:24rpx;font-weight:700;line-height:1;transition:transform .15s ease,background .15s ease}.admin-entry-links button:active{transform:scale(.98);background:#edf2e8}.admin-entry-links button::after{border:0}.admin-entry-links button text{margin:0;color:inherit;font-size:25rpx;line-height:1}.admin-entry-links .entry-arrow{margin-left:auto;color:#82907c;font-size:32rpx}.property-entry .admin-entry-links button{justify-content:flex-start;border-color:#40543f;background:#40543f;color:#fff}.property-entry .admin-entry-links button:active{background:#354b35}.property-entry .entry-arrow{color:rgba(255,255,255,.8)}.action-icon{display:grid;width:56rpx;height:56rpx;flex:none;place-items:center;border-radius:17rpx 17rpx 8rpx;background:#e9eedc;color:#40543f;font-size:29rpx;font-weight:700}.workspace-icon{background:#e7efe9;color:#4f715e}.request-icon{background:#f5eee1;color:#92764b}.interest-icon{background:#f7e9eb;color:#bd6772}
 .avatar{color:#354b35}.page{padding-bottom:calc(96rpx + env(safe-area-inset-bottom))}.logout:active{opacity:.72}.admin-actions>view,.shortcut-grid>view,.secondary-entry{border:1rpx solid #ebe8e1}
 </style>

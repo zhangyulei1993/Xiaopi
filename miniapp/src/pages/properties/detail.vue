@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLoad, onPageScroll, onShow, onShareAppMessage } from "@dcloudio/uni-app";
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
-import { request, resolveAssetUrl } from "../../api/client";
+import { request, resolveAssetUrl, safeDownloadUrl } from "../../api/client";
 import {
   getPublicConfig,
   deleteProperty,
@@ -73,6 +73,17 @@ const allProperties = ref<Property[]>([]);
 const featuredChannels = ref<Array<{ latitude?: number; longitude?: number; radiusKm?: number }>>([]);
 const activeMediaIndex = ref(0);
 const playingVideoIndex = ref(-1);
+const imagePreviewOpen = ref(false);
+const imagePreviewIndex = ref(0);
+const imagePreviewZoom = ref(1);
+const imagePreviewOffsetX = ref(0);
+const imagePreviewOffsetY = ref(0);
+type PreviewPoint = { x: number; y: number };
+type PreviewGesture =
+  | { mode: "pinch"; distance: number; zoom: number; offsetX: number; offsetY: number; center: PreviewPoint }
+  | { mode: "swipe" | "pan"; start: PreviewPoint; offsetX: number; offsetY: number };
+let imagePreviewGesture: PreviewGesture | null = null;
+let imagePreviewSwipe: { x: number; y: number } | null = null;
 const showMediaFullscreenHint = ref(true);
 let mediaHintTimer: ReturnType<typeof setTimeout> | undefined;
 const videoDimensions = ref<Record<number, { width: number; height: number }>>({});
@@ -169,6 +180,12 @@ onShow(() => {
   const roleBeforeRefresh = activeRole.value;
   syncAudience();
   void flushPendingContactEvents();
+  const updatedPropertyID = String(uni.getStorageSync("xiaopi_property_updated_id") || "");
+  if (updatedPropertyID && updatedPropertyID === detailPropertyID.value) {
+    uni.removeStorageSync("xiaopi_property_updated_id");
+    void load(detailPropertyID.value);
+    return;
+  }
   if (item.value && roleBeforeRefresh !== activeRole.value) {
     void load(item.value.id);
     return;
@@ -188,11 +205,9 @@ const mediaItems = computed(() => {
 });
 const mediaLabel = (media: { type: string }, index: number) =>
   media.type === "video" ? "视频" : `实拍 ${index + 1}`;
-const mediaSwitchLabel = (media: { type: string }, index: number) => {
-  if (media.type === "video") return "视频";
-  const imageNumber = mediaItems.value.slice(0, index + 1).filter((entry) => entry.type !== "video").length;
-  return `图片${imageNumber}`;
-};
+const imageMediaIndices = computed(() => mediaItems.value.map((media, index) => media.type === "image" ? index : -1).filter((index) => index >= 0));
+const videoMediaIndex = computed(() => mediaItems.value.findIndex((media) => media.type === "video"));
+const activeImageNumber = computed(() => Math.max(1, imageMediaIndices.value.indexOf(activeMediaIndex.value) + 1));
 const showFullscreenHint = () => {
   showMediaFullscreenHint.value = true;
   if (mediaHintTimer) clearTimeout(mediaHintTimer);
@@ -217,7 +232,9 @@ const nearbyTags = (property: Property) => uniqueListingTags([
   property.areaSqm ? `${property.areaSqm}㎡` : "",
 ]).slice(0, 3);
 const adminDoorplate = computed(() =>
-  isAdmin.value && operatorDoorplateEnabled.value && item.value ? listingDoorplate(item.value) : "",
+  isAdmin.value && operatorDoorplateEnabled.value && item.value
+    ? [listingDoorplate(item.value), item.value.rentType === "合租" && item.value.roomSequence ? `${item.value.roomSequence}号房` : ""].filter(Boolean).join(" · ")
+    : "",
 );
 const detailModule = (key: string) => detailConfig.value.modules.find((module) => module.key === key);
 // The first-screen transaction summary is a structural part of the client
@@ -237,36 +254,46 @@ const priceUnit = computed(() =>
   Number(item.value?.rentMonthly) > 0 ? "元/月" : "租金",
 );
 const isAdminPreview = computed(
-  () => isAdmin.value && !["published", "available"].includes(item.value?.status || ""),
+  () => isAdmin.value && item.value?.status !== "available",
 );
+const adminCurrentStatusLabel = computed(() => ({
+  draft: "草稿",
+  pending_review: "待审核",
+  published: "待设为可租",
+  available: "可租",
+  rented: "已租",
+  offline: "已下架",
+} as Record<string, string>)[item.value?.status || ""] || "未知");
 const adminPreviewLabel = computed(() => {
   const status = item.value?.status;
   if (status === "offline") return "已下架预览";
-  if (status === "pending_review") return "待发布预览";
+  if (status === "pending_review") return "待审核预览";
+  if (status === "rented") return "已租预览";
+  if (status === "published") return "待设可租预览";
   return "草稿预览";
 });
 const adminPrimaryActions = computed(() => {
   switch (item.value?.status) {
     case "draft":
     case "pending_review":
-      return [{ status: "available", label: "发布房源", tone: "primary" }];
+      return [];
     case "published":
       return [
-        { status: "available", label: "设为可租", tone: "primary" },
-        { status: "rented", label: "标记已租", tone: "secondary" },
+        { status: "available", label: "改为可租", tone: "primary" },
+        { status: "rented", label: "改为已租", tone: "secondary" },
         { status: "offline", label: "下架", tone: "secondary" },
       ];
     case "available":
       return [
-        { status: "rented", label: "标记已租", tone: "primary" },
+        { status: "rented", label: "改为已租", tone: "primary" },
         { status: "offline", label: "下架", tone: "secondary" },
       ];
     case "rented":
-      return [{ status: "available", label: "设为可租", tone: "primary" }];
+      return [{ status: "available", label: "改为可租", tone: "primary" }];
     case "offline":
       return [
-        { status: "available", label: "上架可租", tone: "primary" },
-        { status: "rented", label: "设为已租", tone: "secondary" },
+        { status: "available", label: "改为可租", tone: "primary" },
+        { status: "rented", label: "改为已租", tone: "secondary" },
       ];
     default:
       return [];
@@ -281,9 +308,7 @@ const activeVideoIsPortrait = computed(() => {
       dimensions.height > dimensions.width,
   );
 });
-const mediaViewportHeight = computed(() =>
-  mediaItems.value[activeMediaIndex.value]?.type === "video" ? 720 : 440,
-);
+const mediaViewportHeight = 720;
 const videoPoster = computed(() => {
   const image = mediaItems.value.find((media) => media.type === "image");
   return image ? mediaUrl(image.url) : "";
@@ -301,10 +326,10 @@ const shareFieldMeta: Record<string, { label: string; value: (property: Property
   rentMonthly: { label: "月租", value: (property) => Number(property.rentMonthly) > 0 ? `¥${property.rentMonthly}/月` : "租金面议" },
   listingSource: { label: "来源", value: (property) => property.listingSource || "直租" },
   rentType: { label: "出租", value: (property) => property.rentType || "整租" },
-  depositPayment: { label: "押付", value: (property) => property.depositPayment || "押付面议" },
-  areaSqm: { label: "面积", value: (property) => property.areaSqm ? `${property.areaSqm}㎡` : "待补充" },
-  floorInfo: { label: "楼层", value: (property) => property.floorInfo || "待补充" },
-  availableDate: { label: "入住", value: (property) => property.availableDate || "拎包入住" },
+  depositPayment: { label: "押付", value: (property) => property.depositPayment || "" },
+  areaSqm: { label: "面积", value: (property) => property.areaSqm ? `${property.areaSqm}㎡` : "" },
+  floorInfo: { label: "楼层", value: (property) => property.floorInfo || "" },
+  availableDate: { label: "入住", value: (property) => property.availableDate || "" },
 };
 const shareFieldTagMap: Record<string, string> = { layout: "layout", roomNo: "unit", listingSource: "listingSource", rentType: "rentType", areaSqm: "area", floorInfo: "floor" };
 const isPublicShareField = (key: string, surface: "share" | "poster" = "share") =>
@@ -356,7 +381,8 @@ const generateShareCard = async () => {
     // Friends and Moments deliberately use separate public-label sets.
     const shareKeys = ["rentMonthly", ...customerShareTagFields.value]
       .filter((key, index, values) => key !== "community" && values.indexOf(key) === index)
-      .filter((key) => isPublicShareField(key));
+      .filter((key) => isPublicShareField(key))
+      .filter((key) => Boolean(shareFieldValue(current, key)));
     const rentEnabled = shareKeys.includes("rentMonthly");
     context.setFillStyle(rentEnabled ? "#d85f42" : "#26372c");
     context.setFontSize(32);
@@ -458,11 +484,147 @@ const readVideoMetadata = (
     [index]: { width, height },
   };
 };
+const videoActionBusy = ref(false);
+const showVideoActions = (index: number) => {
+  if (!isAdmin.value) return;
+  const media = mediaItems.value[index];
+  if (!media || media.type !== "video" || videoActionBusy.value) return;
+  uni.showActionSheet({
+    itemList: ["保存视频到相册", "转发视频给好友"],
+    success: ({ tapIndex }) => {
+      const wxApi = typeof wx !== "undefined" ? wx as unknown as { shareVideoMessage?: (options: { videoPath: string; fail: () => void }) => void } : undefined;
+      if (tapIndex === 1 && !wxApi?.shareVideoMessage) {
+        uni.showModal({ title: "暂不支持转发视频", content: "当前微信版本不支持直接转发视频，可以先保存到相册，再从微信发送。", showCancel: false });
+        return;
+      }
+      videoActionBusy.value = true;
+      uni.showLoading({ title: "正在准备视频", mask: true });
+      uni.downloadFile({
+        url: safeDownloadUrl(media.url),
+        success: (result) => {
+          if (result.statusCode !== 200 || !result.tempFilePath) {
+            uni.showToast({ title: "视频下载失败", icon: "none" });
+            return;
+          }
+          if (tapIndex === 0) {
+            uni.saveVideoToPhotosAlbum({
+              filePath: result.tempFilePath,
+              success: () => uni.showToast({ title: "已保存到相册" }),
+              fail: () => uni.showModal({ title: "保存未完成", content: "请检查相册权限后重试。", showCancel: false }),
+            });
+          } else {
+            wxApi?.shareVideoMessage?.({
+              videoPath: result.tempFilePath,
+              fail: () => uni.showToast({ title: "转发未完成，可先保存视频", icon: "none" }),
+            });
+          }
+        },
+        fail: () => uni.showToast({ title: "视频下载失败，请检查网络", icon: "none" }),
+        complete: () => { videoActionBusy.value = false; uni.hideLoading(); },
+      });
+    },
+  });
+};
 const previewImage = (url: string) => {
-  const urls = mediaItems.value
-    .filter((media) => media.type === "image")
-    .map((media) => mediaUrl(media.url));
-  if (urls.length) uni.previewImage({ current: mediaUrl(url), urls });
+  const images = mediaItems.value.filter((media) => media.type === "image");
+  const index = images.findIndex((media) => media.url === url);
+  if (index < 0) return;
+  if (isAdmin.value) {
+    const urls = images.map((media) => mediaUrl(media.url));
+    uni.previewImage({ current: mediaUrl(url), urls });
+    return;
+  }
+  resetImagePreviewTransform();
+  imagePreviewIndex.value = index;
+  imagePreviewOpen.value = true;
+};
+const closeImagePreview = () => { imagePreviewOpen.value = false; imagePreviewGesture = null; imagePreviewSwipe = null; resetImagePreviewTransform(); };
+const previewTouchPoint = (touch: Record<string, unknown>): PreviewPoint => ({
+  x: Number(touch.clientX ?? touch.pageX ?? 0),
+  y: Number(touch.clientY ?? touch.pageY ?? 0),
+});
+const previewTouchDistance = (first: Record<string, unknown>, second: Record<string, unknown>) => {
+  const a = previewTouchPoint(first);
+  const b = previewTouchPoint(second);
+  return Math.hypot(a.x - b.x, a.y - b.y);
+};
+const resetImagePreviewTransform = () => {
+  imagePreviewZoom.value = 1;
+  imagePreviewOffsetX.value = 0;
+  imagePreviewOffsetY.value = 0;
+};
+const imagePreviewImageStyle = computed(() => ({
+  transform: `translate3d(${imagePreviewOffsetX.value}px, ${imagePreviewOffsetY.value}px, 0) scale(${imagePreviewZoom.value})`,
+}));
+const clampImagePreviewOffset = () => {
+  const { windowWidth = 375, windowHeight = 667 } = uni.getSystemInfoSync();
+  const zoom = imagePreviewZoom.value;
+  const maxX = Math.max(0, windowWidth * (zoom - 1) / 2);
+  const maxY = Math.max(0, windowHeight * (zoom - 1) / 2);
+  imagePreviewOffsetX.value = Math.max(-maxX, Math.min(maxX, imagePreviewOffsetX.value));
+  imagePreviewOffsetY.value = Math.max(-maxY, Math.min(maxY, imagePreviewOffsetY.value));
+};
+const onImagePreviewTouchStart = (event: { touches?: Record<string, unknown>[] }) => {
+  const touches = event.touches || [];
+  imagePreviewSwipe = null;
+  if (touches.length >= 2) {
+    const first = previewTouchPoint(touches[0]);
+    const second = previewTouchPoint(touches[1]);
+    const { windowWidth = 375, windowHeight = 667 } = uni.getSystemInfoSync();
+    imagePreviewGesture = {
+      mode: "pinch",
+      distance: Math.max(1, previewTouchDistance(touches[0], touches[1])),
+      zoom: imagePreviewZoom.value,
+      offsetX: imagePreviewOffsetX.value,
+      offsetY: imagePreviewOffsetY.value,
+      center: { x: (first.x + second.x) / 2 - windowWidth / 2, y: (first.y + second.y) / 2 - windowHeight / 2 },
+    };
+    return;
+  }
+  if (touches.length) {
+    const start = previewTouchPoint(touches[0]);
+    imagePreviewGesture = {
+      mode: imagePreviewZoom.value > 1 ? "pan" : "swipe",
+      start,
+      offsetX: imagePreviewOffsetX.value,
+      offsetY: imagePreviewOffsetY.value,
+    };
+  }
+};
+const onImagePreviewTouchMove = (event: { touches?: Record<string, unknown>[] }) => {
+  const touches = event.touches || [];
+  if (touches.length >= 2) {
+    if (imagePreviewGesture?.mode !== "pinch") return;
+    const gesture = imagePreviewGesture;
+    const nextZoom = Math.max(1, Math.min(4, gesture.zoom * previewTouchDistance(touches[0], touches[1]) / gesture.distance));
+    const ratio = nextZoom / gesture.zoom;
+    imagePreviewZoom.value = nextZoom;
+    imagePreviewOffsetX.value = gesture.center.x - (gesture.center.x - gesture.offsetX) * ratio;
+    imagePreviewOffsetY.value = gesture.center.y - (gesture.center.y - gesture.offsetY) * ratio;
+    clampImagePreviewOffset();
+    return;
+  }
+  if (!imagePreviewGesture || !touches.length) return;
+  const current = previewTouchPoint(touches[0]);
+  const dx = current.x - imagePreviewGesture.start.x;
+  const dy = current.y - imagePreviewGesture.start.y;
+  if (imagePreviewGesture.mode === "pan") {
+    imagePreviewOffsetX.value = imagePreviewGesture.offsetX + dx;
+    imagePreviewOffsetY.value = imagePreviewGesture.offsetY + dy;
+    clampImagePreviewOffset();
+  } else {
+    imagePreviewSwipe = { x: dx, y: dy };
+  }
+};
+const onImagePreviewTouchEnd = () => {
+  const swipe = imagePreviewSwipe;
+  if (imagePreviewGesture?.mode === "swipe" && swipe && Math.abs(swipe.x) > 55 && Math.abs(swipe.x) > Math.abs(swipe.y) * 1.15) {
+    const count = imageMediaIndices.value.length;
+    if (count > 1) imagePreviewIndex.value = (imagePreviewIndex.value + (swipe.x < 0 ? 1 : count - 1)) % count;
+  }
+  imagePreviewSwipe = null;
+  imagePreviewGesture = null;
+  if (imagePreviewZoom.value <= 1) resetImagePreviewTransform();
 };
 const amenities = computed(() => {
   const match = String(item.value?.description || "").match(/配套设施[ \t]*[：:][ \t]*([^\n]*)/);
@@ -493,6 +655,16 @@ const propertyDescription = computed(() =>
     .replace(/配套设施[ \t]*[：:][ \t]*[^\n]*\n?/, "")
     .trim(),
 );
+const propertyDisplayAddress = computed(() => {
+  const community = String(item.value?.community || "").trim();
+  const rawAddress = String(item.value?.location || "").trim();
+  const address = /^(位置待补充|地址待补充)$/.test(rawAddress) ? "" : rawAddress;
+  if (!address) return community || rawAddress || "位置待补充";
+  if (!community) return address;
+  const normalizedAddress = address.replace(/[\s·・,，。\-—]/g, "").toLowerCase();
+  const normalizedCommunity = community.replace(/[\s·・,，。\-—]/g, "").toLowerCase();
+  return normalizedAddress.includes(normalizedCommunity) ? address : `${address} · ${community}`;
+});
 const hasLocation = computed(() =>
   Boolean(Number(item.value?.latitude) && Number(item.value?.longitude)),
 );
@@ -707,10 +879,12 @@ const editProperty = () => {
 };
 const updateStatusFromPreview = (nextStatus: string, label: string) => {
   if (!item.value) return;
+  const currentStatus = adminCurrentStatusLabel.value;
+  const targetStatus = ({ available: "可租", rented: "已租", offline: "已下架" } as Record<string, string>)[nextStatus] || nextStatus;
   uni.showModal({
-    title: `确认${label}`,
-    content: nextStatus === "offline" ? "下架后，用户端将不再展示该房源。" : nextStatus === "rented" ? "标记后，房源会归入已租列表。" : "该状态会立即同步到房源管理。",
-    confirmText: "确认",
+    title: `${currentStatus} → ${targetStatus}`,
+    content: `确认将房源状态从「${currentStatus}」改为「${targetStatus}」吗？${nextStatus === "offline" ? "下架后，用户端将不再展示该房源。" : nextStatus === "rented" ? "确认后将从可租房源中移除，并归入已租。" : nextStatus === "available" ? "确认后将作为可租房源展示给用户。" : ""}`,
+    confirmText: `确认${targetStatus}`,
     success: async (result) => {
       if (!result.confirm || !item.value) return;
       try {
@@ -785,6 +959,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
             :src="mediaUrl(media.url)"
             lazy-load
             mode="aspectFill"
+            :show-menu-by-longpress="false"
             @click="previewImage(media.url)" />
           <view v-else-if="media.type === 'video' && shouldLoadMedia(index)" class="video-stage">
             <video
@@ -801,6 +976,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
               enable-play-gesture
               preload="metadata"
               object-fit="cover"
+              @longpress="showVideoActions(index)"
               @loadedmetadata="readVideoMetadata(index, $event)"
               @play="onVideoPlay(index)"
               @pause="playingVideoIndex = -1"
@@ -811,16 +987,14 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
         </swiper-item>
       </swiper
       ><view v-if="showMediaFullscreenHint && (mediaItems[activeMediaIndex]?.type !== 'video' || playingVideoIndex === activeMediaIndex)" class="media-fullscreen-hint" :class="{ 'video-hint': mediaItems[activeMediaIndex]?.type === 'video', 'image-hint': mediaItems[activeMediaIndex]?.type !== 'video' }"><text>{{ mediaItems[activeMediaIndex]?.type === 'video' ? '全屏观看' : '点击图片查看大图' }}</text><text class="hint-arrow">{{ mediaItems[activeMediaIndex]?.type === 'video' ? '↘' : '↗' }}</text></view>
-      <view v-if="mediaItems.length === 1 && mediaItems[activeMediaIndex]?.type !== 'video'" class="media-counter">1 / 1</view><scroll-view v-if="mediaItems.length > 1" class="media-strip" scroll-x show-scrollbar="false"
-      ><view class="media-strip-row"><view
-        v-for="(media, index) in mediaItems"
-        :key="`thumb-${media.url}-${index}`"
-        class="media-thumb"
-        :class="{ active: activeMediaIndex === index, video: media.type === 'video' }"
-        @click="selectMedia(index)"
-        ><text class="media-thumb-label">{{ mediaSwitchLabel(media, index) }}</text></view></view
-      ></scroll-view
-      ></view
+      <view v-if="isAdmin && mediaItems[activeMediaIndex]?.type === 'video'" class="video-actions-button" @click.stop="showVideoActions(activeMediaIndex)">视频操作</view>
+      <view v-if="imageMediaIndices.length || videoMediaIndex >= 0" class="media-strip">
+        <view class="media-strip-row">
+          <view v-if="videoMediaIndex >= 0" class="media-thumb video" :class="{ active: activeMediaIndex === videoMediaIndex }" @click="selectMedia(videoMediaIndex)"><text class="media-thumb-label">视频</text></view>
+          <view v-if="imageMediaIndices.length" class="media-thumb" :class="{ active: mediaItems[activeMediaIndex]?.type === 'image' }" @click="selectMedia(mediaItems[activeMediaIndex]?.type === 'image' ? activeMediaIndex : imageMediaIndices[0])"><text class="media-thumb-label">照片 {{ mediaItems[activeMediaIndex]?.type === 'image' ? activeImageNumber : 1 }}/{{ imageMediaIndices.length }}</text></view>
+        </view>
+      </view>
+      </view
     ><view v-if="detailModuleEnabled('overview')" class="card overview"
       ><view v-if="isAdminPreview" class="admin-preview-tag">{{ adminPreviewLabel }}</view
       ><view class="overview-top"
@@ -830,10 +1004,10 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
           }}<small>{{ favorite ? "已关注" : "关注" }}</small></view
         ></view
       ><view class="title">{{ item.title || item.community }}</view
-      ><view v-if="isAdmin" class="muted">{{ item.location || "位置待补充" }}</view
+      ><view v-if="isAdmin" class="muted">{{ propertyDisplayAddress }}</view
       ><view v-if="adminDoorplate" class="admin-detail-doorplate">门牌定位 · {{ adminDoorplate }}</view
       ><view v-if="item.listingSource === '转租'" class="overview-meta-row"><view class="transfer-tag">转租 · 剩余 {{ item.remainingLeaseMonths || 0 }} 个月</view></view
-      ><view v-if="!isAdmin" class="muted">{{ item.location || "位置待补充" }}</view
+      ><view v-if="!isAdmin" class="muted">{{ propertyDisplayAddress }}</view
       ><view class="key-facts"><view><small class="kv-key">{{ item.rentType === '合租' && item.wholeAreaSqm ? '整套面积' : '面积' }}</small><strong class="kv-value">{{ item.rentType === '合租' && item.wholeAreaSqm ? `${item.wholeAreaSqm}㎡` : item.areaSqm ? `${item.areaSqm}㎡` : "待补充" }}</strong></view
         ><view><small class="kv-key">{{ item.rentType === '合租' && item.wholeLayout ? '整套户型' : '户型' }}</small><strong class="kv-value">{{ item.rentType === '合租' && item.wholeLayout ? item.wholeLayout : listingLayout(item) || "待补充" }}</strong></view
         ><view><small class="kv-key">楼层</small><strong class="kv-value">{{ item.floorInfo || "待补充" }}</strong></view
@@ -856,7 +1030,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
     ><view v-if="detailModuleEnabled('location') && hasLocation" class="card location-card"
       ><view class="location-heading"
         ><view
-          ><strong>{{ detailModuleTitle('location', '位置与周边') }}</strong><small>{{ item.location }}</small></view><text>已定位</text></view
+          ><strong>{{ detailModuleTitle('location', '位置与周边') }}</strong><small>{{ propertyDisplayAddress }}</small></view><text>已定位</text></view
       ><view class="map-summary" @click="mapExpanded = !mapExpanded"
         ><view><strong>{{ mapExpanded ? "收起地图" : "查看地图位置" }}</strong><small>已保存房源定位</small></view
         ><text>{{ mapExpanded ? "⌃" : "›" }}</text></view
@@ -901,14 +1075,15 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
     ><button v-if="!isAdmin" class="floating-appointment" @click="openAppointment"><text>预约</text><small>看房</small></button
     ><button v-if="!isAdmin" class="floating-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享</text></button
     ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
-      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status === 'offline' }"><button v-if="item.status !== 'offline'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
-      ><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
+      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status !== 'available' }"><button v-if="item.status === 'available'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
+      ><view class="admin-current-status"><text>当前状态</text><strong>{{ adminCurrentStatusLabel }}</strong></view><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
       ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="detail-signature"><text class="detail-signature-mark">皮</text><strong>{{ brandName || '小皮租房' }}</strong></view
       ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom" @click="recordContact('consult_entry_click')"><text>在线咨询</text></button
       ><button class="user-phone" @click="phoneCustomerService"><text>打电话</text></button></view
     ><view v-if="appointmentOpen" id="appointment-mask" class="appointment-mask" @click="closeAppointmentFromBackdrop"><view class="appointment-sheet"><view class="appointment-sheet-head"><view><strong>预约看房</strong><text>{{ item.title || item.community }}</text></view><text @click="appointmentOpen = false">×</text></view><template v-if="boundPhone"><view class="appointment-field"><text>怎么称呼您</text><input v-model.trim="appointmentName" maxlength="20" placeholder="例如：张女士" /></view><view class="appointment-field"><text>联系手机号</text><strong>{{ maskedPhone }}</strong></view><view class="appointment-field"><text>什么时候方便</text><view class="appointment-times"><text v-for="time in appointmentTimes" :key="time" :class="{ active: appointmentTime === time }" @click="appointmentTime = time">{{ time }}</text></view></view><button class="appointment-submit" :loading="appointmentSubmitting" @click="submitAppointment">提交预约</button></template><template v-else><view class="appointment-bind"><strong>先绑定手机号</strong><text>用于确认看房安排，只会展示脱敏号码。</text><button open-type="getPhoneNumber" :loading="appointmentBinding" @getphonenumber="bindAppointmentPhone">绑定手机号并继续</button></view></template></view></view
+    ><view v-if="imagePreviewOpen && !isAdmin" class="image-preview-mask" @click="closeImagePreview"><view class="image-preview-content" @click.stop><view class="image-preview-toolbar"><text @click="closeImagePreview">×</text><small>{{ imagePreviewIndex + 1 }} / {{ imageMediaIndices.length }}</small></view><view class="image-preview-stage" @touchstart="onImagePreviewTouchStart" @touchmove.stop.prevent="onImagePreviewTouchMove" @touchend="onImagePreviewTouchEnd" @touchcancel="onImagePreviewTouchEnd"><image class="image-preview-image" :src="mediaUrl(mediaItems[imageMediaIndices[imagePreviewIndex]]?.url || '')" mode="aspectFit" :show-menu-by-longpress="false" :style="imagePreviewImageStyle" /></view><small class="image-preview-hint">双指放大 · 放大后拖动 · 左右滑动切图</small></view></view
     ></view
   ><view v-else class="page state">房源不存在或已下架</view>
 </template>
@@ -1215,6 +1390,8 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .admin-edit-primary { border:1rpx solid #d9e0d4; background:#f1f4ed; color:#4e6048; }
 .admin-share-primary::after,.admin-edit-primary::after { border:0; }
 .admin-detail-main { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:10rpx; margin-top:10rpx; }
+.admin-current-status { display:flex; align-items:center; gap:12rpx; margin-top:12rpx; color:#778174; font-size:21rpx; }
+.admin-current-status strong { padding:6rpx 12rpx; border-radius:999rpx; background:#edf2e9; color:#40543f; font-size:22rpx; font-weight:750; }
 .admin-detail-primary { min-width:0; margin:0; padding:0 16rpx; border:1rpx solid transparent; border-radius:15rpx; font-size:26rpx; font-weight:750; line-height:82rpx; }
 .admin-detail-primary::after,.admin-detail-tool::after { border:0; }
 .admin-detail-primary.primary { border-color:#40543f; background:#40543f; color:#fff; }
@@ -1265,4 +1442,29 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .detail-scrolled-title{position:absolute;right:98px;bottom:0;left:98px;overflow:hidden;height:36px;color:#29382d;font-size:15px;font-weight:700;line-height:36px;text-align:center;text-overflow:ellipsis;white-space:nowrap;}
 .detail-cover-empty .property-placeholder-image{width:132rpx;height:104rpx;opacity:.8;}
 .detail-cover-empty{gap:9rpx;}
+</style>
+
+<style scoped>
+.detail-cover-empty { min-height: 720rpx; box-sizing: border-box; }
+</style>
+
+<style scoped>
+.media-strip { right: auto; max-width: calc(100% - 36rpx); }
+.media-gallery.video-playing .media-strip { opacity: 0; pointer-events: none; }
+</style>
+
+<style scoped>
+.video-actions-button{position:absolute;z-index:5;right:20rpx;top:calc(var(--status-bar-height, 0px) + 90rpx);padding:10rpx 18rpx;border:1rpx solid rgba(255,255,255,.6);border-radius:999rpx;background:rgba(24,34,25,.68);color:#fff;font-size:22rpx;line-height:1.4}
+.media-gallery.video-playing .video-actions-button{opacity:0;pointer-events:none}
+</style>
+
+<style scoped>
+.image-preview-mask{position:fixed;z-index:1000;inset:0;display:flex;align-items:center;justify-content:center;background:#080908}
+.image-preview-content{position:relative;width:100%;height:100%}
+.image-preview-toolbar{position:absolute;z-index:2;top:calc(env(safe-area-inset-top) + 24rpx);right:32rpx;left:32rpx;display:flex;align-items:center;justify-content:space-between;color:#fff}
+.image-preview-toolbar text{display:grid;width:64rpx;height:64rpx;place-items:center;border:1rpx solid rgba(255,255,255,.28);border-radius:50%;background:rgba(0,0,0,.35);font-size:48rpx;font-weight:300;line-height:1}
+.image-preview-toolbar small{padding:9rpx 16rpx;border-radius:999rpx;background:rgba(0,0,0,.4);font-size:22rpx;font-variant-numeric:tabular-nums}
+.image-preview-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+.image-preview-image{display:block;width:100%;height:100%;transform-origin:center center;will-change:transform}
+.image-preview-hint{position:absolute;right:0;bottom:calc(env(safe-area-inset-bottom) + 36rpx);left:0;color:rgba(255,255,255,.72);font-size:21rpx;text-align:center;pointer-events:none}
 </style>

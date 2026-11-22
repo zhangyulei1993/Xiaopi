@@ -4,8 +4,9 @@ import ts from 'typescript'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const expectedDeclarations={request:path.join(projectRoot,'src/api/request-url.mjs'), wrapper:path.join(projectRoot,'src/api/client.ts'), upload:path.join(projectRoot,'src/api/upload-url.mjs')}
+const expectedDeclarations={request:path.join(projectRoot,'src/api/request-url.mjs'), wrapper:path.join(projectRoot,'src/api/client.ts'), upload:path.join(projectRoot,'src/api/upload-url.mjs'), download:path.join(projectRoot,'src/api/download-url.mjs')}
 const sameFile=(actual, expected)=>{ try { return fs.realpathSync(actual) === fs.realpathSync(expected) } catch { return false } }
+const sameRuntimeModule=(actual, expected)=>sameFile(actual, expected) || (actual.endsWith('.d.mts') && sameFile(actual.slice(0,-6)+'.mjs', expected))
 
 export function auditSource(file, source) {
   const blocks = file.endsWith('.vue') ? [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].map(m => ({text:m[1], offset:m.index + m[0].indexOf(m[1])})) : [{text:source,offset:0}]
@@ -31,7 +32,7 @@ export function auditSource(file, source) {
           const url=arg && ts.isObjectLiteralExpression(arg) ? arg.properties.find(p=>ts.isPropertyAssignment(p)&&p.name.getText(ast)==='url') : undefined
           const expression=url && ts.isPropertyAssignment(url) ? url.initializer.getText(ast) : undefined
           const line=source.slice(0,block.offset+node.getStart(ast)).split('\n').length
-          const expected=callee === 'uni.request' ? 'safeRequestUrl' : callee === 'uni.uploadFile' ? 'safeUploadUrl' : null
+          const expected=callee === 'uni.request' ? 'safeRequestUrl' : callee === 'uni.uploadFile' ? 'safeUploadUrl' : callee === 'uni.downloadFile' ? 'safeDownloadUrl' : null
           const direct=url && ts.isPropertyAssignment(url) && ts.isCallExpression(url.initializer) && ts.isIdentifier(url.initializer.expression) && url.initializer.expression.text===expected
           const spreadAfter=url && ts.isObjectLiteralExpression(arg) && arg.properties.slice(arg.properties.indexOf(url)+1).some(p=>ts.isSpreadAssignment(p) || (ts.isPropertyAssignment(p) && p.name.getText(ast)==='url'))
           const ref=direct ? url.initializer.expression : undefined
@@ -51,7 +52,7 @@ export function auditSource(file, source) {
           }
           const declarations=(resolved?.declarations || []).map(d=>({file:d.getSourceFile().fileName,kind:ts.SyntaxKind[d.kind],name:resolved.getName()}))
           let wrapperBinding = null
-          if (callee === 'uni.uploadFile' && resolved?.declarations?.length === 1) {
+          if ((callee === 'uni.uploadFile' || callee === 'uni.downloadFile') && resolved?.declarations?.length === 1) {
             const declaration = resolved.declarations[0]
             const init = ts.isVariableDeclaration(declaration) ? declaration.initializer : undefined
             const body = init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) ? init.body : undefined
@@ -62,8 +63,10 @@ export function auditSource(file, source) {
             wrapperBinding = { directReturn:!!returned, importAlias:!!(target && (target.flags & ts.SymbolFlags.Alias)), declarations:(actual?.declarations || []).map(d=>({file:d.getSourceFile().fileName,kind:ts.SyntaxKind[d.kind],name:actual.getName()})) }
           }
           const originVerified=declarations.length===1 && (callee==='uni.request'
-            ? sameFile(declarations[0].file,expectedDeclarations.request)
-            : callee==='uni.uploadFile' && sameFile(declarations[0].file,expectedDeclarations.wrapper) && wrapperBinding?.directReturn && wrapperBinding.importAlias && wrapperBinding.declarations.length===1 && sameFile(wrapperBinding.declarations[0].file,expectedDeclarations.upload))
+            ? sameRuntimeModule(declarations[0].file,expectedDeclarations.request)
+            : callee==='uni.uploadFile'
+              ? sameFile(declarations[0].file,expectedDeclarations.wrapper) && wrapperBinding?.directReturn && wrapperBinding.importAlias && wrapperBinding.declarations.length===1 && sameRuntimeModule(wrapperBinding.declarations[0].file,expectedDeclarations.upload)
+              : callee==='uni.downloadFile' && sameFile(declarations[0].file,expectedDeclarations.wrapper) && wrapperBinding?.directReturn && wrapperBinding.importAlias && wrapperBinding.declarations.length===1 && sameRuntimeModule(wrapperBinding.declarations[0].file,expectedDeclarations.download))
           calls.push({file,line,callee,urlExpression:expression ?? null,directGuard:!!direct&&!spreadAfter,reassigned,importAlias:!!(symbol && (symbol.flags & ts.SymbolFlags.Alias)),resolvedDeclarations:declarations,wrapperBinding,originVerified:!!originVerified,status:'BLOCKED',reason:direct&&!spreadAfter&&!reassigned&&originVerified?'Resolved declaration files match; guard implementation, cross-file writes and built output require verification':'URL binding, declaration origin or reassignment could not be verified'})
         }
       }

@@ -74,26 +74,15 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
 		return
 	}
-	// A public rental listing without a cover image is not usable: it renders as
-	// a placeholder in the discovery feed and undermines the verification claim.
-	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
-		items, err := s.store.ListProperties(r.Context())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to verify property media")
-			return
-		}
-		for _, item := range items {
-			if item.ID == input.PropertyID {
-				hasImage := false
-				for _, media := range item.Media {
-					if media.Type == "image" {
-						hasImage = true
-						break
-					}
-				}
-				if !hasImage {
-					writeError(w, http.StatusBadRequest, "发布房源前请至少上传一张实拍图片")
-					return
+	previousStatus := "未知"
+	propertyName := input.PropertyID
+	if properties, err := s.store.ListProperties(r.Context()); err == nil {
+		for _, property := range properties {
+			if property.ID == input.PropertyID {
+				previousStatus = string(property.Status)
+				propertyName = property.Community
+				if propertyName == "" {
+					propertyName = property.Title
 				}
 				break
 			}
@@ -107,6 +96,7 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 		return
 	}
+	s.logOperation(r.Context(), input.OperatorID, "property", input.PropertyID, "变更房源状态", fmt.Sprintf("%s：%s → %s", propertyName, previousStatus, input.Status))
 	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
 		if items, err := s.store.ListProperties(r.Context()); err == nil {
 			for _, item := range items {
@@ -214,8 +204,9 @@ func (s *Server) convertPropertyLead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+(1<<20))
-	if err := r.ParseMultipartForm(20 << 20); err != nil {
+	const maxMediaUploadBytes = 40 << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxMediaUploadBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxMediaUploadBytes); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid multipart form"})
 		return
 	}
@@ -225,7 +216,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	if header.Size > 20<<20 {
+	if header.Size > maxMediaUploadBytes {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "file too large"})
 		return
 	}

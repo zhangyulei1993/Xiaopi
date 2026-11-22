@@ -5,8 +5,16 @@ It uses Compose project `xiaopi-miniapp-test`, database `xiaopi_miniapp_test`,
 private MySQL, and an API bound to `127.0.0.1:18083`. In `APP_ENV=test`, the
 backend HTTP transport rejects outbound requests. The optional map fixture is
 enabled only with `TEST_FAKE_MAP_ENABLED=true`; it returns a fixed QA location
-without making network calls. Production never enables this fixture.
-Do not copy production credentials into `tests/.env.test`.
+without making network calls. For live map testing, create the ignored local
+`tests/.env.map.test` from `.env.map.test.example` and set `TENCENT_MAP_KEY` and
+`TEST_REAL_MAP_ENABLED=true` there.
+In that mode the test transport permits only HTTPS GET requests to Tencent's
+`/ws/place/v1/search` endpoint, with the configured key and known search
+parameters; all other outbound requests remain blocked. The API key stays in
+the backend container and is never sent to the mini program. When a key is
+configured, the live response takes precedence over the QA fixture.
+Do not copy admin, database, or production service credentials into
+`tests/.env.test`; the optional map key belongs only in `tests/.env.map.test`.
 
 ## Commands
 

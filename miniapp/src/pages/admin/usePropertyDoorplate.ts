@@ -10,7 +10,7 @@ export function usePropertyDoorplate(form: { community?: string; floorInfo?: str
   const buildingRules = ref<Doorplate[]>([]);
   const manualDoorplate = ref("");
   const doorplateEntryMode = ref<"catalog" | "manual">("catalog");
-  type StructureStep = "building" | "unit" | "room" | "";
+  type StructureStep = "building" | "unit" | "room" | "quick" | "";
   const structureStep = ref<StructureStep>("");
 
   const buildingOptions = computed(() => [...new Set(buildingRules.value.map(row => row.building))]);
@@ -53,7 +53,7 @@ export function usePropertyDoorplate(form: { community?: string; floorInfo?: str
     selectedFloor.value = room.floor;
     roomNo.value = room.roomNo;
     form.floorInfo = automaticFloorInfo.value;
-    structureStep.value = "";
+    structureStep.value = "quick";
   };
   const structureStepIndex = (step: StructureStep) =>
     (["building", "unit", "room"] as StructureStep[]).indexOf(step);
@@ -81,12 +81,18 @@ export function usePropertyDoorplate(form: { community?: string; floorInfo?: str
     if (currentIndex <= 0) return;
     returnToStructureStep((["building", "unit", "room"] as StructureStep[])[currentIndex - 1]);
   };
+  let lastPickerCommunity = "";
   const openStructurePicker = async () => {
-    if (!form.community?.trim()) return;
+    const community = form.community?.trim();
+    if (!community) return;
     await loadBuildingRules();
+    if (form.community?.trim() !== community) return;
     // Default to the catalog when first opened; keep the operator's last choice
     // on subsequent opens. Communities without catalog data always use manual entry.
     if (!hasDoorplateCatalog.value) doorplateEntryMode.value = "manual";
+    else if (lastPickerCommunity !== community) doorplateEntryMode.value = "catalog";
+    lastPickerCommunity = community;
+    manualDoorplate.value = "";
     structureStep.value = buildingNo.value
       ? unitNo.value
         ? "room"

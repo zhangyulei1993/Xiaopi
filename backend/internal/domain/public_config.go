@@ -17,14 +17,16 @@ type MiniappLocation struct {
 }
 
 type FeaturedChannel struct {
-	ID        string  `json:"id,omitempty"`
-	Icon      string  `json:"icon"`
-	Title     string  `json:"title"`
-	Subtitle  string  `json:"subtitle"`
-	Keyword   string  `json:"keyword"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	RadiusKm  float64 `json:"radiusKm"`
+	ID              string  `json:"id,omitempty"`
+	Icon            string  `json:"icon"`
+	Title           string  `json:"title"`
+	Subtitle        string  `json:"subtitle"`
+	Community       string  `json:"community,omitempty"`
+	Keyword         string  `json:"keyword"`
+	Latitude        float64 `json:"latitude"`
+	Longitude       float64 `json:"longitude"`
+	RadiusKm        float64 `json:"radiusKm"`
+	ShowInAreaEntry bool    `json:"showInAreaEntry,omitempty"`
 }
 
 // PagePresentation is intentionally small: it gives operations control over
@@ -150,9 +152,9 @@ func DefaultPublicConfig() PublicConfig {
 			{Label: "街道口", Keyword: "街道口"},
 		},
 		FeaturedChannels: []FeaturedChannel{
-			{Icon: "commute", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", Latitude: 30.456040, Longitude: 114.425337, RadiusKm: 3},
-			{Icon: "campus", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 3},
-			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 3},
+			{Icon: "commute", Title: "金融港", Subtitle: "通勤优选", Keyword: "金融港", Latitude: 30.456040, Longitude: 114.425337, RadiusKm: 3, ShowInAreaEntry: true},
+			{Icon: "campus", Title: "光谷", Subtitle: "品质房源", Keyword: "光谷", RadiusKm: 3, ShowInAreaEntry: true},
+			{Icon: "life", Title: "街道口", Subtitle: "生活便利", Keyword: "街道口", RadiusKm: 3, ShowInAreaEntry: true},
 		},
 		PagePresentations: map[string]PagePresentation{
 			"home":              {Title: "今天想住哪里？", Subtitle: "搜索小区、地铁或商圈", ChannelTitle: "精选频道", AllChannelsText: "全部频道", RecommendationTitle: "推荐房源", ViewAllText: "查看全部", NearbyLabel: "附近"},
@@ -229,6 +231,7 @@ func (config *PublicConfig) Normalize() {
 		config.FeaturedChannels[index].Icon = strings.TrimSpace(config.FeaturedChannels[index].Icon)
 		config.FeaturedChannels[index].Title = strings.TrimSpace(config.FeaturedChannels[index].Title)
 		config.FeaturedChannels[index].Subtitle = strings.TrimSpace(config.FeaturedChannels[index].Subtitle)
+		config.FeaturedChannels[index].Community = strings.TrimSpace(config.FeaturedChannels[index].Community)
 		config.FeaturedChannels[index].Keyword = strings.TrimSpace(config.FeaturedChannels[index].Keyword)
 		if config.FeaturedChannels[index].RadiusKm <= 0 {
 			config.FeaturedChannels[index].RadiusKm = 3

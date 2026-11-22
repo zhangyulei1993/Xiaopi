@@ -14,6 +14,9 @@ export interface Property {
   buildingNo?: string;
   unitNo?: string;
   roomNo?: string;
+  roomSequence?: number;
+  isMaterial?: boolean;
+  materialCategory?: string;
   latitude?: number;
   longitude?: number;
   layout: string;
@@ -49,6 +52,18 @@ export interface PropertyMedia {
   url: string;
   sort?: number;
 }
+export interface FeaturedChannel {
+  id?: string;
+  icon: string;
+  title: string;
+  subtitle: string;
+  community?: string;
+  keyword: string;
+  latitude?: number;
+  longitude?: number;
+  radiusKm?: number;
+  showInAreaEntry?: boolean;
+}
 export const listProperties = () => request<Property[]>("/v1/properties");
 export const createProperty = (property: Partial<Property>) =>
   request<Property>("/v1/properties", { method: "POST", data: property });
@@ -57,6 +72,16 @@ export const updateProperty = (property: Partial<Property>) =>
     method: "PATCH",
     data: property,
   });
+export const listMaterialLibrary = () => request<Property[]>('/v1/admin/material-library');
+export const createMaterial = (property: Partial<Property>) =>
+  request<Property>('/v1/admin/material-library', { method: 'POST', data: property });
+export const deleteMaterial = (propertyId: string) =>
+  request(`/v1/admin/material-library/${encodeURIComponent(propertyId)}`, { method: 'DELETE' });
+export const convertMaterial = (propertyId: string) =>
+  request<Property>(`/v1/admin/material-library/${encodeURIComponent(propertyId)}/convert`, { method: 'PATCH' });
+export const getMaterialCategories = () => request<string[]>('/v1/admin/material-library/categories');
+export const saveMaterialCategories = (categories: string[]) =>
+  request<string[]>('/v1/admin/material-library/categories', { method: 'PUT', data: { categories } });
 export const deleteProperty = (propertyId: string) =>
   request(`/v1/properties/${encodeURIComponent(propertyId)}`, { method: "DELETE" });
 export const replacePropertyMedia = (propertyId: string, mediaIds: string[]) =>
@@ -128,6 +153,17 @@ export interface RentalRequest {
   createdAt?: string;
 }
 export interface OperationLog { id: string; targetType: string; targetId: string; action: string; detail: string; createdAt: string }
+export interface OperationLogPage { items: OperationLog[]; total: number; page: number; pageSize: number; pageCount: number }
+export const queryOperationLogs = (filters: { category: string; startDate?: string; endDate?: string; page: number; pageSize?: number }) => {
+  const params = [
+    `category=${encodeURIComponent(filters.category)}`,
+    `page=${filters.page}`,
+    `pageSize=${filters.pageSize || 20}`,
+  ];
+  if (filters.startDate) params.push(`startDate=${encodeURIComponent(filters.startDate)}`);
+  if (filters.endDate) params.push(`endDate=${encodeURIComponent(filters.endDate)}`);
+  return request<OperationLogPage>(`/v1/admin/operation-logs/query?${params.join("&")}`);
+};
 export interface FavoriteContact { userId: string; nickname: string; avatarUrl: string; phone: string; propertyId: string; propertyName: string; createdAt: string }
 export const createRentalRequest = (item: RentalRequest) =>
   request<RentalRequest>("/v1/rental-requests", { method: "POST", data: item });
@@ -174,16 +210,7 @@ export interface PublicConfig {
   contactPhone: string;
   relatedPropertyRadiusKm?: number;
   locations: { id?: string; label: string; keyword: string; latitude?: number; longitude?: number; radiusKm?: number }[];
-  featuredChannels: {
-    id?: string;
-    icon: string;
-    title: string;
-    subtitle: string;
-    keyword: string;
-    latitude?: number;
-    longitude?: number;
-    radiusKm?: number;
-  }[];
+  featuredChannels: FeaturedChannel[];
   statusLabels?: { draft?: string; pendingReview?: string; published?: string; available?: string; rented?: string; offline?: string };
   pagePresentations?: Record<string, {
     copy?: Record<string, string>; searchPlaceholder?: string; operatorTitle?: string; operatorSubtitle?: string; eyebrow?: string;

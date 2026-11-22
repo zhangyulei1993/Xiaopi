@@ -28,6 +28,61 @@
       "handler": "s.adminLogin"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/admin/web-accounts",
+      "expected": {
+        "guest": 401,
+        "user": 401,
+        "admin": 401
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.manageWebAdmins"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/web-accounts",
+      "expected": {
+        "guest": 401,
+        "user": 401,
+        "admin": 401
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.manageWebAdmins"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/web-accounts/{username}",
+      "expected": {
+        "guest": 401,
+        "user": 401,
+        "admin": 401
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.manageWebAdmins"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/admin/web-accounts/{username}",
+      "expected": {
+        "guest": 401,
+        "user": 401,
+        "admin": 401
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.manageWebAdmins"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/web-password",
+      "expected": {
+        "guest": 401,
+        "user": 401,
+        "admin": 401
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.manageWebAdmins"
+    },
+    {
       "method": "POST",
       "path": "/api/v1/auth/wechat/login",
       "expected": {
@@ -226,6 +281,39 @@
       "handler": "s.publicConfig"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/admin/config/state",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.configState, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/config/history",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.configHistory, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/config/publish",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.publishConfig, roleAdmin)"
+    },
+    {
       "method": "PUT",
       "path": "/api/v1/admin/config/public",
       "expected": {
@@ -246,6 +334,83 @@
       },
       "probe": "DENIAL_ONLY",
       "handler": "s.requireRoles(s.searchLocations, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/doorplate-plans",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.doorplatePlans, roleAdmin)"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/doorplate-plans",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.doorplatePlans, roleAdmin)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/admin/doorplate-plans",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.doorplatePlans, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/community-locations",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.communityLocations, roleAdmin)"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/community-locations",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.communityLocations, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/doorplates",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.doorplates, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/doorplates",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.doorplates, roleAdmin)"
     },
     {
       "method": "GET",
@@ -559,6 +724,14 @@
   "pages": [
     {
       "route": "pages/home/index",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    },
+    {
+      "route": "pages/map/index",
       "expected": {
         "guest": "公开页面",
         "user": "公开页面",

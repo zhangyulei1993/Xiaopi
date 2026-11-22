@@ -59,10 +59,8 @@ export const uniqueListingTags = (values: string[]) => {
 // tag so configuration changes apply to old listings immediately and the
 // core title remains readable on narrow cards.
 export const publicListingTitle = (item: Property, fields?: string[]) => {
-  // Public cards use the community as a stable title. Everything else belongs
-  // to configurable tags, never to an auto-composed title.
+  // Editable title defaults to the community name; older records keep the
+  // community as a fallback when their title is empty.
   void fields;
-  const base = String(item.community || item.title || "房源").trim();
-  const phrase = String(item.marketingPhrase || "").trim();
-  return phrase ? `${base} · ${phrase}` : base;
+  return String(item.title || item.community || "房源").trim();
 };

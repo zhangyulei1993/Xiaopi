@@ -1,0 +1,186 @@
+{
+  "version": "core-v1",
+  "runId": "2026-11-10T20:17:28.171Z",
+  "reason": "首版基准，已审核核心九态和 QA 中文预填修复",
+  "createdAt": "2026-11-10T20:20:44.528Z",
+  "device": {
+    "model": "iPhone 17",
+    "screenWidth": 402,
+    "screenHeight": 874,
+    "pixelRatio": 3,
+    "SDKVersion": "3.17.6"
+  },
+  "masks": [
+    {
+      "x": 14,
+      "y": 35,
+      "width": 65,
+      "height": 19,
+      "reason": "Simulator status-bar clock only"
+    }
+  ],
+  "images": [
+    {
+      "name": "home",
+      "route": "pages/home/index",
+      "window": {
+        "width": 402,
+        "height": 776
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "2ee4fd2b8e3e14d6661862576d2e59244034f61d1881c8313e801d928c96bd93"
+    },
+    {
+      "name": "list-data",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "da8b7ca8f7089ffced390d693a7302c8f5dfeac87858c9820abe346b3189273d"
+    },
+    {
+      "name": "list-empty",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "f45c690dee0a8f1243d7929c72fbb902b96adc571e2e19b8c71554960b5932df"
+    },
+    {
+      "name": "detail-placeholder",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "c5eb218a0c47a74b63a0cc797fc4286135f87885d7143403b8a767e5b9d49ff1"
+    },
+    {
+      "name": "appointment-open",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "c476d5ddbcdcd437ca947a92cbe0782ffcd89acd64fca9988c75b580c82cbe93"
+    },
+    {
+      "name": "appointment-filled",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "8da9c58864c15022e8fc30763391367e6ed7209e2ac16de8db19c54828beae41"
+    },
+    {
+      "name": "appointment-closed",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "c5eb218a0c47a74b63a0cc797fc4286135f87885d7143403b8a767e5b9d49ff1"
+    },
+    {
+      "name": "detail-scrolled",
+      "route": "pages/properties/detail",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "7644a5ca89c0555899d10a96cc991235eb1bfa22531a8019cbdba48c02c24ee2"
+    },
+    {
+      "name": "list-return",
+      "route": "pages/properties/index",
+      "window": {
+        "width": 402,
+        "height": 694
+      },
+      "masks": [
+        {
+          "x": 14,
+          "y": 35,
+          "width": 65,
+          "height": 19,
+          "reason": "Simulator status-bar clock only"
+        }
+      ],
+      "sha256": "56ae16683ae713d3ae2d7f30b01e6ff8e66340075678556eea995e8567ba0c96"
+    }
+  ]
+}
