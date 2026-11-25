@@ -17,6 +17,7 @@ export interface Property {
   roomSequence?: number;
   isMaterial?: boolean;
   materialCategory?: string;
+  convertedPropertyId?: string;
   latitude?: number;
   longitude?: number;
   layout: string;
@@ -82,6 +83,8 @@ export const convertMaterial = (propertyId: string) =>
 export const getMaterialCategories = () => request<string[]>('/v1/admin/material-library/categories');
 export const saveMaterialCategories = (categories: string[]) =>
   request<string[]>('/v1/admin/material-library/categories', { method: 'PUT', data: { categories } });
+export const renameMaterialCategory = (from: string, to: string) =>
+  request<{ from: string; to: string }>('/v1/admin/material-library/categories/rename', { method: 'PATCH', data: { from, to } });
 export const deleteProperty = (propertyId: string) =>
   request(`/v1/properties/${encodeURIComponent(propertyId)}`, { method: "DELETE" });
 export const replacePropertyMedia = (propertyId: string, mediaIds: string[]) =>
@@ -269,6 +272,12 @@ export const temporaryLogin = (phone: string, accessCode: string) =>
       method: "POST",
       data: { phone, accessCode },
     },
+  );
+
+export const testAccessLogin = (phone: string, accessCode: string) =>
+  request<WechatLoginResult & { phone: string; testOnly: boolean }>(
+    "/v1/auth/test-access/login",
+    { method: "POST", data: { phone, accessCode } },
   );
 
 export const refreshAuth = () =>

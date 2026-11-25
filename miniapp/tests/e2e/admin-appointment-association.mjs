@@ -6,6 +6,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { classify } from '../../scripts/classify-smoke-network.mjs'
+import { normalizeDevtoolsCall } from './devtools-compat.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const project = path.join(root, 'dist/mp-weixin-test')
@@ -21,6 +22,7 @@ function run(name, command, args, input) {
   return r.stdout
 }
 function call(name, tool, ...args) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run(name, 'wechatide', ['-c', 'Codex', tool, '--project', project, ...args]))
   assert.ok(reply.ok && reply.result?.success !== false, name)
   return reply.result
@@ -29,10 +31,10 @@ function capture(name, selector) {
   call(name + '-dom', 'automation_element_action', '--action', 'outerWxml', '--selector', selector, '--wait-for-selector', selector)
   call(name + '-screenshot', 'simulator_screenshot', '--path', path.join(out, name + '.png'), '--optimize=false')
   const errors = call(name + '-console', 'get_simulator_console', '--command', 'grep -iE "error|exception|fail"')
-  const raw = call(name + '-network', 'get_simulator_network', '--command', 'grep -n .')
+  const raw = call(name + '-network', 'get_simulator_network', '--command', "grep -n -E 'HTTP_(REQUEST|RESPONSE).*127.0.0.1:18083/api/v1/admin/rental-requests'")
   assert.equal(errors, '', name + ' console errors')
   assert.equal(typeof raw, 'string')
-  const entries = raw.split('\n').filter(Boolean).map(line => JSON.parse(line.replace(/^\d+:/, '')))
+  const entries = raw.split('\n').filter(line => /^\d+:/.test(line)).map(line => JSON.parse(line.replace(/^\d+:/, '')))
   for (const { detail } of entries) {
     const login = detail.method === 'POST' && detail.url === 'http://127.0.0.1:18083/api/v1/auth/wechat/login'
     if (login) assert.ok(detail.status === undefined || detail.status === 200)
@@ -82,8 +84,8 @@ try {
     const probe = call('network-flush-'+attempt,'automation_evaluate','--fn-source','function(){return new Promise((resolve,reject)=>wx.request({url:"http://127.0.0.1:18083/api/health",method:"GET",success:r=>resolve(r.statusCode),fail:reject}))}')
     assert.equal(probe.result.result, 200)
     const name = 'appointments-network-after-flush-'+attempt
-    const raw = call(name, 'get_simulator_network', '--command', 'grep -n .')
-    const events = raw.split('\n').filter(Boolean).map(line => JSON.parse(line.replace(/^\d+:/, '')))
+    const raw = call(name, 'get_simulator_network', '--command', "grep -n -E 'HTTP_(REQUEST|RESPONSE).*127.0.0.1:18083/api/v1/admin/rental-requests'")
+    const events = raw.split('\n').filter(line => /^\d+:/.test(line)).map(line => JSON.parse(line.replace(/^\d+:/, '')))
     assert.ok(events.every(({detail}) => classify(detail) !== 'FAIL'), 'Unexpected network event after cache flush')
     network = events.find(isAppointmentsResponse)
     report.networkEvidence = name+'.log'
@@ -102,7 +104,8 @@ try {
     for (const field of ['userId','propertyId','propertyTitle','contactName','phone','preferredTime','status']) assert.equal(returned[field],record[field],record.id+' '+field)
     assert.equal(returned.propertyAvailable,Boolean(record.livePropertyTitle))
     const card = cards.find(text=>text.includes(record.contactName) && text.includes(record.preferredTime) && text.includes(record.propertyTitle))
-    assert.ok(card && card.includes(record.status) && card.includes('联系客户'), record.id+' card association')
+    const statusLabel = ({new:'待联系',contacted:'已联系',inspection_pending:'待看房',converted:'已转化',closed:'已关闭',completed:'已完成',invalid:'无效'})[record.status] || record.status
+    assert.ok(card && card.includes(statusLabel) && card.includes('联系客户'), record.id+' card association')
   }
   assert.equal(mysql('appointments-after',sql),before)
   report.appointments = records.map(({ id, userId, propertyId, propertyTitle, status }) => ({ id, userId, propertyId, propertyTitle, status }))

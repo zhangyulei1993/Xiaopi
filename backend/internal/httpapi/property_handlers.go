@@ -338,7 +338,23 @@ func (s *Server) deleteProperty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, media := range property.Media {
-		s.removeStoredUpload(media.URL)
+		sharedWithMaterial := false
+		for _, candidate := range items {
+			if candidate.IsMaterial && candidate.ConvertedPropertyID == propertyID {
+				for _, retained := range candidate.Media {
+					if retained.URL == media.URL {
+						sharedWithMaterial = true
+						break
+					}
+				}
+			}
+			if sharedWithMaterial {
+				break
+			}
+		}
+		if !sharedWithMaterial {
+			s.removeStoredUpload(media.URL)
+		}
 	}
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", propertyID, "删除房源", fmt.Sprintf("%s（删除前状态：%s）", property.Title, property.Status))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})

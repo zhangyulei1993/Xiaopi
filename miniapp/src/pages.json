@@ -16,7 +16,7 @@
     { "path": "pages/admin/operation-logs", "style": { "navigationBarTitleText": "操作记录" } },
     { "path": "pages/admin/image-crop", "style": { "navigationBarTitleText": "调整图片展示" } },
     { "path": "pages/auth/avatar-crop", "style": { "navigationBarTitleText": "调整头像" } },
-    { "path": "pages/auth/login", "style": { "navigationBarTitleText": "微信登录" } }
+    { "path": "pages/auth/login", "style": { "navigationBarTitleText": "登录" } }
   ],
   "tabBar": { "color": "#8a958a", "selectedColor": "#40543f", "backgroundColor": "#fffdf9", "borderStyle": "black", "position": "bottom", "list": [
     { "pagePath": "pages/home/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },

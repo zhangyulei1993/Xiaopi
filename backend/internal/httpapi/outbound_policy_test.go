@@ -58,6 +58,38 @@ func TestTestModeAllowsOnlyConfiguredTencentPlaceSearch(t *testing.T) {
 	}
 }
 
+func TestTestModeAllowsOnlyConstrainedTencentStaticMap(t *testing.T) {
+	t.Setenv("TEST_REAL_MAP_ENABLED", "true")
+	t.Setenv("TENCENT_MAP_KEY", "local-test-key")
+	calls := 0
+	mock := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("image"))}, nil
+	})
+	client := &http.Client{Transport: newOutboundPolicyTransport(mock, true, "")}
+	allowed := "https://apis.map.qq.com/ws/staticmap/v2/?key=local-test-key&center=30.460402%2C114.422247&zoom=14&size=620%2A260&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247"
+	response, err := client.Get(allowed)
+	if err != nil {
+		t.Fatalf("allowed Tencent static map: %v", err)
+	}
+	response.Body.Close()
+	for _, target := range []string{
+		"https://apis.map.qq.com/ws/staticmap/v2/?key=local-test-key&center=30.460402%2C114.422247&zoom=14&size=620%2A260&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247&redirect=https://example.invalid",
+		"https://apis.map.qq.com/ws/staticmap/v2/?key=wrong-key&center=30.460402%2C114.422247&zoom=14&size=620%2A260&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247",
+		"https://apis.map.qq.com/ws/staticmap/v2/?key=local-test-key&center=999%2C114.422247&zoom=14&size=620%2A260&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247",
+		"https://apis.map.qq.com/ws/staticmap/v2/?key=local-test-key&center=30.460402%2C114.422247&zoom=14&size=1200%2A1200&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247",
+		"https://apis.map.qq.com/ws/staticmap/v2/?key=local-test-key&center=30.460402%2C114.422247&zoom=14&size=620%2A260&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247&url=https://example.invalid",
+		"https://apis.map.qq.com.evil.invalid/ws/staticmap/v2/?key=local-test-key&center=30.460402%2C114.422247&zoom=14&size=620%2A260&scale=2&markers=size%3Alarge%7Ccolor%3A0x40543f%7Clabel%3AP%7C30.460402%2C114.422247",
+	} {
+		if _, err := client.Get(target); err == nil {
+			t.Fatalf("expected test-mode rejection for %s", target)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("underlying transport calls = %d, want only the allowlisted static map", calls)
+	}
+}
+
 func TestMockAndProductionTransport(t *testing.T) {
 	calls := 0
 	mock := roundTripFunc(func(*http.Request) (*http.Response, error) {

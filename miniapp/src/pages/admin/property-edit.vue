@@ -3,7 +3,7 @@ import { usePropertyDoorplate } from "./usePropertyDoorplate";
 import { watchPostEffect } from "vue";
 import { readPrivateCache } from "../../auth/private-cache";
 import { permissionAudit } from "../../utils/permission-audit";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { API_ORIGIN, safeUploadUrl, request, resolveAssetUrl } from "../../api/client";
 import {
@@ -19,6 +19,7 @@ import {
   type PropertyMedia,
 } from "../../api/properties";
 import { getSession, hasRole } from "../../auth/session";
+import { refreshCurrentSession, startSessionKeepAlive } from "../../auth/refresh-session";
 import { amenityIcon } from "../../utils/amenities";
 import { listingDoorplate, listingTagValue, publicListingTitle } from "../../utils/listing-title";
 import { normalizeCommunityName } from "../../utils/community-name";
@@ -1143,21 +1144,15 @@ onLoad(async (query) => {
   syncLayout();
   await loadChannels();
   await loadProperty();
-  uni.getLocation({
-    type: "gcj02",
-    success: (result) => {
-      currentLocation.value = {
-        latitude: Number(result.latitude.toFixed(7)),
-        longitude: Number(result.longitude.toFixed(7)),
-      };
-    },
-  });
 });
+let stopSessionKeepAlive: (() => void) | null = null;
 onShow(() => {
   permissionAudit("onShow", "property-editor");
   const session = getSession();
   permissionAudit("guard", "property-editor-crop", session?.role === "admin");
   if (session?.role !== "admin") return;
+  stopSessionKeepAlive?.();
+  stopSessionKeepAlive = startSessionKeepAlive("admin");
   const result = readPrivateCache<{ index?: number; path?: string; width?: number; height?: number; size?: number }>(
     session, "admin", "xiaopi-property-image-crop-result", key => uni.getStorageSync(key),
     present => permissionAudit("private-read", "property-crop-cache", present));
@@ -1176,6 +1171,10 @@ onShow(() => {
   }
   uni.removeStorageSync("xiaopi-property-image-crop-result");
   uni.removeStorageSync("xiaopi-property-image-crop-result:owner");
+});
+onHide(() => {
+  stopSessionKeepAlive?.();
+  stopSessionKeepAlive = null;
 });
 const pick = (type: "image" | "video") => {
   const count =
@@ -1399,6 +1398,7 @@ const save = async (mode: SaveMode = "draft") => {
   let saveStage = "保存房源信息";
   uploadProgress.value = saveStage;
   try {
+    await refreshCurrentSession("admin");
     const details = detailModuleEnabled("description")
       ? String(form.description || "").trim()
       : preservedDescription.value;

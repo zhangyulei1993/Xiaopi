@@ -9,7 +9,7 @@ import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
 import { callPhone } from "../../utils/phone";
 import { requestMessageSubscription } from "../../utils/subscribe";
-const tab = ref<"leads" | "properties" | "requests" | "interests">("properties"),
+const tab = ref<"requests" | "interests" | "leads">("requests"),
   leads = ref<PropertyLead[]>([]),
   properties = ref<Property[]>([]),
   requests = ref<RentalRequest[]>([]),
@@ -17,8 +17,8 @@ const tab = ref<"leads" | "properties" | "requests" | "interests">("properties")
   interests = ref<FavoriteContact[]>([]),
 	contactEvents = ref<ContactEvent[]>([]),
   loading = ref(false),
-  loadFailed = ref(false);
-const appointmentTemplateID = ref("");
+  loadFailed = ref(false),
+  subscribingAppointmentReminders = ref(false);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("adminWorkbench", "小皮工作台", "房源运营与数据处理");
 const summary = computed(() => ({
   draft: properties.value.filter((item) => item.status === "draft").length,
@@ -39,7 +39,6 @@ const load = async () => {
 	  request<FavoriteContact[]>("/v1/admin/favorite-contacts").catch(() => []),
 	  listContactEvents().catch(() => []),
     ]);
-	appointmentTemplateID.value = (await getSubscriptionTemplates().catch(() => null))?.appointment || "";
   } catch (error) {
     loadFailed.value = true;
     uni.showToast({
@@ -62,7 +61,7 @@ onShow(async () => {
     return;
   }
   const requestedTab = String(uni.getStorageSync("xiaopi_admin_tab") || "");
-  if (["properties", "leads", "requests", "interests"].includes(requestedTab)) {
+  if (["requests", "interests", "leads"].includes(requestedTab)) {
     tab.value = requestedTab as typeof tab.value;
     uni.removeStorageSync("xiaopi_admin_tab");
   }
@@ -75,11 +74,39 @@ const openPropertyList = (filter = "") => {
   uni.switchTab({ url: "/pages/properties/index" });
 };
 const openOperationLogs = () => uni.navigateTo({ url: "/pages/admin/operation-logs" });
+const subscribeAppointmentReminders = async () => {
+  if (!hasRole("admin") || subscribingAppointmentReminders.value) return;
+  subscribingAppointmentReminders.value = true;
+  try {
+    const templates = await getSubscriptionTemplates();
+    if (!templates.appointment) throw new Error("预约提醒模板未配置");
+    const accepted = await requestMessageSubscription(templates.appointment);
+    if (!accepted) return;
+    await registerMessageSubscription(templates.appointment);
+    uni.showToast({ title: "已获得一次预约提醒授权" });
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "预约提醒授权登记失败", icon: "none" });
+  } finally {
+    subscribingAppointmentReminders.value = false;
+  }
+};
 const openRequestProperty = (item: RentalRequest) => {
   if (item.requestType !== "appointment" || !item.propertyAvailable || !item.propertyId) return;
   uni.navigateTo({ url: `/pages/properties/detail?id=${encodeURIComponent(item.propertyId)}` });
 };
+const statusLabels: Record<string, string> = {
+  new: "待联系", contacted: "已联系", inspection_pending: "待看房",
+  matched: "已匹配", completed: "已完成", converted: "已转房源",
+  closed: "已关闭", invalid: "无效",
+};
+const statusLabel = (status?: string) => statusLabels[String(status || "new")] || status || "待联系";
+const canFollowUp = (status?: string) => !["contacted", "converted", "closed", "completed", "invalid"].includes(String(status || "new"));
+const canConvertLead = (status?: string) => !["converted", "closed"].includes(String(status || "new"));
 const convert = async (lead: PropertyLead) => {
+  if (!canConvertLead(lead.status)) {
+    uni.showToast({ title: lead.status === "converted" ? "这条线索已转为房源" : "已关闭的线索不能转为房源", icon: "none" });
+    return;
+  }
   try {
     const result = await request<Property>("/v1/property-leads/convert", {
       method: "POST",
@@ -104,17 +131,8 @@ const convert = async (lead: PropertyLead) => {
   }
 };
 const contactLead = (phoneNumber: string) => callPhone(phoneNumber, "客户手机号缺失");
-const enableAppointmentAlerts = async () => {
-	const accepted = await requestMessageSubscription(appointmentTemplateID.value);
-	if (!accepted) return;
-	try {
-		await registerMessageSubscription(appointmentTemplateID.value);
-		uni.showToast({ title: "已开启一次预约提醒" });
-	} catch (error) {
-		uni.showToast({ title: error instanceof Error ? `授权成功，登记失败：${error.message}` : "授权成功，但预约提醒登记失败", icon: "none" });
-	}
-};
-const followUp = async (type: "lead" | "request", id: string) => {
+const followUp = async (type: "lead" | "request", id: string, status?: string) => {
+  if (!canFollowUp(status)) return;
   try {
     await request(type === "lead" ? "/v1/property-leads/follow-up" : "/v1/admin/rental-requests/follow-up", { method:"PATCH", data:{ id, status:"contacted", followUpNote:"已在工作台联系客户" } });
     uni.showToast({ title:"已标记为已联系" }); await load();
@@ -133,7 +151,8 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       ><view
         ><view class="title">房源总览</view
         ></view
-      ><view class="head-actions"><view class="alert-switch" @click="enableAppointmentAlerts">开启预约提醒</view><view class="refresh" @click="load">刷新</view></view></view
+      ><view class="head-actions"><button class="subscribe-reminder" :disabled="subscribingAppointmentReminders" @click="subscribeAppointmentReminders">{{ subscribingAppointmentReminders ? "处理中…" : "订阅预约提醒" }}</button><view class="refresh" @click="load">刷新</view></view></view
+    ><view class="subscribe-reminder-note">每次授权对应一条预约通知；可再次授权后续提醒</view
     ><view class="summary"
       ><view
         ><strong>{{ summary.draft }}</strong
@@ -147,30 +166,20 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       ></view
     ><view class="activity-entry card" @click="openOperationLogs"><view class="activity-entry-head"><view><strong>操作记录</strong><text>分类查看并按时间回溯管理员操作</text></view><text class="activity-entry-link">查看全部 ›</text></view><view v-for="item in activities.slice(0, 3)" :key="item.id" class="activity-entry-row"><strong>{{ item.action }}</strong><text>{{ item.detail || item.targetType }}</text></view><view v-if="!activities.length" class="activity-entry-empty">暂无操作记录</view></view
     ><view class="tabs"
-      ><text
-        :class="{ active: tab === 'properties' }"
-        @click="tab = 'properties'"
-        >房源管理 {{ properties.length }}</text
-      ><text :class="{ active: tab === 'leads' }" @click="tab = 'leads'"
-        >房源线索 {{ leads.length }}</text
-      ><text :class="{ active: tab === 'requests' }" @click="tab = 'requests'"
+      ><text id="workbench-tab-requests" :class="{ active: tab === 'requests' }" @click="tab = 'requests'"
         >客户需求 {{ requests.length }}</text
-      ><text :class="{ active: tab === 'interests' }" @click="tab = 'interests'"
+      ><text id="workbench-tab-interests" :class="{ active: tab === 'interests' }" @click="tab = 'interests'"
         >用户意向 {{ interests.length + contactEvents.length }}</text
+      ><text id="workbench-tab-leads" :class="{ active: tab === 'leads' }" @click="tab = 'leads'"
+        >房源线索 {{ leads.length }}</text
       ></view
-    ><view v-if="tab === 'properties'" class="new-property" @click="edit()"
-      ><text>＋</text
-      ><view
-        ><strong>录入新房源</strong
-        ></view
-      ><text>›</text></view
     ><view v-if="loading" class="muted empty">加载中...</view
     ><view v-else-if="loadFailed" class="empty load-error"><strong>工作台数据加载失败</strong><text>当前显示的待办和统计可能不完整。</text><button @click="load">重新加载</button></view
     ><template v-else-if="tab === 'leads'"
       ><view v-for="lead in leads" :key="lead.id" class="card item"
         ><view class="row"
           ><view class="title small">{{ lead.community }}</view
-          ><text class="status">{{ lead.status }}</text></view
+          ><text class="status">{{ statusLabel(lead.status) }}</text></view
         ><view class="muted"
           >{{ lead.sourceName || "未填写姓名" }} · {{ lead.sourcePhone }}</view
         ><view class="muted"
@@ -178,10 +187,10 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
           {{ lead.expectedRentMonthly }} 元/月</view
         ><view class="note">{{ lead.note || copyText("暂无补充说明") }}</view
         ><view class="actions"
-          ><button @click="contactLead(lead.sourcePhone)">联系客户</button
-          ><button @click="followUp('lead', lead.id)">标记已联系</button
-          ><button class="primary" @click="convert(lead)">
-            转为房源草稿
+          ><button :disabled="!lead.sourcePhone" @click="contactLead(lead.sourcePhone)">{{ lead.sourcePhone ? "联系客户" : "手机号待补" }}</button
+          ><button :disabled="!canFollowUp(lead.status)" @click="followUp('lead', lead.id, lead.status)">{{ canFollowUp(lead.status) ? "标记已联系" : statusLabel(lead.status) }}</button
+          ><button class="primary" :disabled="!canConvertLead(lead.status)" @click="convert(lead)">
+            {{ lead.status === "converted" ? "已转房源" : lead.status === "closed" ? "已关闭" : "转为房源草稿" }}
           </button></view
         ></view
       ><view v-if="!leads.length" class="empty muted"
@@ -189,21 +198,19 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       ></template
     ><template v-else-if="tab === 'requests'"
       ><view v-for="item in requests" :key="item.id" class="card item"
-        ><view class="row"><view class="title small">{{ item.requestType === 'appointment' ? '预约看房' : item.requestType === 'area_subscription' ? '片区新房预约' : '找房需求' }}</view><text class="status">{{ item.status || 'new' }}</text></view
+        ><view class="row"><view class="title small">{{ item.requestType === 'appointment' ? '预约看房' : item.requestType === 'area_subscription' ? '片区新房预约' : '找房需求' }}</view><text class="status">{{ statusLabel(item.status) }}</text></view
 		><view v-if="item.requestType === 'appointment'" class="request-property" :class="{ unavailable: !item.propertyAvailable }" @click="openRequestProperty(item)"><text>预约房源</text><strong>{{ item.propertyTitle || item.location || '房源信息待确认' }}</strong><small>{{ item.propertyAvailable ? '查看房源 ›' : '房源已下架或无法查看' }}</small></view
 		><view v-if="item.requestType === 'appointment'" class="muted info">{{ item.contactName || '称谓待补充' }} · {{ item.preferredTime || '时间待确认' }}</view
         ><view class="muted info">{{ item.location || '地区待确认' }} · {{ item.layout || '户型不限' }}</view
         ><view class="property-meta"><text>¥ {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} / 月</text><text>{{ item.moveInDate || '入住时间待定' }}</text></view
         ><view v-if="item.note" class="note">{{ item.note }}</view
-        ><view class="actions"><button @click="contactLead(item.phone)">联系客户</button><button @click="followUp('request', String(item.id))">标记已联系</button><button class="primary" @click="tab = 'properties'">匹配房源</button></view
+        ><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? "联系客户" : "手机号待补" }}</button><button :disabled="!canFollowUp(item.status)" @click="followUp('request', String(item.id), item.status)">{{ canFollowUp(item.status) ? "标记已联系" : statusLabel(item.status) }}</button><button class="primary" @click="openPropertyList()">匹配房源</button></view
         ></view
       ><view v-if="!requests.length" class="empty muted">{{ copyText("暂无客户需求") }}</view
       ></template
     ><template v-else-if="tab === 'interests'"
       ><view v-for="item in contactEvents" :key="item.id" class="card item"><view class="row"><view class="title small">{{ item.propertyName || '房源' }}</view><text class="status">{{ item.type === 'phone_entry_click' ? '拨号入口点击' : '咨询入口点击' }}</text></view><view class="muted">{{ item.nickname || '微信用户' }} · {{ item.phone || '手机号待绑定' }}</view><view class="property-meta"><text>{{ item.source === 'detail' ? '详情页触发' : item.source || '页面触发' }}</text><text>{{ item.createdAt ? new Date(item.createdAt).toLocaleString() : '' }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone || '')">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view
       ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length && !contactEvents.length" class="empty muted">{{ copyText("暂无用户意向") }}记录</view></template
-    ><template v-else
-      ><view class="card property-management-entry"><strong>{{ copyText("房源列表与管理操作已统一到「房源」页") }}</strong><text>{{ copyText("可在统一列表中搜索、筛选、编辑、复制、更新状态或删除房源。") }}</text><button class="primary" @click="openPropertyList()">打开房源管理</button></view></template
     ></view
   >
 </template>
@@ -220,7 +227,8 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
 }
-.head-actions{display:flex;align-items:center;gap:10rpx}.alert-switch{padding:12rpx 18rpx;border-radius:999rpx;background:#40543f;color:#fff;font-size:22rpx}
+.head-actions{display:flex;align-items:center;gap:10rpx}
+.subscribe-reminder{height:62rpx;margin:0;padding:0 20rpx;border:1rpx solid #d9e3d4;border-radius:999rpx;background:#fff;color:#40543f;font-size:21rpx;font-weight:700;line-height:60rpx}.subscribe-reminder::after{border:0}.subscribe-reminder[disabled]{opacity:.6}.subscribe-reminder-note{margin:-12rpx 0 22rpx;color:#818b7e;font-size:19rpx;line-height:1.4;text-align:right}
 .summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -266,37 +274,6 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
   border-radius: 999rpx;
   color: #40543f;
   font-weight: 700;
-}
-.new-property {
-  display: flex;
-  align-items: center;
-  gap: 18rpx;
-  margin-bottom: 24rpx;
-  padding: 24rpx 28rpx;
-  border-radius: 24rpx;
-  background: linear-gradient(135deg, #29382d, #536a45);
-  color: #fff;
-}
-.new-property > text:first-child {
-  display: flex;
-  width: 52rpx;
-  height: 52rpx;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16rpx;
-  background: rgba(255, 255, 255, 0.12);
-}
-.new-property > view {
-  flex: 1;
-}
-.new-property strong,
-.new-property small {
-  display: block;
-}
-.new-property small {
-  margin-top: 6rpx;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 21rpx;
 }
 .small {
   font-size: 31rpx;
@@ -386,7 +363,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
   padding: 100rpx 0;
 }
 .load-error{display:flex;align-items:center;flex-direction:column;gap:12rpx;padding:60rpx 28rpx}.load-error strong{color:#40543f;font-size:29rpx}.load-error text{color:#828c82;font-size:22rpx}.load-error button{margin-top:8rpx;padding:0 28rpx;border:0;border-radius:12rpx;background:#40543f;color:#fff;font-size:22rpx;line-height:68rpx}.load-error button::after{border:0}.request-property{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10rpx;margin-top:14rpx;padding:13rpx 15rpx;border:1rpx solid #dce6d9;border-radius:12rpx;background:#f3f7ef}.request-property>text{color:#7c8979;font-size:19rpx}.request-property strong{overflow:hidden;color:#40543f;font-size:22rpx;text-overflow:ellipsis;white-space:nowrap}.request-property small{color:#637b58;font-size:18rpx}.request-property.unavailable{grid-template-columns:auto minmax(0,1fr)}.request-property.unavailable small{grid-column:2;color:#969b93}.request-property:active{opacity:.78}
-.page-presentation-head{margin-bottom:28rpx}.work-head{margin-bottom:20rpx}.work-head .title{font-size:36rpx;line-height:1.3}.summary{margin-bottom:28rpx}.tabs{margin-bottom:28rpx}.new-property{margin-bottom:28rpx}.item{margin-bottom:22rpx}.item .title{line-height:1.35}.info{line-height:1.55}.actions{margin-top:28rpx}
-.refresh{font-size:23rpx;line-height:1.2}.summary>view{padding:25rpx 16rpx}.summary strong{font-size:40rpx;line-height:1.1}.summary text{font-size:22rpx;line-height:1.3}.tabs text{padding:19rpx 12rpx;font-size:25rpx;line-height:1.25}.new-property strong{font-size:30rpx;line-height:1.3}.item{padding:30rpx}.item .muted{margin-top:9rpx;font-size:23rpx;line-height:1.55}.note{font-size:23rpx;line-height:1.55}.actions button{min-height:76rpx;font-size:24rpx;line-height:76rpx}
+.page-presentation-head{margin-bottom:28rpx}.work-head{margin-bottom:20rpx}.work-head .title{font-size:36rpx;line-height:1.3}.summary{margin-bottom:28rpx}.tabs{margin-bottom:28rpx}.item{margin-bottom:22rpx}.item .title{line-height:1.35}.info{line-height:1.55}.actions{margin-top:28rpx}
+.refresh{font-size:23rpx;line-height:1.2}.summary>view{padding:25rpx 16rpx}.summary strong{font-size:40rpx;line-height:1.1}.summary text{font-size:22rpx;line-height:1.3}.tabs text{padding:19rpx 12rpx;font-size:25rpx;line-height:1.25}.item{padding:30rpx}.item .muted{margin-top:9rpx;font-size:23rpx;line-height:1.55}.note{font-size:23rpx;line-height:1.55}.actions button{min-height:76rpx;font-size:24rpx;line-height:76rpx}
 .property-management-entry{display:flex;align-items:center;flex-direction:column;gap:14rpx;padding:42rpx 26rpx;text-align:center}.property-management-entry strong{color:#40543f;font-size:28rpx}.property-management-entry text{color:#7e887d;font-size:22rpx;line-height:1.5}.property-management-entry button{min-height:72rpx;margin-top:6rpx;padding:0 30rpx;border:0;border-radius:12rpx;background:#40543f;color:#fff;font-size:23rpx;line-height:72rpx}.property-management-entry button::after{border:0}
 </style>

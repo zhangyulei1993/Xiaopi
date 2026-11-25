@@ -128,6 +128,7 @@ try {
   cleanup('rental_requests',`id='${request}' AND note='${marker}'`)
   cleanup('operation_logs',`target_id IN ('${lead}','${request}')`)
   cleanup('property_status_history',`property_id='${live}'`)
+  cleanup('operation_logs',`target_id='${live}'`)
   sql(`INSERT INTO property_leads (id,community,note) VALUES ('${lead}','${marker}','${marker}');
        INSERT INTO rental_requests (id,user_id,request_type,phone,note) VALUES ('${request}','qa-user-a','general','13800000001','${marker}')`)
   test('PATCH','/api/v1/property-leads/follow-up','admin',200,{id:lead,status:'contacted',followUpNote:marker},()=>{

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { classify } from '../../scripts/classify-smoke-network.mjs'
+import { normalizeDevtoolsCall } from './devtools-compat.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const project = path.join(root, 'dist/mp-weixin-test')
@@ -20,6 +21,7 @@ function run(name, command, args, input) {
   return r.stdout
 }
 function call(name, tool, ...args) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run(name, 'wechatide', ['-c', 'Codex', tool, '--project', project, ...args]))
   assert.ok(reply.ok && reply.result?.success !== false, name)
   return reply.result
@@ -28,10 +30,10 @@ function capture(name, selector) {
   call(name + '-dom', 'automation_element_action', '--action', 'outerWxml', '--selector', selector, '--wait-for-selector', selector)
   call(name + '-screenshot', 'simulator_screenshot', '--path', path.join(out, name + '.png'), '--optimize=false')
   const errors = call(name + '-console', 'get_simulator_console', '--command', 'grep -iE "error|exception|fail"')
-  const raw = call(name + '-network', 'get_simulator_network', '--command', 'grep -n .')
+  const raw = call(name + '-network', 'get_simulator_network', '--command', "grep -n -E 'HTTP_(REQUEST|RESPONSE).*127.0.0.1:18083/api'")
   report.consoleErrors = errors
   assert.equal(typeof raw, 'string')
-  const entries = raw.split('\n').filter(Boolean).map(line => JSON.parse(line.replace(/^\d+:/, '')))
+  const entries = raw.split('\n').filter(line => /^\d+:/.test(line)).map(line => JSON.parse(line.replace(/^\d+:/, '')))
   for (const { detail } of entries) {
     const login = detail.method === 'POST' && detail.url === 'http://127.0.0.1:18083/api/v1/auth/wechat/login'
     const allowed = detail.method === 'POST' && ['http://127.0.0.1:18083/api/v1/footprints/qa-property-1','http://127.0.0.1:18083/api/v1/rental-requests'].includes(detail.url)
@@ -52,17 +54,18 @@ try {
   const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
   assert.equal(mysql('fixture-precheck', "SELECT COUNT(*) FROM users WHERE id IN ('qa-user-a','qa-user-b') AND open_id=CONCAT('test:',id) AND status='active';").trim(), '2')
   assert.equal(mysql('property-precheck', "SELECT COUNT(*) FROM properties WHERE id='qa-property-1' AND status='available';").trim(), '1')
+  const propertyCommunity = mysql('property-community', "SELECT community FROM properties WHERE id='qa-property-1';").trim()
   run('notification-disabled', 'docker', ['exec', api, 'sh', '-ec', 'test -z "$WECHAT_MINI_APP_ID$WECHAT_MINI_APP_SECRET"'])
   const state = call('pending-precheck', 'automation_evaluate', '--fn-source', 'function(){return !!wx.getStorageSync("xiaopi_pending_action")}')
   assert.equal(state.result.result, false)
   const element = (name, action, selector, ...args) => call(name, 'automation_element_action', '--action', action, '--selector', selector, '--wait-for-selector', selector, ...args)
   call('open-qa-login', 'simulator_open_page', '--page', 'pages/auth/login')
-  const qa = '.test-login-panel button'
-  assert.match(element('qa-label','text',qa), /普通用户 A/)
-  element('qa-tap','tap',qa)
+  element('test-phone-input','input','.test-phone-input','--value','13800000001')
+  element('test-access-code-input','input','.test-access-code-input','--value','100001')
+  element('qa-tap','tap','#test-access-code-submit')
   element('qa-ready','size','.hero-search')
   call('open-detail','simulator_open_page','--page','pages/properties/detail','--query','id=qa-property-1')
-  assert.match(element('detail','text','.overview'), /TEST Community A/)
+  assert.ok(element('detail','text','.overview').includes(propertyCommunity))
   element('open-appointment','tap','.floating-appointment')
   element('sheet-ready','size','.appointment-sheet')
   const entries = capture('sheet','.appointment-sheet')

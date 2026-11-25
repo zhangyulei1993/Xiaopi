@@ -1,14 +1,11 @@
 {
   "name": "property-detail-test-backend",
-  "page": "/pages/properties/index",
-  "readySelector": ".grid",
+  "page": "/pages/properties/detail?id=qa-property-1",
+  "readySelector": ".overview",
   "assertions": [
-    { "kind": "current-page", "equals": "pages/properties/index" },
-    { "kind": "exists", "selector": ".masonry-property" }
+    { "kind": "current-page", "equals": "pages/properties/detail" },
+    { "kind": "exists", "selector": ".overview" },
+    { "kind": "page-text", "selector": ".overview", "equals": "元/月" }
   ],
-  "steps": [
-    { "action": "tap", "selector": ".masonry-property" },
-    { "action": "assert-page", "page": "pages/properties/detail", "readySelector": ".overview" },
-    { "action": "assert-text", "selector": ".overview", "contains": "TEST Community A" }
-  ]
+  "steps": []
 }

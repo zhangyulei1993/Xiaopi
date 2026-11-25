@@ -6,7 +6,7 @@ import { hasRole } from "../../auth/session";
 
 const categories = [
   { value: "all", label: "全部" },
-  { value: "property", label: "房源与门牌" },
+  { value: "property", label: "房源、素材与门牌" },
   { value: "customer", label: "客户与需求" },
   { value: "message", label: "消息通知" },
 ];
@@ -102,15 +102,15 @@ onShow(() => {
   <view class="page">
     <view class="page-heading"><text class="eyebrow">运营留痕</text><view>操作记录</view><text class="subtitle">查看房源、客户跟进和消息通知等操作</text></view>
     <view class="filter-card">
-      <scroll-view class="category-scroll" scroll-x :show-scrollbar="false"><view class="category-row"><button v-for="item in categories" :key="item.value" class="category-chip" :class="{ active: category === item.value }" @click="selectCategory(item.value)">{{ item.label }}</button></view></scroll-view>
-      <view class="date-filter"><text class="filter-caption">时间区间</text><picker mode="date" :value="startDate" @change="chooseStartDate"><view class="date-button" :class="{ placeholder: !startDate }">{{ startDate || "开始日期" }}</view></picker><text class="date-separator">至</text><picker mode="date" :value="endDate" @change="chooseEndDate"><view class="date-button" :class="{ placeholder: !endDate }">{{ endDate || "结束日期" }}</view></picker><text v-if="startDate || endDate" class="clear-dates" @click="clearDates">清除</text></view>
+      <scroll-view class="category-scroll" scroll-x :show-scrollbar="false"><view class="category-row"><button v-for="item in categories" :id="`operation-category-${item.value}`" :key="item.value" class="category-chip" :class="{ active: category === item.value }" @click="selectCategory(item.value)">{{ item.label }}</button></view></scroll-view>
+      <view class="date-filter"><text class="filter-caption">时间区间</text><picker id="operation-start-date" mode="date" :value="startDate" @change="chooseStartDate"><view class="date-button" :class="{ placeholder: !startDate }">{{ startDate || "开始日期" }}</view></picker><text class="date-separator">至</text><picker id="operation-end-date" mode="date" :value="endDate" @change="chooseEndDate"><view class="date-button" :class="{ placeholder: !endDate }">{{ endDate || "结束日期" }}</view></picker><text v-if="startDate || endDate" class="clear-dates" @click="clearDates">清除</text></view>
     </view>
     <view class="results-heading"><view><strong>{{ currentCategoryLabel }}</strong><text>{{ total }} 条记录</text></view><text v-if="startDate || endDate">{{ startDate || "不限" }} — {{ endDate || "不限" }}</text></view>
     <view v-if="loading && !items.length" class="state-card">正在加载操作记录…</view>
     <view v-else-if="failed && !items.length" class="state-card"><text>操作记录暂时无法加载</text><button @click="load">重新加载</button></view>
     <view v-else-if="!items.length" class="state-card"><strong>暂无操作记录</strong><text>调整分类或时间范围后再查看</text></view>
     <view v-else class="log-list"><view v-for="item in items" :key="item.id" class="log-card"><view class="log-top"><text class="log-category">{{ categoryOf(item.targetType) }}</text><text class="log-time">{{ dateText(item.createdAt) }}</text></view><strong class="log-action">{{ item.action }}</strong><text v-if="item.detail" class="log-detail">{{ item.detail }}</text><text v-if="item.targetId" class="log-target">记录编号 {{ item.targetId }}</text></view></view>
-    <view v-if="pageCount > 1" class="pagination"><button :disabled="page <= 1 || loading" @click="turnPage(-1)">上一页</button><text>第 {{ page }} / {{ pageCount }} 页</text><button :disabled="page >= pageCount || loading" @click="turnPage(1)">下一页</button></view>
+    <view v-if="pageCount > 1" class="pagination"><button id="operation-page-previous" :disabled="page <= 1 || loading" @click="turnPage(-1)">上一页</button><text>第 {{ page }} / {{ pageCount }} 页</text><button id="operation-page-next" :disabled="page >= pageCount || loading" @click="turnPage(1)">下一页</button></view>
   </view>
 </template>
 

@@ -58,6 +58,7 @@ type Property struct {
 	DisplayTags          []string        `json:"displayTags"`
 	IsMaterial           bool            `json:"isMaterial"`
 	MaterialCategory     string          `json:"materialCategory"`
+	ConvertedPropertyID  string          `json:"convertedPropertyId,omitempty"`
 	Status               PropertyStatus  `json:"status"`
 	OwnerID              string          `json:"ownerId"`
 	Media                []PropertyMedia `json:"media"`

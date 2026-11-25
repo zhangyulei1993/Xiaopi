@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { enterSuiteLock, suiteChildOptions } from '../suite-lock.mjs'
 import { fileURLToPath } from 'node:url'
 import { classify } from '../../scripts/classify-smoke-network.mjs'
+import { normalizeDevtoolsCall } from '../e2e/devtools-compat.mjs'
 import { classifyIPhone17Pixel, deviceFrameMasks } from './device-frame.mjs'
 import { readPng, comparePixels, exceedsVisualThreshold, checkRect, overlaps } from './pixels.mjs'
 
@@ -24,7 +25,7 @@ const extended = process.argv.includes('--extended')
 const listingDataMode = process.env.XIAOPI_UI_LISTING_DATA || ''
 assert.ok(!listingDataMode || listingDataMode === 'imported', 'Invalid UI listing data mode')
 const expectedDevice = { model:'iPhone 17', screenWidth:402, screenHeight:874, pixelRatio:3, SDKVersion:'3.17.6' }
-const masks = [{ x:14, y:35, width:65, height:19, reason:'Simulator status-bar clock only' }]
+const masks = [{ x:13, y:33, width:62, height:18, reason:'Simulator status-bar clock only' }]
 const report = { runId, execution_id:suiteLock.executionId, project, baselineId, capture, status:'FAIL', device:null, masks, cases:[], commands:[] }
 const started = Date.now()
 fs.mkdirSync(out, { recursive:true })
@@ -43,6 +44,7 @@ function run(command, args, retry = false) {
   return result.stdout
 }
 function cli(tool, args = [], retry = false) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run('wechatide',['-c','Codex',tool,'--project',project,...args],retry))
   assert.ok(reply.ok && reply.result?.success !== false, tool)
   return reply.result
@@ -125,7 +127,7 @@ async function state(name, route, ready, nodes, options = {}) {
   } finally {
     try {
       const actual = readPng(result.actual)
-      assert.deepEqual([actual.width,actual.height],[636,1382],'Simulator screenshot dimensions changed')
+      assert.deepEqual([actual.width,actual.height],[604,1312],'Simulator screenshot dimensions changed')
       options.verifyImage?.(actual,result)
       if (!capture) {
         const hash = createHash('sha256').update(fs.readFileSync(result.expected)).digest('hex')
@@ -200,17 +202,18 @@ try {
   const preflightPath = path.join(out,'screenshot-preflight.png')
   cli('simulator_screenshot',['--path',preflightPath,'--optimize=false'],true)
   const {width,height} = readPng(preflightPath)
-  report.screenshotPreflight = {width,height,expectedWidth:636,expectedHeight:1382,file:preflightPath}
-  if (width !== 636 || height !== 1382) {
+  report.screenshotPreflight = {width,height,expectedWidth:604,expectedHeight:1312,file:preflightPath}
+  if (width !== 604 || height !== 1312) {
     report.status = 'ENVIRONMENT_BLOCKED'
-    throw new Error(`原始截图为 ${width}×${height}，需要 636×1382。请恢复隔离测试窗口全屏及自适应比例。`)
+    throw new Error(`原始截图为 ${width}×${height}，需要 604×1312。请调整隔离测试窗口及模拟器比例。`)
   }
   if (extended) {
     open('pages/auth/login')
-    await waitForPage('pages/auth/login','.test-login-panel button')
+    await waitForPage('pages/auth/login','.test-phone-input')
   } else open('pages/auth/login')
-  assert.match(el('text','.test-login-panel button'),/普通用户 A/)
-  el('tap','.test-login-panel button')
+  el('input','.test-phone-input',['--value','13800000001'])
+  el('input','.test-access-code-input',['--value','100001'])
+  el('tap','#test-access-code-submit')
   el('size','.hero-search')
   if (extended) {
     const { runExtended } = await import('./extended.mjs')

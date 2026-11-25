@@ -229,7 +229,7 @@ try {
             ['simulator_screenshot',['--path',path.join(out,label+'-failure.png'),'--optimize=false']],
             ['automation_page_action',['--action','querySelectorAll','--selector','view']],
             ['get_simulator_console',['--command','grep -iE "error|exception|fail"']],
-            ['get_simulator_network',['--command','grep -n .']],
+            ['get_simulator_network',['--command','grep -n -E "HTTP_REQUEST.*127.0.0.1:18083/api|HTTP_RESPONSE.*127.0.0.1:18083/api"']],
           ]) {
             const { stdout, ...probe } = run(label+'-failure-'+tool,'wechatide',['-c','Codex',tool,'--project',project,...args])
             diagnostics.push(probe)

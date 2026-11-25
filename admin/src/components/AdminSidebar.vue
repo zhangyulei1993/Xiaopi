@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Collection, DataAnalysis, House, Key, Location, User, UserFilled } from '@element-plus/icons-vue'
 
-defineProps<{ active: string }>()
+defineProps<{ active: string; apiLabel: string }>()
 const emit = defineEmits<{ select: [value: string] }>()
 
 const groups = [
@@ -56,7 +56,7 @@ const groups = [
     </el-menu>
     <div class="sidebar-foot">
       <span>API 服务</span>
-      <strong><i />150.158.157.213</strong>
+      <strong><i />{{ apiLabel }}</strong>
     </div>
   </aside>
 </template>

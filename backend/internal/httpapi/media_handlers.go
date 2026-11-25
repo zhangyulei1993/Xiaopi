@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -197,6 +198,10 @@ func (s *Server) convertPropertyLead(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	p := domain.Property{ID: propertyID, Title: input.Title, Community: input.Community, Location: input.Location, Layout: input.Layout, RentMonthly: input.RentMonthly, FeeText: input.FeeText, Description: input.Description, Status: domain.PropertyDraft, OwnerID: input.OwnerID, CreatedAt: now, UpdatedAt: now}
 	if err := s.store.ConvertLeadToProperty(r.Context(), input.LeadID, p); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusConflict, "线索已处理或不存在，不能重复转为房源")
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 		return
 	}

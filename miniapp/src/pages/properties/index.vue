@@ -24,6 +24,9 @@ const properties = ref<Property[]>([]),
   favoriteIDs = ref<string[]>([]),
   keyword = ref(""),
   selectedArea = ref("全部"),
+  selectedCommunity = ref(""),
+  communityPickerOpen = ref(false),
+  communityPickerQuery = ref(""),
   selectedKind = ref(""),
   selectedStatus = ref("all"),
   currentRole = ref("");
@@ -44,6 +47,7 @@ const selectedPrice = ref(0),
   loading = ref(false),
   loadFailed = ref(false),
   workingID = ref("");
+const expandedActionsID = ref("");
 const listingTitleFields = ref<string[]>(["community", "floor", "layout", "rentType", "area"]);
 const adminDoorplateEnabled = ref(true);
 const configuredStatusLabels = ref<Record<string, string>>({});
@@ -71,6 +75,34 @@ const pinnedAreaChannels = (config: Awaited<ReturnType<typeof getPublicConfig>> 
   return (matches.length ? matches : channels.slice(0, 3)).slice(0, 4);
 };
 const isAdmin = computed(() => currentRole.value === "admin");
+const communityOptions = computed(() => {
+  const byKey = new Map<string, { name: string; count: number }>();
+  properties.value.forEach((item) => {
+    const name = String(item.community || "").trim();
+    const key = normalizeCommunityName(name);
+    if (!name || !key) return;
+    const entry = byKey.get(key);
+    if (entry) entry.count += 1;
+    else byKey.set(key, { name, count: 1 });
+  });
+  return [...byKey.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN"));
+});
+const visibleCommunityOptions = computed(() => {
+  const query = normalizeCommunityName(communityPickerQuery.value);
+  return query ? communityOptions.value.filter((option) => normalizeCommunityName(option.name).includes(query)) : communityOptions.value;
+});
+const openCommunityPicker = () => {
+  communityPickerQuery.value = "";
+  communityPickerOpen.value = true;
+};
+const selectCommunity = (community: string) => {
+  selectedCommunity.value = community;
+  communityPickerOpen.value = false;
+};
+const clearCommunityFilter = () => {
+  selectedCommunity.value = "";
+  communityPickerQuery.value = "";
+};
 const adminStatusOptions = [
   { value: "all", label: "全部" },
   { value: "draft", label: "草稿" },
@@ -107,7 +139,7 @@ const subscriptionAreaName = computed(() => selectedArea.value !== "全部" ? se
 const extraFilterCount = computed(() => Number(selectedPrice.value !== 0) + Number(Boolean(selectedKind.value)));
 const hasNonFavoriteFilters = computed(() => Boolean(
   keyword.value.trim() || selectedArea.value !== "全部" || selectedPrice.value !== 0 ||
-  selectedKind.value || channelFilter.value || (isAdmin.value && selectedStatus.value !== "all"),
+  selectedKind.value || channelFilter.value || (isAdmin.value && (selectedStatus.value !== "all" || selectedCommunity.value)),
 ));
 const resetFilters = () => {
   keyword.value = "";
@@ -115,6 +147,7 @@ const resetFilters = () => {
   selectedPrice.value = 0;
   selectedKind.value = "";
   selectedStatus.value = "all";
+  selectedCommunity.value = "";
   channelFilter.value = null;
   showFavoritesOnly.value = false;
 };
@@ -161,6 +194,7 @@ const filteredProperties = computed(() => {
           : !channelFilter.value.keyword || item.location?.includes(channelFilter.value.keyword));
     return (
       (!isAdmin.value || adminStatusMatched(item)) &&
+      (!isAdmin.value || !selectedCommunity.value || normalizeCommunityName(item.community || "") === normalizeCommunityName(selectedCommunity.value)) &&
       channelMatched &&
       kindMatched(item) &&
       (!showFavoritesOnly.value || favoriteIDs.value.includes(item.id)) &&
@@ -334,8 +368,12 @@ const adminDoorplate = (item: Property) =>
   isAdmin.value && adminDoorplateEnabled.value ? listingDoorplate(item) : "";
 const listingTitle = (item: Property) => {
   return isAdmin.value
-    ? String(item.community || item.title || "房源").trim()
+    ? String(item.title || item.community || "房源").trim()
     : publicListingTitle(item, listingTitleFields.value);
+};
+const listingCommunity = (item: Property) => {
+  const community = String(item.community || "").trim();
+  return community && normalizeCommunityName(community) !== normalizeCommunityName(listingTitle(item)) ? community : "";
 };
 const cardLocation = (value: unknown) => {
   const raw = String(value || "").trim();
@@ -381,6 +419,25 @@ const toggleFavorite = async (id: string) => {
   }
 };
 const editProperty = (id: string) => uni.navigateTo({ url: `/pages/admin/property-edit?id=${id}` });
+const toggleCardActions = (id: string) => {
+  expandedActionsID.value = expandedActionsID.value === id ? "" : id;
+};
+const primaryStatusAction = (item: Property) => {
+  if (["draft", "pending_review"].includes(item.status)) return null;
+  if (item.status === "available") return { status: "rented", label: "改为已租", className: "action-rented" };
+  return { status: "available", label: "改为可租", className: "action-primary" };
+};
+const secondaryStatusActions = (item: Property) => {
+  if (item.status === "published") return [{ status: "rented", label: "改为已租" }, { status: "offline", label: "下架" }];
+  if (item.status === "available") return [{ status: "offline", label: "下架" }];
+  if (item.status === "offline") return [{ status: "rented", label: "改为已租" }];
+  if (!["draft", "pending_review", "rented"].includes(item.status)) return [{ status: "rented", label: "改为已租" }];
+  return [];
+};
+const runPrimaryStatusAction = (item: Property) => {
+  const action = primaryStatusAction(item);
+  if (action) void changeStatus(item, action.status);
+};
 const copyProperty = async (property: Property) => {
   if (workingID.value) return;
   workingID.value = property.id;
@@ -493,6 +550,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
       :class="{ active: showFavoritesOnly }"
       @click="showFavoritesOnly = !showFavoritesOnly"
       ><image :src="heartIcon" mode="aspectFit" />{{ showFavoritesOnly ? "只看已关注" : "只看关注" }}</view
+    ><view v-if="isAdmin" class="admin-community-filter"><view class="admin-community-filter-trigger" @click="openCommunityPicker"><image :src="searchIcon" mode="aspectFit" /><text :class="{ placeholder: !selectedCommunity }">{{ selectedCommunity || "按小区筛选" }}</text><text class="admin-community-filter-arrow">⌄</text></view><text v-if="selectedCommunity" class="admin-community-filter-clear" @click="clearCommunityFilter">清除</text></view
     ><view class="filter-block"
       v-if="isAdmin"
       :class="{ 'admin-filter-row': isAdmin }"
@@ -534,7 +592,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
       ><view>房源加载失败</view
       ><button size="mini" @click="load">重新加载</button></view
     ><view v-else-if="filteredProperties.length" class="grid" :class="{ 'customer-masonry-grid': !isAdmin }"
-      ><template v-if="!isAdmin"><view v-for="(column, columnIndex) in customerMasonryColumns" :key="`column-${columnIndex}`" class="masonry-column"><view v-for="item in column" :key="item.id" class="masonry-property" @click="open(item.id)"><view class="masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover" /><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill" /><view v-else class="property-placeholder"><image :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text></view><view class="badge" :class="`status-${item.status}`">可租</view><view v-if="masonryMedia(item)?.type === 'video'" class="masonry-video-play">▶</view><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view><view class="favorite" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="masonry-copy" :class="{ 'without-tags': !cardTags(item).length }"><view class="property-listing-title">{{ listingTitle(item) }}</view><view v-if="cardTags(item).length" class="masonry-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view><view class="price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></template><view
+      ><template v-if="!isAdmin"><view v-for="(column, columnIndex) in customerMasonryColumns" :key="`column-${columnIndex}`" class="masonry-column"><view v-for="item in column" :key="item.id" class="masonry-property" @click="open(item.id)"><view class="masonry-cover"><video v-if="masonryMedia(item)?.type === 'video'" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :poster="coverUrl(item)" :style="{ objectPosition: coverObjectPosition(item) }" muted :controls="false" :show-center-play-btn="false" object-fit="cover" /><image v-else-if="masonryMedia(item)?.url" :src="resolveAssetUrl(masonryMedia(item)?.url || '')" :style="{ objectPosition: coverObjectPosition(item) }" mode="aspectFill" /><view v-else class="property-placeholder"><image :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text></view><view class="badge" :class="`status-${item.status}`">可租</view><view v-if="masonryMedia(item)?.type === 'video'" class="masonry-video-play">▶</view><view v-if="channelLabel(item)" class="cover-location">⌖ {{ channelLabel(item) }}</view><view class="favorite" :class="{ active: favoriteIDs.includes(item.id) }" @click.stop="toggleFavorite(item.id)"><image :src="heartIcon" mode="aspectFit" /></view></view><view class="masonry-copy" :class="{ 'without-tags': !cardTags(item).length }"><view class="property-listing-title">{{ listingTitle(item) }}</view><view v-if="cardTags(item).length" class="masonry-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view><view class="price">¥ {{ item.rentMonthly }}<text class="price-unit">/月</text></view></view></view></view></template><view
         v-else
         v-for="item in filteredProperties"
         :key="item.id"
@@ -560,6 +618,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
             ></view
           ><view class="property-copy"
           ><view class="property-listing-title">{{ listingTitle(item) }}</view
+          ><view v-if="isAdmin && listingCommunity(item)" class="admin-community-subtitle">{{ listingCommunity(item) }}</view
           ><view v-if="adminDoorplate(item)" class="admin-doorplate">门牌 · {{ adminDoorplate(item) }}</view
           ><view class="service-tag-stack" :class="`tag-layout-${listTagLayout}`"><template v-if="listTagLayout === 'grouped'"><view class="service-tags primary-tags"><text v-for="label in primaryLabels(item)" :key="label">{{ label }}</text></view><view v-if="secondaryLabels(item).length" class="service-tags fee-tags"><text v-for="label in secondaryLabels(item)" :key="label">{{ label }}</text></view></template><view v-else class="service-tags all-tags"><text v-for="label in cardTags(item)" :key="label">{{ label }}</text></view></view
           ><view class="price"
@@ -567,7 +626,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
           ></view
         ></view
         ><view v-if="isAdmin" class="admin-card-actions" @click.stop
-          ><view class="admin-inline-actions"><template v-if="['draft', 'pending_review'].includes(item.status)"><button class="action-primary" @click.stop="editProperty(item.id)">编辑并发布</button></template><template v-else-if="item.status === 'published'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">改为可租</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">改为已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'available'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">改为已租</button><button class="action-offline" :loading="workingID === item.id" @click.stop="changeStatus(item, 'offline')">下架</button></template><template v-else-if="item.status === 'rented'"><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">改为可租</button></template><template v-else><button class="action-edit" @click.stop="editProperty(item.id)">编辑</button><button class="action-primary" :loading="workingID === item.id" @click.stop="changeStatus(item, 'available')">改为可租</button><button class="action-rented" :loading="workingID === item.id" @click.stop="changeStatus(item, 'rented')">改为已租</button></template><button class="action-copy" :loading="workingID === item.id" @click.stop="copyProperty(item)">复制</button><button class="action-delete-inline" @click.stop="removeProperty(item)">删除</button></view></view
+          ><view class="admin-primary-actions"><button :class="['action-edit', { 'action-primary': ['draft', 'pending_review'].includes(item.status) }]" @click.stop="editProperty(item.id)">{{ ['draft', 'pending_review'].includes(item.status) ? '编辑并发布' : '编辑' }}</button><button v-if="primaryStatusAction(item)" :class="primaryStatusAction(item)?.className" :loading="workingID === item.id" @click.stop="runPrimaryStatusAction(item)">{{ primaryStatusAction(item)?.label }}</button><button class="action-more" :class="{ expanded: expandedActionsID === item.id }" @click.stop="toggleCardActions(item.id)">{{ expandedActionsID === item.id ? '收起' : '更多操作' }}<text>{{ expandedActionsID === item.id ? '⌃' : '⌄' }}</text></button></view><view v-if="expandedActionsID === item.id" class="admin-extra-actions"><button v-for="action in secondaryStatusActions(item)" :key="action.status" class="action-extra-status" :loading="workingID === item.id" @click.stop="changeStatus(item, action.status)">{{ action.label }}</button><button class="action-copy" :loading="workingID === item.id" @click.stop="copyProperty(item)">复制房源</button><button class="action-delete-inline" @click.stop="removeProperty(item)">删除房源</button></view></view
         ></view
       ></view
     ><view v-if="!loading && !loadFailed && !filteredProperties.length" class="empty-match card" :class="{ 'favorites-empty': showFavoritesOnly }"
@@ -584,6 +643,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
         ><strong>{{ subscriptionAreaName ? `关注${subscriptionAreaName}新房源` : "还没找到合适的？" }}</strong
         ><text>{{ subscriptionAreaName ? "有新房源时及时通知你" : "告诉小皮你的预算和入住要求" }}</text></view
       ><text><image :src="filterIcon" mode="aspectFit" />{{ subscriptionAreaName ? "立即关注 ›" : "发布需求 ›" }}</text></view
+    ><view v-if="communityPickerOpen" class="community-picker-mask" @click="communityPickerOpen = false"><view class="community-picker-sheet" @click.stop><view class="community-picker-header"><strong>选择小区</strong><text @click="communityPickerOpen = false">×</text></view><view class="community-picker-search"><image :src="searchIcon" mode="aspectFit" /><input v-model="communityPickerQuery" placeholder="搜索小区名称" confirm-type="search" /></view><scroll-view scroll-y class="community-picker-options"><view class="community-picker-option" :class="{ active: !selectedCommunity }" @click="selectCommunity('')"><text>全部小区</text><small>{{ properties.length }} 套</small></view><view v-for="option in visibleCommunityOptions" :key="normalizeCommunityName(option.name)" class="community-picker-option" :class="{ active: normalizeCommunityName(selectedCommunity) === normalizeCommunityName(option.name) }" @click="selectCommunity(option.name)"><text>{{ option.name }}</text><small>{{ option.count }} 套</small></view><view v-if="!visibleCommunityOptions.length" class="community-picker-empty">没有找到匹配的小区</view></scroll-view></view></view
     ></view
   >
 </template>
@@ -840,6 +900,8 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
 .property-copy { display:flex; min-width:0; flex:1; flex-direction:column; padding:6rpx 4rpx 3rpx 0; }
 .property-listing-title { display:block; overflow:hidden; max-width:100%; margin:0; color:#2d3d30; font-size:29rpx; font-weight:800; line-height:1.28; letter-spacing:-.4rpx; text-overflow:ellipsis; white-space:nowrap; }
 .admin-doorplate{display:block;overflow:hidden;margin-top:7rpx;color:#526553;font-size:21rpx;font-weight:700;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.admin-community-subtitle{display:block;overflow:hidden;margin-top:4rpx;color:#778176;font-size:19rpx;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
+.admin-community-filter{display:flex;align-items:center;gap:12rpx;margin:0 0 10rpx}.admin-community-filter-trigger{display:flex;min-width:0;min-height:62rpx;flex:1;align-items:center;gap:10rpx;padding:0 15rpx;border:1rpx solid #e4e8de;border-radius:13rpx;background:#fffdf9;color:#40543f}.admin-community-filter-trigger image,.community-picker-search image{width:26rpx;height:26rpx;flex:none;opacity:.72}.admin-community-filter-trigger>text:nth-child(2){min-width:0;flex:1;overflow:hidden;font-size:21rpx;text-overflow:ellipsis;white-space:nowrap}.admin-community-filter-trigger .placeholder{color:#8b9388}.admin-community-filter-arrow{color:#84907f;font-size:26rpx;line-height:1}.admin-community-filter-clear{flex:none;padding:12rpx 4rpx;color:#748070;font-size:20rpx}.community-picker-mask{position:fixed;z-index:30;inset:0;display:flex;align-items:flex-end;background:rgba(20,27,20,.38)}.community-picker-sheet{box-sizing:border-box;width:100%;max-height:76vh;padding:22rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));border-radius:24rpx 24rpx 0 0;background:#fbfaf6}.community-picker-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18rpx;color:#29382d}.community-picker-header strong{font-size:27rpx}.community-picker-header text{display:grid;width:54rpx;height:54rpx;place-items:center;border-radius:50%;background:#edf0e8;color:#62705f;font-size:38rpx;line-height:1}.community-picker-search{display:flex;height:68rpx;align-items:center;gap:11rpx;padding:0 16rpx;border:1rpx solid #e4e8de;border-radius:13rpx;background:#fff}.community-picker-search input{min-width:0;flex:1;color:#29382d;font-size:22rpx}.community-picker-options{max-height:56vh;margin-top:14rpx}.community-picker-option{display:flex;min-height:68rpx;align-items:center;justify-content:space-between;gap:14rpx;padding:0 15rpx;border-bottom:1rpx solid #eceee8;color:#405043}.community-picker-option.active{border-radius:11rpx;background:#edf2e8;color:#40543f;font-weight:700}.community-picker-option>text{min-width:0;overflow:hidden;font-size:22rpx;text-overflow:ellipsis;white-space:nowrap}.community-picker-option small{flex:none;color:#879085;font-size:18rpx}.community-picker-empty{padding:40rpx 12rpx;color:#899187;font-size:21rpx;text-align:center}
 .property-listing-address { overflow:hidden; max-height:31rpx; margin:8rpx 0 0; color:#778176; font-size:22rpx; font-weight:400; line-height:1.4; text-overflow:ellipsis; white-space:nowrap; }
 .service-tags { display:flex; height:32rpx; gap:10rpx; overflow:hidden; margin-top:10rpx; white-space:nowrap; }
 .service-tags text { flex:none; padding:5rpx 8rpx; border-radius:7rpx; background:#edf0dc; color:#536a45; font-size:18rpx; line-height:1.2; }.service-tags text:nth-child(2) { background:#f8eadf; color:#b7644b; }
@@ -888,7 +950,7 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
 .admin-property .property-main{height:auto;min-height:244rpx;align-items:flex-start}
 .admin-property .property-copy{height:auto;min-height:244rpx}
 .admin-property .admin-doorplate{margin-top:8rpx;padding:5rpx 9rpx;border:1rpx solid #d8e2d2;border-radius:8rpx;background:#f3f7ee;color:#40543f;font-size:19rpx;font-weight:700;line-height:1.2}
-.admin-property .service-tag-stack{gap:5rpx;margin-top:8rpx}
+.admin-property .service-tag-stack{flex:1;justify-content:space-evenly;gap:5rpx;margin-top:8rpx;padding:6rpx 0;box-sizing:border-box}
 .admin-property .service-tags{max-width:100%;overflow:hidden}
 .tag-layout-wrap .all-tags{display:flex;height:auto;max-height:58rpx;flex-wrap:wrap;gap:5rpx 7rpx;overflow:hidden}.tag-layout-wrap .all-tags text{padding:4rpx 8rpx;font-size:19rpx}.tag-layout-wrap .all-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}
 /* Customer browsing uses two independently flowing columns; management keeps its action-oriented row cards. */
@@ -928,4 +990,19 @@ function copyText(fallback: string) { return pagePresentation.value?.copy?.[fall
 .admin-filter-row .filter-label{flex:0 0 76rpx;margin:0 0 12rpx;font-size:20rpx;line-height:1.2;white-space:nowrap;}
 .admin-filter-row .chips{flex:1;height:64rpx;}
 .admin-filter-row .chips text{padding:12rpx 13rpx;margin-right:7rpx;font-size:20rpx;line-height:1.2;}
+.admin-card-actions{min-height:0;margin-top:12rpx;padding:12rpx 0 0;border-top:1rpx solid #eceee8}
+.admin-primary-actions{display:flex;align-items:stretch;gap:8rpx}
+.admin-primary-actions button,.admin-extra-actions button{box-sizing:border-box;display:flex;min-width:0;min-height:66rpx;flex:1;align-items:center;justify-content:center;margin:0;padding:5rpx 8rpx;border-radius:11rpx;font-size:22rpx;font-weight:700;line-height:1.2;white-space:nowrap}
+.admin-primary-actions button::after,.admin-extra-actions button::after{border:0}
+.admin-primary-actions .action-more{gap:5rpx;border:1rpx solid #dfe5da;background:#f7f8f4;color:#65715f}
+.admin-primary-actions .action-more text{font-size:25rpx;line-height:1}
+.admin-primary-actions .action-more.expanded{border-color:#cdd9c5;background:#eef3e9;color:#40543f}
+.admin-extra-actions{display:flex;flex-wrap:wrap;gap:8rpx;margin-top:9rpx;padding-top:9rpx;border-top:1rpx dashed #e7eae3}
+.admin-extra-actions button{min-height:56rpx;flex:0 1 auto;padding:0 15rpx;border:1rpx solid #dfe5da;background:#f7f8f4;color:#5c6857;font-size:20rpx}
+.admin-extra-actions .action-extra-status{border-color:#e1e5dc;background:#fff;color:#5d6b58}
+.admin-extra-actions .action-copy{border-color:#dce4d8;background:#f4f7f1;color:#63735e}
+.admin-extra-actions .action-delete-inline{border-color:#efdcd4;background:#fff8f5;color:#b76c57}
+.admin-property{padding:8rpx 10rpx}
+.admin-property .property-main .cover{width:360rpx;height:244rpx;align-self:stretch}
+.admin-property .property-main{gap:22rpx}
 </style>

@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { normalizeDevtoolsCall } from './devtools-compat.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const project = path.join(root, 'dist/mp-weixin-test')
@@ -27,6 +28,7 @@ function run(command, args) {
   return result.stdout
 }
 function cli(tool, ...args) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run('wechatide', ['-c', 'Codex', tool, '--project', project, ...args]))
   assert.ok(reply.ok && reply.result?.success !== false, reply.message || tool)
   return reply.result
@@ -365,6 +367,11 @@ try {
       for (const { route, expected } of matrix.pages) {
         const item = { route, role, expected: expected[role] }
         if (routeAudit && !auditRoutes[route]?.roles.includes(role)) continue
+        // Some page flows intentionally clear or replace sessions (notably auth
+        // routes). Re-seed the role token before every route so one page cannot
+        // leak its auth state into the next permission assertion.
+        fs.writeFileSync(argsFile, JSON.stringify([role, sessions[role]?.accessToken || '']), { mode: 0o600 })
+        cli('automation_evaluate', '--fn-source', 'function(role,token){if(token){wx.setStorageSync("xiaopi_access_token",token);wx.setStorageSync("xiaopi_session_role",role)}else{wx.removeStorageSync("xiaopi_access_token");wx.removeStorageSync("xiaopi_session_role")}return true}', '--args-file', argsFile)
         const selector = ui[route]?.[role]
         if (!selector) {
           report.ui.push({ ...item, status: 'NOT_RUN', reason: route.endsWith('image-crop') ? '缺少一次性房源图片和管理员编辑器传入的裁剪上下文' : route.endsWith('avatar-crop') ? '缺少一次性头像图片和头像选择器传入的裁剪上下文' : '缺少普通用户访问详情时自动写入足迹的一次性房源及清理条件' })
@@ -380,7 +387,7 @@ try {
           if (redirect || listing) {
             if (redirect) {
               cli('simulator_open_page', '--page', 'pages/home/index')
-              if (routeAudit) cli('automation_element_action', '--action', 'size', '--selector', '.home-page', '--wait-for-selector', '.home-page')
+              cli('automation_element_action', '--action', 'size', '--selector', '.home-page', '--wait-for-selector', '.home-page')
             }
             const readNetwork = () => cli('get_simulator_network','--command','grep -n -E "HTTP_REQUEST|HTTP_RESPONSE"')
             const baselineNetwork = routeAudit ? readNetwork() : ''
@@ -525,23 +532,25 @@ try {
           assert.match(JSON.stringify(hero), /完善房源信息/)
           const loaded = cli('automation_evaluate', '--fn-source', 'function(){const p=getCurrentPages().at(-1);return p?.options?.id ?? p?.$page?.options?.id}').result.result
           assert.equal(loaded, id, 'Unexpected editor target')
-          const address = 'input[placeholder="选择小区后自动回填，可补充门牌信息"]'
-          assert.match(JSON.stringify(el('value', address)), /QA Address/, 'QA draft address did not load')
-          el('input', address, '--value', 'QA Address updated')
-          assert.match(JSON.stringify(el('value', address)), /QA Address updated/)
-          assert.deepEqual(mysql(`SELECT location FROM properties WHERE ${where}`), ['QA Address'])
+          const community = el('outerWxml', '.community-select-entry')
+          assert.match(JSON.stringify(community), /QA permission save/, 'QA draft community did not load')
+          const title = 'input[placeholder="默认使用小区名称，可自定义"]'
+          assert.match(JSON.stringify(el('value', title)), /QA permission save/, 'QA draft title did not load')
+          el('input', title, '--value', 'QA permission save updated')
+          assert.match(JSON.stringify(el('value', title)), /QA permission save updated/)
+          assert.deepEqual(mysql(`SELECT title FROM properties WHERE ${where}`), ['QA permission save'])
           el('tap', '.step-save-button')
           const deadline = Date.now() + 10000
           let observed
           do {
-            observed = mysql(`SELECT location FROM properties WHERE ${where}`)
-            if (observed[0] === 'QA Address updated') break
+            observed = mysql(`SELECT title FROM properties WHERE ${where}`)
+            if (observed[0] === 'QA permission save updated') break
             await new Promise(resolve => setTimeout(resolve, 250))
           } while (Date.now() < deadline)
-          assert.deepEqual(observed, ['QA Address updated'])
+          assert.deepEqual(observed, ['QA permission save updated'])
           const screenshot = path.join(out, 'admin-save-draft.png')
           cli('simulator_screenshot', '--path', screenshot, '--optimize=false')
-          return { database: { before: 'QA Address', after: 'QA Address updated', status: 'draft' }, fixture: id, screenshot }
+          return { database: { before: 'QA permission save', after: 'QA permission save updated', status: 'draft' }, fixture: id, screenshot }
         } catch (error) {
           try { cli('simulator_screenshot', '--path', path.join(out, 'admin-save-draft-failure.png'), '--optimize=false') } catch {}
           throw error

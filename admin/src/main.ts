@@ -3,7 +3,11 @@ import 'element-plus/es/components/loading/style/css'
 import { ElDescriptions, ElDescriptionsItem } from 'element-plus/es/components/descriptions/index.mjs'
 import 'element-plus/es/components/descriptions/style/css'
 import { ElDialog } from 'element-plus/es/components/dialog/index.mjs'
+import { ElDatePicker } from 'element-plus/es/components/date-picker/index.mjs'
+import { ElTooltip } from 'element-plus/es/components/tooltip/index.mjs'
 import 'element-plus/es/components/dialog/style/css'
+import 'element-plus/es/components/date-picker/style/css'
+import 'element-plus/es/components/tooltip/style/css'
 import { ElAlert } from 'element-plus/es/components/alert/index.mjs'
 import { ElAvatar } from 'element-plus/es/components/avatar/index.mjs'
 import { ElButton } from 'element-plus/es/components/button/index.mjs'
@@ -46,7 +50,7 @@ import './style.css'
 // before installation leaves hash-history navigation pending and renders a
 // blank page on a fresh visit.
 const app = createApp(App)
-for (const component of [ElDialog, ElDescriptions, ElDescriptionsItem, ElAlert, ElAvatar, ElButton, ElEmpty, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMenu, ElMenuItem, ElMenuItemGroup, ElOption, ElPopconfirm, ElRadio, ElRadioButton, ElRadioGroup, ElSelect, ElSwitch, ElTable, ElTableColumn, ElTag]) {
+for (const component of [ElDialog, ElDatePicker, ElTooltip, ElDescriptions, ElDescriptionsItem, ElAlert, ElAvatar, ElButton, ElEmpty, ElForm, ElFormItem, ElIcon, ElInput, ElInputNumber, ElMenu, ElMenuItem, ElMenuItemGroup, ElOption, ElPopconfirm, ElRadio, ElRadioButton, ElRadioGroup, ElSelect, ElSwitch, ElTable, ElTableColumn, ElTag]) {
   app.component(component.name!, component)
 }
 app.use(ElLoading).use(router).mount('#app')

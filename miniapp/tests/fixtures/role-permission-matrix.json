@@ -95,6 +95,17 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/auth/test-access/login",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "NOT_RUN",
+      "handler": "s.testAccessLogin"
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/auth/wechat/phone",
       "expected": {
         "guest": 401,
@@ -413,6 +424,17 @@
       "handler": "s.requireRoles(s.doorplates, roleAdmin)"
     },
     {
+      "method": "DELETE",
+      "path": "/api/v1/admin/doorplates",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.doorplates, roleAdmin)"
+    },
+    {
       "method": "GET",
       "path": "/api/v1/admin/building-rules",
       "expected": {
@@ -444,6 +466,83 @@
       },
       "probe": "DENIAL_ONLY",
       "handler": "s.requireRoles(s.staticLocationMap, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/material-library",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.listMaterialLibrary, roleAdmin)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/material-library",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.createMaterial, roleAdmin)"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/admin/material-library/{propertyID}",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.deleteMaterial, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/material-library/{propertyID}/convert",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.convertMaterial, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/material-library/categories",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.materialCategories, roleAdmin)"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/admin/material-library/categories",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.materialCategories, roleAdmin)"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/material-library/categories/rename",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "DENIAL_ONLY",
+      "handler": "s.requireRoles(s.renameMaterialCategory, roleAdmin)"
     },
     {
       "method": "GET",
@@ -611,6 +710,17 @@
       "handler": "s.requireRoles(s.listOperationLogs, roleAdmin)"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/admin/operation-logs/query",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.requireRoles(s.queryOperationLogs, roleAdmin)"
+    },
+    {
       "method": "POST",
       "path": "/api/v1/rental-requests",
       "expected": {
@@ -731,6 +841,14 @@
       }
     },
     {
+      "route": "pages/channels/index",
+      "expected": {
+        "guest": "公开页面",
+        "user": "公开页面",
+        "admin": "公开页面"
+      }
+    },
+    {
       "route": "pages/map/index",
       "expected": {
         "guest": "公开页面",
@@ -804,6 +922,22 @@
     },
     {
       "route": "pages/admin/property-edit",
+      "expected": {
+        "guest": "返回我的",
+        "user": "返回我的",
+        "admin": "运营页面"
+      }
+    },
+    {
+      "route": "pages/admin/material-library",
+      "expected": {
+        "guest": "返回我的",
+        "user": "返回我的",
+        "admin": "运营页面"
+      }
+    },
+    {
+      "route": "pages/admin/operation-logs",
       "expected": {
         "guest": "返回我的",
         "user": "返回我的",

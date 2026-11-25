@@ -24,19 +24,28 @@ test('same-name guard remains blocked without proven binding', () => {
 test('real project request and uploads resolve their expected declarations', async () => {
   const { auditTree } = await import('../../scripts/audit-network-source.mjs')
   const calls = auditTree('src')
-  assert.equal(calls.length, 4)
+  assert.equal(calls.length, 6)
   const request = calls.find(c => c.callee === 'uni.request')
   assert.equal(request.directGuard, true)
   assert.equal(request.importAlias, true)
-  assert.match(request.resolvedDeclarations[0].file, /src\/api\/request-url\.mjs$/)
-  for (const upload of calls.filter(c => c.callee === 'uni.uploadFile')) {
+  assert.equal(request.originVerified, true)
+  assert.match(request.resolvedDeclarations[0].file, /src\/api\/request-url\.(?:d\.mts|mjs)$/)
+  const uploads = calls.filter(c => c.callee === 'uni.uploadFile')
+  assert.equal(uploads.length, 4)
+  for (const upload of uploads) {
     assert.equal(upload.directGuard, true)
     assert.equal(upload.importAlias, true)
+    assert.equal(upload.originVerified, true)
     assert.match(upload.resolvedDeclarations[0].file, /src\/api\/client\.ts$/)
     assert.equal(upload.wrapperBinding.directReturn, true)
     assert.equal(upload.wrapperBinding.importAlias, true)
-    assert.match(upload.wrapperBinding.declarations[0].file, /src\/api\/upload-url\.mjs$/)
+    assert.match(upload.wrapperBinding.declarations[0].file, /src\/api\/upload-url\.(?:d\.mts|mjs)$/)
   }
+  const [download] = calls.filter(c => c.callee === 'uni.downloadFile')
+  assert.ok(download)
+  assert.equal(download.directGuard, true)
+  assert.equal(download.originVerified, true)
+  assert.match(download.wrapperBinding.declarations[0].file, /src\/api\/download-url\.(?:d\.mts|mjs)$/)
 })
 
 test('guard reassignment is detected by symbol identity', () => {

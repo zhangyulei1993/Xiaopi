@@ -104,9 +104,15 @@ func canonicalizeFeaturedChannelCommunities(ctx context.Context, rawStore any, c
 			break
 		}
 	}
-	// Keep older admin clients compatible until the updated workspace reaches
-	// production. The updated client always supplies Community and validates it.
+	// Existing channels may be anchored to a verified Tencent map point instead
+	// of a doorplate community. Preserve those map-based channels so a new Admin
+	// client can publish unrelated changes without inventing a community match.
 	if !usesCatalogSelection {
+		for _, channel := range config.FeaturedChannels {
+			if strings.TrimSpace(channel.Keyword) == "" || !validFeaturedChannelLocation(channel) {
+				return errors.New("精选频道必须选择门牌库小区或保留有效地图定位")
+			}
+		}
 		return nil
 	}
 	store, ok := rawStore.(appConfigStore)
@@ -129,10 +135,10 @@ func canonicalizeFeaturedChannelCommunities(ctx context.Context, rawStore any, c
 		channel := &config.FeaturedChannels[index]
 		requested := strings.TrimSpace(channel.Community)
 		if requested == "" {
-			requested = strings.TrimSpace(channel.Keyword)
-		}
-		if requested == "" {
-			return errors.New("精选频道必须从门牌库选择关联小区")
+			if strings.TrimSpace(channel.Keyword) != "" && validFeaturedChannelLocation(*channel) {
+				continue
+			}
+			return errors.New("精选频道必须选择门牌库小区或保留有效地图定位")
 		}
 		canonical, _ := resolveCommunityName(requested, known)
 		found := false
@@ -149,6 +155,10 @@ func canonicalizeFeaturedChannelCommunities(ctx context.Context, rawStore any, c
 		channel.Keyword = canonical
 	}
 	return nil
+}
+
+func validFeaturedChannelLocation(channel domain.FeaturedChannel) bool {
+	return channel.Latitude != 0 && channel.Longitude != 0 && channel.Latitude >= -90 && channel.Latitude <= 90 && channel.Longitude >= -180 && channel.Longitude <= 180
 }
 
 func (s *Server) recordConfigFailure(r *http.Request, after domain.PublicConfig, source, message string) {

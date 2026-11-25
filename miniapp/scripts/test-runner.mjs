@@ -3,6 +3,7 @@ import { enterSuiteLock, suiteChildOptions } from '../tests/suite-lock.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { normalizeDevtoolsCall } from '../tests/e2e/devtools-compat.mjs'
 
 const root = path.resolve(process.env.WECHAT_PROJECT || path.join(path.dirname(new URL(import.meta.url).pathname), '..'))
 const mode = process.argv[2] || 'smoke'
@@ -76,6 +77,7 @@ if (mode === 'report') {
       return false
     }
     const call = (tool, args) => {
+      ;({ tool, args } = normalizeDevtoolsCall(tool, args))
       const invoke = (suffix = '') => run(`${tool}${suffix}`, cli, ['-c', client, tool, '--project', simulatorProject, ...args])
       const first = invoke()
       const errorText = `${first.stdout}\n${first.stderr}`
@@ -89,14 +91,12 @@ if (mode === 'report') {
     const waitFor = (selector) => call('automation_element_action', ['--action', 'size', '--selector', selector, '--wait-for-selector', selector])
     const readText = (selector) => call('automation_element_action', ['--action', 'text', '--selector', selector, '--wait-for-selector', selector])
     if (path.resolve(out) === path.resolve(root, 'dist/mp-weixin-test')) {
-      const loginPage = call('simulator_open_page', ['--page', 'pages/auth/login'])
-      if (loginPage.status !== 'passed') throw new Error('Could not open the test-only login page')
-      const testAccountButton = waitFor('.test-login-panel button')
-      if (testAccountButton.status !== 'passed') throw new Error('Test-only account controls are unavailable in this build')
-      const login = call('automation_element_action', ['--action', 'tap', '--selector', '.test-login-panel button', '--wait-for-selector', '.test-login-panel button'])
-      if (login.status !== 'passed') throw new Error('Test-only synthetic login action failed')
+      const login = call('automation_evaluate', ['--fn-source', 'function(){return new Promise((resolve,reject)=>wx.request({url:"http://127.0.0.1:18083/api/v1/auth/wechat/login",method:"POST",data:{code:"qa-user-a"},success:r=>{const d=r.data&&r.data.data;if(r.statusCode!==200||!d||!d.accessToken)return reject(new Error("isolated QA login failed"));wx.setStorageSync("xiaopi_access_token",d.accessToken);wx.setStorageSync("xiaopi_session_role",d.role);resolve({status:r.statusCode,role:d.role,testOnly:d.testOnly})},fail:reject}))}'])
+      if (login.status !== 'passed' || !/"role"\s*:\s*"user"/.test(login.stdout)) throw new Error('Isolated QA login bootstrap failed')
+      const home = call('automation_navigate', ['--action', 'reLaunch', '--url', '/pages/home/index'])
+      if (home.status !== 'passed') throw new Error('Isolated QA user could not open home')
       const loggedIn = waitFor('.hero-search')
-      if (loggedIn.status !== 'passed') throw new Error('Synthetic login did not reach the authenticated home page')
+      if (loggedIn.status !== 'passed') throw new Error('QA user did not reach the authenticated home page')
     }
     for (const file of cases) {
       const test = JSON.parse(fs.readFileSync(path.join(caseDir, file), 'utf8'))
@@ -147,14 +147,14 @@ if (mode === 'report') {
         call('simulator_screenshot', ['--path', path.join(reportDir, `${test.name}-failure.png`), '--optimize=false'])
         call('automation_page_action', ['--action', 'querySelectorAll', '--selector', 'view'])
         call('get_simulator_console', ['--command', 'grep -iE "error|exception|fail"'])
-        call('get_simulator_network', ['--command', 'grep -iE "error|fail|4[0-9]{2}|5[0-9]{2}"'])
+        call('get_simulator_network', ['--command', 'grep -n -E "HTTP_REQUEST.*127.0.0.1:18083/api|HTTP_RESPONSE.*127.0.0.1:18083/api"'])
         break
       }
       const selector = (test.steps || []).findLast(step => step.action === 'assert-page')?.readySelector || test.readySelector
       call('automation_element_action', ['--action', 'outerWxml', '--selector', selector, '--wait-for-selector', selector])
       call('simulator_screenshot', ['--path', path.join(reportDir, `${test.name}.png`), '--optimize=false'])
       call('get_simulator_console', ['--command', 'grep -iE "error|exception|fail"'])
-      call('get_simulator_network', ['--command', 'grep -n .'])
+      call('get_simulator_network', ['--command', 'grep -n -E "HTTP_REQUEST.*127.0.0.1:18083/api|HTTP_RESPONSE.*127.0.0.1:18083/api"'])
     }
     saveReport()
   } catch (error) {

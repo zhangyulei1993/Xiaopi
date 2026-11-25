@@ -47,14 +47,16 @@ const reviewed = {
   'api/client.js': '769f8c9eec21264099bf956779526661de51f254d2079afc01b7996e358f722d',
   'api/request-url.js': '0717acf313cd34bbb238750ba2fa8d5e9598f73b560b219ce28c23f72bd8e97e',
   'api/upload-url.js': '0483e3525aa2ff158e23c90b0025c68e6af41057c0fc8d45224da815cc3cef6e',
-  'pages/admin/property-edit.js': '5430cd5fb5edd350d99c380124d2fd47e2f35a7b82e49e7cb16b9fd903184a8d',
-  'pages/auth/login.js': '49dc6d0164e4c393b6df5939e740fd29aa006b2162364ad3a690e320f6b67404',
-  'pages/me/index.js': '90e096aa97385064aa1beec52ab046d593a1b7846a882579648f2dd5a6f8d98b',
-  'pages/properties/detail.js': '5c768dbbfd8f192a8e901999f3581574d23e78ea71dd826b0f5c02e775069398',
+  'api/download-url.js': '6f99afd137f889883488848e159e92386ee9289f3199d9a2b5ac60489bcb3d82',
+  'pages/admin/material-library.js': '1139a97024d51b0493b90d3dbe81f0a64429533e93ec41094f458ad34f9729dc',
+  'pages/admin/property-edit.js': 'c2d2fa43fd85777ad590cf09cd641c4534e8f3ce2a7a5bb641ced1c3aeadbe36',
+  'pages/auth/login.js': '78435ab7da03292bc08a090c6945329f267335119f160bcb2ce2b334c72c1ab1',
+  'pages/me/index.js': '761029a563210ed5e864d67cf2e7f840f5909d52af331d844fab20cc23f2603d',
+  'pages/properties/detail.js': '000b9d84665b25422729f0f0d892858465856e6955f16d9d64d5077556260603',
 }
 const verified = report.buildProvenance.status === 'PASS'
   && Object.entries(reviewed).every(([file, digest]) => report.artifactSha256[file] === digest)
-  && report.sourceCalls.length === 5
+  && report.sourceCalls.length === 6
   && report.sourceCalls.every(call => call.originVerified && call.importAlias && call.directGuard && !call.reassigned)
 const matched = new Set()
 report.guardedCalls = []

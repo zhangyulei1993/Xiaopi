@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 	"xiaopi/backend/internal/domain"
@@ -90,6 +91,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/admin/web-accounts/{username}", s.manageWebAdmins)
 	mux.HandleFunc("POST /api/v1/admin/web-password", s.manageWebAdmins)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", s.wechatLogin)
+	if os.Getenv("APP_ENV") == "test" {
+		mux.HandleFunc("POST /api/v1/auth/test-access/login", s.testAccessLogin)
+	}
 	mux.HandleFunc("POST /api/v1/auth/wechat/phone", s.requireRoles(s.bindWechatPhone, roleUser, roleAdmin))
 	mux.HandleFunc("GET /api/v1/auth/profile", s.requireRoles(s.getUserProfile, roleUser, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/auth/profile", s.requireRoles(s.updateUserProfile, roleUser, roleAdmin))
@@ -129,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/admin/material-library/{propertyID}/convert", s.requireRoles(s.convertMaterial, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/material-library/categories", s.requireRoles(s.materialCategories, roleAdmin))
 	mux.HandleFunc("PUT /api/v1/admin/material-library/categories", s.requireRoles(s.materialCategories, roleAdmin))
+	mux.HandleFunc("PATCH /api/v1/admin/material-library/categories/rename", s.requireRoles(s.renameMaterialCategory, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))

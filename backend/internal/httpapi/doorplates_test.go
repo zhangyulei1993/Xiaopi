@@ -102,6 +102,18 @@ func TestCollectionPlanAndLocationUseCanonicalCommunity(t *testing.T) {
 	if len(stored) != 1 || stored["藏龙·新天地"].Address == "" {
 		t.Fatalf("location not stored under canonical community: %#v", stored)
 	}
+	newCommunityRequest := httptest.NewRequest(http.MethodPut, "/api/v1/admin/community-locations?community=%E5%87%A1%E8%B0%B7%E5%B0%8F%E5%8C%BA", strings.NewReader(`{"address":"武汉市洪山区凡谷路1号","latitude":30.46,"longitude":114.42}`))
+	newCommunityResponse := httptest.NewRecorder()
+	server.communityLocations(newCommunityResponse, newCommunityRequest)
+	if newCommunityResponse.Code != http.StatusOK {
+		t.Fatalf("new community location save status=%d body=%s", newCommunityResponse.Code, newCommunityResponse.Body.String())
+	}
+	if err := json.Unmarshal(store.configs[communityLocationKey], &stored); err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 2 || stored["凡谷小区"].Address != "武汉市洪山区凡谷路1号" {
+		t.Fatalf("new community location not stored: %#v", stored)
+	}
 }
 
 var _ appConfigStore = (*doorplateConfigStore)(nil)

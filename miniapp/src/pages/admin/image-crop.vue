@@ -92,6 +92,13 @@ const finish = () => {
 };
 const cancel = () => uni.navigateBack();
 onLoad(() => {
+  const session = getSession();
+  if (!session || session.role !== "admin" || session.accessToken !== cropSession?.accessToken) {
+    uni.removeStorageSync("xiaopi-property-image-crop-source");
+    uni.showToast({ title: "仅管理员可调整房源图片", icon: "none" });
+    uni.switchTab({ url: "/pages/me/index" });
+    return;
+  }
   const cached = uni.getStorageSync("xiaopi-property-image-crop-source") as CropSource;
   uni.removeStorageSync("xiaopi-property-image-crop-source");
   if (!cached?.path || !cached.width || !cached.height) { uni.showToast({ title: "没有可处理的图片", icon: "none" }); setTimeout(() => uni.navigateBack(), 300); return; }

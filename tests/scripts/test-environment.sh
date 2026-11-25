@@ -28,6 +28,7 @@ TEST_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)
 TEST_AUTH_TOKEN_TTL=15m
 TEST_BOOTSTRAP_ADMIN_PASSWORD=$(openssl rand -hex 24)
 TEST_WECHAT_CODE_MAP=qa-user-a=qa-user-a,qa-user-b=qa-user-b,qa-admin=qa-admin,qa-disabled=qa-disabled
+TEST_ACCESS_CODE_MAP=13800000001:100001=qa-user-a,13800000002:100002=qa-user-b,13800000003:100003=qa-admin,13800000004:100004=qa-disabled
 EOF
   chmod 600 "$ENV_FILE"
 }

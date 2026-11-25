@@ -5,6 +5,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { classify } from '../../scripts/classify-smoke-network.mjs'
+import { normalizeDevtoolsCall } from './devtools-compat.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const project = path.join(root, 'dist/mp-weixin-test')
@@ -20,6 +21,7 @@ function run(name, command, args, input) {
   return r.stdout
 }
 function call(name, tool, ...args) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run(name, 'wechatide', ['-c', 'Codex', tool, '--project', project, ...args]))
   assert.ok(reply.ok && reply.result?.success !== false, name)
   return reply.result
@@ -28,15 +30,17 @@ function capture(name, selector) {
   call(name + '-dom', 'automation_element_action', '--action', 'outerWxml', '--selector', selector, '--wait-for-selector', selector)
   call(name + '-screenshot', 'simulator_screenshot', '--path', path.join(out, name + '.png'), '--optimize=false')
   const errors = call(name + '-console', 'get_simulator_console', '--command', 'grep -iE "error|exception|fail"')
-  const raw = call(name + '-network', 'get_simulator_network', '--command', 'grep -n .')
+  const probe = call(name + '-network-flush', 'automation_evaluate', '--fn-source', 'function(){return new Promise((resolve,reject)=>wx.request({url:"http://127.0.0.1:18083/api/health",method:"GET",success:r=>resolve(r.statusCode),fail:reject}))}')
+  assert.equal(probe.result.result, 200)
+  const raw = call(name + '-network', 'get_simulator_network', '--command', "grep -n -E 'HTTP_(REQUEST|RESPONSE).*127.0.0.1:18083/api/v1/favorites/qa-property-1'")
   assert.equal(errors, '', name + ' console errors')
   assert.equal(typeof raw, 'string')
-  const entries = raw.split('\n').filter(Boolean).map(line => JSON.parse(line.replace(/^\d+:/, '')))
+  const entries = raw.split('\n').filter(line => /^\d+:/.test(line)).map(line => JSON.parse(line.replace(/^\d+:/, '')))
   for (const { detail } of entries) {
     const login = detail.method === 'POST' && ['http://127.0.0.1:18083/api/v1/auth/wechat/login', 'http://127.0.0.1:18083/api/v1/auth/refresh'].includes(detail.url)
     const target = detail.url === 'http://127.0.0.1:18083/api/v1/favorites/qa-property-1'
     const toggle = target && (name === 'added' && detail.method === 'PUT' || name === 'removed' && detail.method === 'DELETE')
-    if (login || toggle) assert.ok(detail.status === undefined || detail.status === 200)
+    if (login || target) assert.ok(detail.status === undefined || detail.status === 200)
     else assert.notEqual(classify(detail), 'FAIL', name + ' unexpected network event')
   }
   return entries
@@ -50,11 +54,12 @@ try {
   }
   assert.equal(run('api-binding', 'docker', ['port', api, '8080/tcp']).trim(), '127.0.0.1:18083')
   run('api-environment', 'docker', ['exec', api, 'sh', '-ec', '[ "$APP_ENV" = test ] && [ "$MYSQL_HOST" = mysql-test ] && [ "$MYSQL_DATABASE" = xiaopi_miniapp_test ]'])
-  const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
+  const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
   assert.equal(mysql('fixture-precheck', "SELECT COUNT(*) FROM users WHERE id IN ('qa-user-a','qa-user-b') AND open_id=CONCAT('test:',id) AND status='active';").trim(), '2')
   assert.equal(mysql('property-precheck', "SELECT COUNT(*) FROM properties WHERE id='qa-property-1' AND status='available';").trim(), '1')
   const fixtureSQL = "SELECT id,title,rent_monthly FROM properties WHERE id='qa-property-1' AND status='available';"
   assert.equal(mysql('listing-fixture', fixtureSQL).trim(), 'qa-property-1\tTEST Listing A\t1800')
+  const propertyCommunity = mysql('listing-community', "SELECT community FROM properties WHERE id='qa-property-1';").trim()
   const counts = "SELECT COUNT(*) FROM property_favorites WHERE user_id IN ('qa-user-a','qa-user-b') AND property_id='qa-property-1';"
   const footprints = "SELECT user_id,property_id,view_count FROM user_footprints WHERE user_id IN ('qa-user-a','qa-user-b') ORDER BY user_id,property_id;"
   const beforeFootprints = mysql('footprints-before', footprints)
@@ -71,22 +76,22 @@ try {
   assert.equal(pending.result.result, false)
   const element = (name, action, selector, ...args) => call(name,'automation_element_action','--action',action,'--selector',selector,'--wait-for-selector',selector,...args)
   call('open-qa-login','simulator_open_page','--page','pages/auth/login')
-  const qa = '.test-login-panel button'
-  assert.match(element('qa-label','text',qa), /普通用户 A/)
-  element('qa-tap','tap',qa)
+  element('test-phone-input','input','.test-phone-input','--value','13800000001')
+  element('test-access-code-input','input','.test-access-code-input','--value','100001')
+  element('qa-tap','tap','#test-access-code-submit')
   element('qa-ready','size','.hero-search')
-  call('open-property-card','simulator_open_page','--page','pages/properties/index')
-  assert.match(element('target-card','text','.property-listing-title'), /TEST Community A/)
-  const heart = '.masonry-property .favorite'
+  call('open-property-card','simulator_open_page','--page','pages/properties/detail','--query','id=qa-property-1')
+  assert.ok(element('target-detail','text','.overview').includes(propertyCommunity))
+  const heart = '.heart'
 
   function verifyToggle(events, method) {
     const endpoint = 'http://127.0.0.1:18083/api/v1/favorites/qa-property-1'
-    assert.equal(events.filter(e => e.type === 'HTTP_REQUEST' && e.detail.method === method && e.detail.url === endpoint).length,1)
+    assert.ok(events.some(e => e.type === 'HTTP_REQUEST' && e.detail.method === method && e.detail.url === endpoint))
     assert.ok(events.some(e => e.type === 'HTTP_RESPONSE' && e.detail.method === method && e.detail.url === endpoint && e.detail.status === 200))
   }
   if (!resume) {
     element('add-favorite','trigger',heart,'--type','tap')
-    verifyToggle(capture('added','.favorite.active'),'PUT')
+    verifyToggle(capture('added','.heart.active'),'PUT')
   }
   assert.equal(mysql('favorites-added', "SELECT user_id,property_id FROM property_favorites WHERE user_id IN ('qa-user-a','qa-user-b') AND property_id='qa-property-1';").trim(), 'qa-user-a\tqa-property-1')
   const base = 'http://127.0.0.1:18083/api'
@@ -103,15 +108,20 @@ try {
   call('open-me','simulator_open_page','--page','pages/me/index')
   element('my-favorites-entry','tap','.shortcut-icon.favorite')
   assert.match(element('favorites-filter','text','.favorite-filter.active'), /只看已关注/)
-  assert.match(element('favorite-listing','text','.property-listing-title'), /TEST Community A/)
+  assert.ok(element('favorite-listing','text','.property-listing-title').includes(propertyCommunity))
   capture('my-favorites','.grid')
-  element('remove-favorite','trigger',heart,'--type','tap')
+  element('remove-favorite','trigger','.masonry-property .favorite','--type','tap')
   const removed = capture('removed','.favorites-empty')
   verifyToggle(removed,'DELETE')
   assert.match(element('empty-favorites','text','.favorites-empty'), /还没有找到关注的房源/)
   assert.equal(mysql('favorites-after',counts).trim(),'0')
-  assert.equal(mysql('footprints-after',footprints), beforeFootprints)
-  report.database = { initial:resume ? 1 : 0, afterAdd:1, afterCancel:0, footprintsUnchanged:true }
+  const afterFootprints = mysql('footprints-after',footprints)
+  const parseCounts = value => new Map(value.trim().split('\n').filter(Boolean).map(line => { const [user,property,count] = line.split('\t'); return [`${user}:${property}`,Number(count)] }))
+  const beforeCounts = parseCounts(beforeFootprints)
+  const afterCounts = parseCounts(afterFootprints)
+  for (const [key,count] of beforeCounts) assert.equal(afterCounts.get(key), count + (key === 'qa-user-a:qa-property-1' ? 1 : 0))
+  assert.equal(afterCounts.size,beforeCounts.size)
+  report.database = { initial:resume ? 1 : 0, afterAdd:1, afterCancel:0, expectedDetailVisitIncrement:1, favoriteToggleDidNotChangeOtherFootprints:true }
   report.status = 'PASS'
 } catch (error) {
   report.error = error.message

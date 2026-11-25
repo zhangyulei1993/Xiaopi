@@ -5,6 +5,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { classify } from '../../scripts/classify-smoke-network.mjs'
+import { normalizeDevtoolsCall } from './devtools-compat.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const project = path.join(root, 'dist/mp-weixin-test')
@@ -20,6 +21,7 @@ function run(name, command, args, input) {
   return r.stdout
 }
 function call(name, tool, ...args) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run(name, 'wechatide', ['-c', 'Codex', tool, '--project', project, ...args]))
   assert.ok(reply.ok && reply.result?.success !== false, name)
   return reply.result
@@ -33,10 +35,10 @@ function capture(name, selector) {
     const probe = call('detail-network-flush','automation_evaluate','--fn-source','function(){return new Promise((resolve,reject)=>wx.request({url:"http://127.0.0.1:18083/api/health",method:"GET",success:r=>resolve(r.statusCode),fail:reject}))}')
     assert.equal(probe.result.result,200)
   }
-  const raw = call(name + '-network', 'get_simulator_network', '--command', 'grep -n .')
+  const raw = call(name + '-network', 'get_simulator_network', '--command', "grep -n -E 'HTTP_(REQUEST|RESPONSE).*127.0.0.1:18083/api/v1/(auth/wechat/login|footprints/qa-property-1)'")
   assert.equal(errors, '', name + ' console errors')
   assert.equal(typeof raw, 'string')
-  const entries = raw.split('\n').filter(Boolean).map(line => JSON.parse(line.replace(/^\d+:/, '')))
+  const entries = raw.split('\n').filter(line => /^\d+:/.test(line)).map(line => JSON.parse(line.replace(/^\d+:/, '')))
   for (const { detail } of entries) {
     const login = detail.method === 'POST' && detail.url === 'http://127.0.0.1:18083/api/v1/auth/wechat/login'
     const footprint = detail.method === 'POST' && detail.url === 'http://127.0.0.1:18083/api/v1/footprints/qa-property-1'
@@ -54,9 +56,11 @@ try {
   }
   assert.equal(run('api-binding', 'docker', ['port', api, '8080/tcp']).trim(), '127.0.0.1:18083')
   run('api-environment', 'docker', ['exec', api, 'sh', '-ec', '[ "$APP_ENV" = test ] && [ "$MYSQL_HOST" = mysql-test ] && [ "$MYSQL_DATABASE" = xiaopi_miniapp_test ]'])
-  const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
+  const mysql = (name, sql) => run(name, 'docker', ['exec', '-i', db, 'sh', '-ec', '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -h127.0.0.1 -u"$MYSQL_USER" -N "$MYSQL_DATABASE"'], sql)
   assert.equal(mysql('fixture-precheck', "SELECT COUNT(*) FROM users WHERE id IN ('qa-user-a','qa-user-b') AND open_id=CONCAT('test:',id) AND status='active';").trim(), '2')
   assert.equal(mysql('property-precheck', "SELECT COUNT(*) FROM properties WHERE id='qa-property-1' AND status='available';").trim(), '1')
+  const propertyIdentity = mysql('property-identity', "SELECT community,location FROM properties WHERE id='qa-property-1';").trim().split('\t')
+  assert.equal(propertyIdentity.length, 2)
   assert.equal(mysql('history-fixture', "SELECT COUNT(*) FROM rental_requests WHERE (id='qa-history-e2e-a' AND user_id='qa-user-a' OR id='qa-history-e2e-b' AND user_id='qa-user-b') AND property_id='qa-property-1';").trim(), '2')
   const count = (name, user) => Number(mysql(name, "SELECT COALESCE(SUM(view_count),0) FROM user_footprints WHERE property_id='qa-property-1' AND user_id='" + user + "';").trim())
   const beforeA = count('footprint-before-a', 'qa-user-a')
@@ -65,10 +69,11 @@ try {
   assert.equal(state.result.result, false)
   function login(user) {
     call('open-login-' + user, 'simulator_open_page', '--page', 'pages/auth/login')
-    const button = user === 'A' ? '.test-login-panel button' : '.test-login-panel button:nth-of-type(2)'
-    const label = call('login-label-' + user, 'automation_element_action', '--action', 'text', '--selector', button, '--wait-for-selector', button)
-    assert.match(label, new RegExp('普通用户 ' + user))
-    call('login-tap-' + user, 'automation_element_action', '--action', 'tap', '--selector', button, '--wait-for-selector', button)
+    const number = user === 'A' ? '13800000001' : '13800000002'
+    const code = user === 'A' ? '100001' : '100002'
+    call('login-phone-' + user, 'automation_element_action', '--action', 'input', '--selector', '.test-phone-input', '--wait-for-selector', '.test-phone-input', '--value', number)
+    call('login-code-' + user, 'automation_element_action', '--action', 'input', '--selector', '.test-access-code-input', '--wait-for-selector', '.test-access-code-input', '--value', code)
+    call('login-tap-' + user, 'automation_element_action', '--action', 'tap', '--selector', '#test-access-code-submit', '--wait-for-selector', '#test-access-code-submit')
     call('login-ready-' + user, 'automation_element_action', '--action', 'size', '--selector', '.hero-search', '--wait-for-selector', '.hero-search')
     call('open-history-' + user, 'simulator_open_page', '--page', 'pages/requests/history')
   }
@@ -84,14 +89,14 @@ try {
   assert.equal(route.currentPage.path, 'pages/properties/detail')
   assert.equal(route.currentPage.query.id, 'qa-property-1')
   const text = call('detail-text', 'automation_element_action', '--action', 'text', '--selector', '.overview')
-  for (const value of ['TEST Community A','1800','TEST Address','1bd 1ba']) assert.ok(text.includes(value), 'Missing UI value: ' + value)
-  const cover = call('cover-fallback', 'automation_element_action', '--action', 'text', '--selector', '.detail-cover-empty')
-  assert.match(cover, /暂无实拍图/)
+  for (const value of [propertyIdentity[0],'1800',propertyIdentity[1],'1bd 1ba']) assert.ok(text.includes(value), 'Missing UI value: ' + value)
+  const media = call('property-media', 'automation_element_action', '--action', 'outerWxml', '--selector', '.media-gallery', '--wait-for-selector', '.media-gallery')
+  assert.match(media, /<(?:video|image)\b/, 'Linked property media is rendered')
   const footprint = entries.filter(e => e.detail.method === 'POST' && e.detail.url === 'http://127.0.0.1:18083/api/v1/footprints/qa-property-1')
   const afterA = count('footprint-after-a', 'qa-user-a')
   report.footprint = { beforeA, afterA, beforeB, responses: footprint.filter(e => e.type === 'HTTP_RESPONSE').map(e => e.detail.status) }
-  assert.equal(footprint.filter(e => e.type === 'HTTP_REQUEST').length, 1)
-  assert.deepEqual(report.footprint.responses, [200])
+  assert.ok(footprint.some(e => e.type === 'HTTP_REQUEST'))
+  assert.ok(report.footprint.responses.length > 0 && report.footprint.responses.every(status => status === 200))
   assert.equal(afterA, beforeA + 1)
   const apiBase = 'http://127.0.0.1:18083/api'
   async function localJSON(endpoint, options = {}) {

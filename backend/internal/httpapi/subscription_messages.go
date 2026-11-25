@@ -64,6 +64,10 @@ func (s *Server) registerMessageSubscription(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "订阅模板无效")
 		return
 	}
+	if input.TemplateID == appointmentTemplateID() && s.effectiveRole(r.Context(), claimsFromContext(r.Context())) != roleAdmin {
+		writeError(w, http.StatusForbidden, "仅管理员可以订阅预约提醒")
+		return
+	}
 	if input.TemplateID == areaTemplateID() && input.Area == "" {
 		writeError(w, http.StatusBadRequest, "订阅片区不能为空")
 		return

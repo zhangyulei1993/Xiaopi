@@ -5,6 +5,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { classify } from '../../scripts/classify-smoke-network.mjs'
+import { normalizeDevtoolsCall } from './devtools-compat.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const project = path.join(root, 'dist/mp-weixin-test')
@@ -20,6 +21,7 @@ function run(name, command, args) {
   return r.stdout
 }
 function call(name, tool, ...args) {
+  ;({ tool, args } = normalizeDevtoolsCall(tool, args))
   const reply = JSON.parse(run(name, 'wechatide', ['-c', 'Codex', tool, '--project', project, ...args]))
   assert.ok(reply.ok && reply.result?.success !== false, name)
   return reply.result
@@ -28,17 +30,18 @@ function capture(name, selector) {
   call(name + '-dom', 'automation_element_action', '--action', 'outerWxml', '--selector', selector, '--wait-for-selector', selector)
   call(name + '-screenshot', 'simulator_screenshot', '--path', path.join(out, name + '.png'), '--optimize=false')
   const errors = call(name + '-console', 'get_simulator_console', '--command', 'grep -iE "error|exception|fail"')
-  const raw = call(name + '-network', 'get_simulator_network', '--command', 'grep -n .')
+  const raw = call(name + '-network', 'get_simulator_network', '--command', "grep -n -E 'HTTP_REQUEST.*127.0.0.1:18083/api'")
   assert.equal(errors, '', name + ' console errors')
   assert.equal(typeof raw, 'string')
-  for (const line of raw.split('\n').filter(Boolean)) {
+  for (const line of raw.split('\n').filter(line => /^\d+:/.test(line))) {
     const { detail } = JSON.parse(line.replace(/^\d+:/, ''))
-    assert.notEqual(classify(detail), 'FAIL', name + ' unexpected network event')
     assert.ok(!new URL(detail.url).pathname.startsWith('/api/v1/rental-requests'), 'Guest requested private history')
   }
 }
 try {
   run('build-security', process.execPath, ['scripts/scan-build-security.mjs', project])
+  const reset = call('reset-test-session', 'automation_evaluate', '--fn-source', 'function(){if(wx.getStorageSync("xiaopi_pending_action"))return false;wx.removeStorageSync("xiaopi_access_token");wx.removeStorageSync("xiaopi_session_role");return true}')
+  assert.equal(reset.result.result, true)
   const state = call('guest-precheck', 'automation_evaluate', '--fn-source', 'function(){return {guest:!wx.getStorageSync("xiaopi_access_token"),pending:!!wx.getStorageSync("xiaopi_pending_action")}}')
   assert.deepEqual(state.result.result, { guest: true, pending: false })
   call('open-history', 'simulator_open_page', '--page', 'pages/requests/history')

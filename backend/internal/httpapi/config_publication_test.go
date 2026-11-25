@@ -14,10 +14,11 @@ import (
 
 type publicationTestStore struct {
 	*fakeStore
-	mu      sync.Mutex
-	config  domain.PublicConfig
-	history []domain.ConfigPublication
-	fail    bool
+	mu         sync.Mutex
+	config     domain.PublicConfig
+	history    []domain.ConfigPublication
+	doorplates []doorplate
+	fail       bool
 }
 
 func (f *publicationTestStore) GetAppConfig(_ context.Context, key string) ([]byte, error) {
@@ -25,6 +26,9 @@ func (f *publicationTestStore) GetAppConfig(_ context.Context, key string) ([]by
 	defer f.mu.Unlock()
 	if key == publicConfigKey {
 		return json.Marshal(f.config)
+	}
+	if key == "doorplate_catalog" {
+		return json.Marshal(f.doorplates)
 	}
 	for _, e := range f.history {
 		if key == "miniapp_publish_"+e.ID {
@@ -59,6 +63,12 @@ func (f *publicationTestStore) PublishPublicConfig(_ context.Context, expected s
 func newPublicationTest(t *testing.T) (*Server, *publicationTestStore, string) {
 	t.Helper()
 	store := &publicationTestStore{fakeStore: &fakeStore{}, config: domain.DefaultPublicConfig()}
+	for index := range store.config.FeaturedChannels {
+		if store.config.FeaturedChannels[index].Latitude == 0 || store.config.FeaturedChannels[index].Longitude == 0 {
+			store.config.FeaturedChannels[index].Latitude = 30.456040
+			store.config.FeaturedChannels[index].Longitude = 114.425337
+		}
+	}
 	store.config.Normalize()
 	s := NewServerWithConfig(store, Config{AdminUsername: "admin", AdminPassword: "test-password", TokenTTL: time.Hour, TokenSecret: "test-publication-secret"})
 	token, err := s.tokens.issue("admin", roleAdmin)
@@ -66,6 +76,49 @@ func newPublicationTest(t *testing.T) (*Server, *publicationTestStore, string) {
 		t.Fatal(err)
 	}
 	return s, store, token
+}
+
+func TestFeaturedChannelPublicationPreservesLegacyMapAnchors(t *testing.T) {
+	store := &publicationTestStore{
+		fakeStore:  &fakeStore{},
+		doorplates: []doorplate{{Community: "凤凰花园三期", Building: "1栋", Unit: "1单元", Room: "101"}},
+	}
+	config := domain.DefaultPublicConfig()
+	config.FeaturedChannels[0].Community = "凤凰花园三期"
+	config.FeaturedChannels[0].Keyword = "凤凰花园三期"
+	config.FeaturedChannels[1].Latitude = 30.460402
+	config.FeaturedChannels[1].Longitude = 114.422247
+	config.FeaturedChannels[2].Latitude = 30.436999
+	config.FeaturedChannels[2].Longitude = 114.445507
+	if err := canonicalizeFeaturedChannelCommunities(context.Background(), store, &config); err != nil {
+		t.Fatalf("mixed community and legacy map channels should publish: %v", err)
+	}
+	if config.FeaturedChannels[0].Community != "凤凰花园三期" || config.FeaturedChannels[0].Keyword != "凤凰花园三期" {
+		t.Fatal("selected doorplate community was not canonicalized")
+	}
+	if config.FeaturedChannels[1].Community != "" || config.FeaturedChannels[1].Keyword != "光谷" || config.FeaturedChannels[1].Latitude != 30.460402 {
+		t.Fatal("legacy channel map anchor or keyword was changed")
+	}
+
+	config.FeaturedChannels[2].Latitude = 0
+	config.FeaturedChannels[2].Longitude = 0
+	if err := canonicalizeFeaturedChannelCommunities(context.Background(), store, &config); err == nil {
+		t.Fatal("unbound channel without a map anchor should not publish")
+	}
+}
+
+func TestFeaturedChannelPublicationRequiresLocationForNewUnboundChannel(t *testing.T) {
+	store := &publicationTestStore{fakeStore: &fakeStore{}}
+	config := domain.DefaultPublicConfig()
+	config.FeaturedChannels[0].Latitude = 30.460402
+	config.FeaturedChannels[0].Longitude = 114.422247
+	config.FeaturedChannels[1].Latitude = 30.436999
+	config.FeaturedChannels[1].Longitude = 114.445507
+	config.FeaturedChannels[2].Latitude = 0
+	config.FeaturedChannels[2].Longitude = 0
+	if err := canonicalizeFeaturedChannelCommunities(context.Background(), store, &config); err == nil {
+		t.Fatal("new unbound channel without a map point should not publish")
+	}
 }
 func TestConfigPublishHistoryConflictAndRecovery(t *testing.T) {
 	s, store, token := newPublicationTest(t)

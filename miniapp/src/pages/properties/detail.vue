@@ -173,7 +173,9 @@ onLoad((query) => {
   load(detailPropertyID.value);
 });
 onPageScroll(({ scrollTop }) => {
-  showScrolledTitle.value = scrollTop > 180;
+  // Swap the media overlay back button for the pinned header as it reaches
+  // the top edge, avoiding a gap where neither control is visible.
+  showScrolledTitle.value = scrollTop > Math.max(80, statusBarHeight.value + 38);
 });
 const retryLoad = () => { if (detailPropertyID.value) void load(detailPropertyID.value); };
 onShow(() => {
@@ -299,6 +301,7 @@ const adminPrimaryActions = computed(() => {
       return [];
   }
 });
+const adminSecondaryActions = computed(() => adminPrimaryActions.value.slice(1));
 const activeVideoIsPortrait = computed(() => {
   const active = mediaItems.value[activeMediaIndex.value];
   const dimensions = videoDimensions.value[activeMediaIndex.value];
@@ -941,13 +944,13 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
     ><view class="skeleton-media"></view><view class="skeleton-card"><view></view><view></view><view></view></view><view class="skeleton-card short"><view></view><view></view></view></view
   ><view v-else-if="loadFailed" class="page state"
     ><text>房源暂时加载失败</text><small>检查网络后重试，或返回列表稍后再看。</small><button @click="retryLoad">重新加载</button></view
-  ><view v-else-if="item" class="page detail-page" :style="pageStyle">
+    ><view v-else-if="item" class="page detail-page" :class="{ 'admin-detail-view': isAdmin }" :style="pageStyle">
     <canvas canvas-id="share-card-canvas" class="share-card-canvas" :width="600" :height="480"></canvas>
     <view v-if="showScrolledTitle" class="detail-scrolled-header" :style="{ paddingTop: `${statusBarHeight}px` }">
       <view class="detail-scrolled-back" @click="goBack"><text>‹</text></view>
       <text class="detail-scrolled-title">{{ presentation.title || "房源详情" }}</text>
     </view>
-    <view class="detail-media-back" @click="goBack"><text>‹</text></view>
+    <view v-if="!showScrolledTitle" class="detail-media-back" @click="goBack"><text>‹</text></view>
     <view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
       ><image class="property-placeholder-image" :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text><small>{{ copyText("联系小皮了解房源详情") }}</small></view
     ><view v-else class="media-gallery" :class="{ 'portrait-video': activeVideoIsPortrait, 'video-active': mediaItems[activeMediaIndex]?.type === 'video', 'video-playing': playingVideoIndex === activeMediaIndex }"
@@ -1075,9 +1078,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
     ><button v-if="!isAdmin" class="floating-appointment" @click="openAppointment"><text>预约</text><small>看房</small></button
     ><button v-if="!isAdmin" class="floating-share" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享</text></button
     ><view class="bottom-space" /><view v-if="isAdmin" class="admin-detail-bar"
-      ><view class="admin-detail-lead" :class="{ 'share-disabled': item.status !== 'available' }"><button v-if="item.status === 'available'" class="admin-share-primary" open-type="share"><image src="/static/icons/share-property.svg" mode="aspectFit" /><text>分享好友</text></button><button class="admin-edit-primary" @click="editProperty">编辑房源</button></view
-      ><view class="admin-current-status"><text>当前状态</text><strong>{{ adminCurrentStatusLabel }}</strong></view><view class="admin-detail-main"><button v-for="action in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="action.tone" @click="updateStatusFromPreview(action.status, action.label)">{{ action.label }}</button></view
-      ><view class="admin-detail-tools"><button class="admin-detail-tool delete" @click="deletePropertyFromPreview">删除房源</button></view></view
+      ><view class="admin-detail-controls"><button class="admin-edit-primary" @click="editProperty">编辑</button><template v-if="adminPrimaryActions.length"><button v-for="(action,index) in adminPrimaryActions" :key="action.status" class="admin-detail-primary" :class="index === 0 ? action.tone : 'secondary'" @click="updateStatusFromPreview(action.status, action.label)"><text>{{ action.label }}</text><small v-if="index === 0">（当前{{ adminCurrentStatusLabel }}）</small></button></template><view v-else class="admin-detail-no-transition">当前{{ adminCurrentStatusLabel }} · {{ item.status === 'draft' ? '完善后即可发布' : '无需变更' }}</view><button v-if="item.status === 'available'" class="admin-inline-share" open-type="share">分享</button><button class="admin-extra-tool delete admin-inline-delete" @click="deletePropertyFromPreview">删除</button></view></view
     ><view v-else class="action-bar user-action-bar"
       ><view class="detail-signature"><text class="detail-signature-mark">皮</text><strong>{{ brandName || '小皮租房' }}</strong></view
       ><button class="user-contact" open-type="contact" :show-message-card="true" :send-message-title="shareTitle" :send-message-path="propertyMessagePath" :send-message-img="shareImageUrl" :session-from="customerSessionFrom" @click="recordContact('consult_entry_click')"><text>在线咨询</text></button
@@ -1467,4 +1468,9 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .image-preview-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
 .image-preview-image{display:block;width:100%;height:100%;transform-origin:center center;will-change:transform}
 .image-preview-hint{position:absolute;right:0;bottom:calc(env(safe-area-inset-bottom) + 36rpx);left:0;color:rgba(255,255,255,.72);font-size:21rpx;text-align:center;pointer-events:none}
+.detail-page.admin-detail-view{padding-bottom:205rpx}
+.admin-detail-bar{box-sizing:border-box;padding:14rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));background:#fff;box-shadow:0 -7rpx 22rpx rgba(45,55,43,.09)}
+.admin-detail-controls{display:flex;width:100%;align-items:stretch;gap:8rpx}.admin-detail-controls .admin-edit-primary{display:flex;box-sizing:border-box;min-width:0;min-height:76rpx;align-items:center;justify-content:center;flex:1;padding:0 10rpx;border-radius:13rpx;font-size:20rpx;line-height:1}.admin-detail-controls .admin-detail-primary{display:flex;min-width:0;min-height:76rpx;flex:2.4;align-items:center;justify-content:center;gap:3rpx;padding:0 5rpx;border-radius:13rpx;font-size:19rpx;line-height:1.2;white-space:nowrap}.admin-detail-controls .admin-detail-primary small{color:rgba(255,255,255,.78);font-size:15rpx;font-weight:550}.admin-detail-controls .admin-detail-primary.secondary{box-sizing:border-box;min-width:0;flex:1;padding:0 8rpx;font-size:18rpx}.admin-detail-controls .admin-detail-primary.secondary small{color:#788373}.admin-detail-no-transition{display:flex;min-width:0;min-height:68rpx;flex:2.4;align-items:center;justify-content:center;padding:0 8rpx;border-radius:12rpx;background:#f5f6f2;color:#7d8679;font-size:19rpx;white-space:nowrap}
+.admin-inline-share{display:flex;min-width:0;min-height:76rpx;flex:1;align-items:center;justify-content:center;margin:0;padding:0 7rpx;border:1rpx solid #dfe5da;border-radius:13rpx;background:#f6f8f3;color:#52624c;font-size:18rpx;font-weight:650;line-height:1}.admin-inline-share::after{border:0}
+.admin-extra-tool{box-sizing:border-box;min-width:0;min-height:76rpx;flex:1;margin:0;padding:0 10rpx;border:1rpx solid #efdcd4;border-radius:13rpx;background:#fff8f5;color:#b76c57;font-size:18rpx;line-height:1}.admin-extra-tool::after{border:0}.admin-extra-tool.delete{display:flex;min-width:0;align-items:center;justify-content:center;border-color:#efdcd4;background:#fff8f5;color:#b76c57;text-align:center;white-space:nowrap}
 </style>

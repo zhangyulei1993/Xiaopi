@@ -21,7 +21,7 @@ const images = report.cases.filter(c=>c.status==='CANDIDATE').map(({name,route,w
   assert.match(name,/^[a-z0-9-]+$/)
   const file = path.join(source,name+'.png')
   const {width,height} = readPng(file)
-  assert.deepEqual([width,height],[636,1382])
+  assert.deepEqual([width,height],[604,1312])
   const bytes = fs.readFileSync(file)
   return {name,route,window,masks:frameApproval ? [...masks,...deviceFrameMasks] : (masks || report.masks),bytes,sha256:createHash('sha256').update(bytes).digest('hex')}
 })

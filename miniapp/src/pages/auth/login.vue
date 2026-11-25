@@ -3,7 +3,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { clearSession, getSession, saveSession } from '../../auth/session'
 import { API_ORIGIN, safeUploadUrl, resetReauthentication } from '../../api/client'
-import { getWechatUserProfile, refreshAuth, temporaryLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
+import { getWechatUserProfile, refreshAuth, temporaryLogin, testAccessLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
 import { usePagePresentation } from '../../utils/presentation'
 
 const isLoggingIn = ref(false)
@@ -17,12 +17,6 @@ const showProfileSetup = ref(false)
 const loginReason = ref('登录后可同步关注、足迹与找房进度')
 const brandName = ref('小皮租房')
 const testLoginEnabled = import.meta.env.VITE_TEST_LOGIN_ENABLED === 'true'
-const testAccounts = [
-  { code: 'qa-user-a', label: '普通用户 A' },
-  { code: 'qa-user-b', label: '普通用户 B' },
-  { code: 'qa-admin', label: '测试管理员' },
-  { code: 'qa-disabled', label: '禁用用户（验证拒绝）' },
-]
 const { presentation, loadPresentation, pageStyle } = usePagePresentation('authLogin', '登录小皮', '登录后管理你的找房进度')
 
 const loginCopy = (fallback: string) => presentation.value.copy?.[fallback] || fallback
@@ -30,6 +24,7 @@ const loginCopy = (fallback: string) => presentation.value.copy?.[fallback] || f
 onLoad(async (query) => {
 	resetReauthentication()
   const config = await loadPresentation()
+  uni.setNavigationBarTitle({ title: '登录' })
   brandName.value = config?.heroTitle || brandName.value
   const reason = String(query?.reason || '')
   loginReason.value = loginCopy(['favorite', 'favorites'].includes(reason) ? '登录后查看并同步你的关注房源' : reason === 'footprints' ? '登录后查看最近浏览过的房源' : reason === 'area_subscription' ? '登录后预约该片区新房源' : reason === 'requests' ? '登录后查看你的预约与找房记录' : reason === 'expired' ? '登录状态已过期，请重新登录后继续' : '登录后可同步关注、足迹与找房进度')
@@ -90,49 +85,28 @@ const loginWithWechat = () => {
   })
 }
 
-const loginWithTestAccount = async (code: string) => {
-  if (!testLoginEnabled || isLoggingIn.value) return
-  isLoggingIn.value = true
-  clearSession()
-  uni.removeStorageSync('xiaopi_bound_phone')
-  uni.removeStorageSync('xiaopi_show_favorites')
-  try {
-    const result = await wechatLogin(code)
-    if (!result.testOnly) throw new Error('当前服务未启用隔离测试登录')
-    await completeLogin(result.accessToken, result.role, result.phone || '', false)
-  } catch (error) {
-    showLoginError(error instanceof Error ? error.message : undefined)
-  } finally {
-    isLoggingIn.value = false
-  }
-}
-
-const loginTemporarily = async () => {
+const loginWithAccessCode = async () => {
   if (isLoggingIn.value) return
   if (!/^\+?\d{6,20}$/.test(phone.value.trim()) || !/^\d{6}$/.test(accessCode.value.trim())) {
-	showLoginError('请输入手机号和 6 位数字访问码')
+    showLoginError('请填写手机号和 6 位访问码')
     return
   }
   isLoggingIn.value = true
   try {
-    const result = await temporaryLogin(phone.value.trim(), accessCode.value.trim())
     clearSession()
     uni.removeStorageSync('xiaopi_bound_phone')
+    uni.removeStorageSync('xiaopi_show_favorites')
+    const result = testLoginEnabled
+      ? await testAccessLogin(phone.value.trim(), accessCode.value.trim())
+      : await temporaryLogin(phone.value.trim(), accessCode.value.trim())
+    if (testLoginEnabled && !result.testOnly) throw new Error('测试登录服务未启用')
     saveSession(result.accessToken, result.role === 'admin' ? 'admin' : 'user')
-    try {
-      const refreshed = await refreshAuth()
-      saveSession(refreshed.accessToken, refreshed.role)
-      uni.setStorageSync('xiaopi_bound_phone', result.phone)
-      uni.removeStorageSync('xiaopi_show_favorites')
-      uni.showToast({ title: '身份已切换' })
-      // Keep a pending action (for example "预约看房") on its original page.
-      // Temporary access must behave like ordinary WeChat login here.
-      setTimeout(enterApp, 300)
-    } catch (error) {
-      clearSession()
-      uni.removeStorageSync('xiaopi_bound_phone')
-      throw error
-    }
+    const refreshed = await refreshAuth()
+    saveSession(refreshed.accessToken, refreshed.role)
+    uni.setStorageSync('xiaopi_bound_phone', result.phone)
+    uni.removeStorageSync('xiaopi_show_favorites')
+    uni.showToast({ title: '登录成功' })
+    setTimeout(enterApp, 300)
   } catch (error) {
     showLoginError(error instanceof Error ? error.message : undefined)
   } finally {
@@ -202,17 +176,17 @@ const saveProfileAndEnter = async () => {
 
 <template>
   <view class="page" :style="pageStyle">
-    <view class="login-hero"><view class="brand-mark"><text>小</text><i></i></view><view class="hero-kicker">{{ brandName }}</view><view class="hero-title">{{ presentation.title }}</view><text>{{ presentation.subtitle }}</text></view>
+    <view class="login-hero"><view class="brand-mark"><text>小</text><i></i></view><view class="hero-kicker">{{ brandName }}</view><view class="hero-title">访问码登录</view><text>使用手机号和访问码继续</text></view>
     <view class="card login-card">
-      <view class="login-title"><view><strong>微信登录</strong><text>{{ loginReason }}</text></view><i>可信房源</i></view>
-      <button class="wechat-button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginWithWechat"><text>微</text><view><strong>微信一键登录</strong><small>推荐使用</small></view><b>›</b></button>
-      <view class="divider"><text>测试访问</text></view>
+      <view class="login-title"><view><strong>手机号与访问码</strong><text>{{ loginReason }}</text></view></view>
+      <view class="test-login-panel">
       <view class="temporary-form">
-        <view><text>手机号</text><input v-model="phone" type="number" maxlength="20" placeholder="请输入手机号" /></view>
-        <view><text>访问码</text><input v-model="accessCode" type="number" maxlength="6" placeholder="6 位数字" /></view>
+        <view><text>手机号</text><input id="test-phone-input" class="test-phone-input" v-model="phone" type="number" maxlength="20" placeholder="手机号" /></view>
+        <view><text>访问码</text><input id="test-access-code-input" class="test-access-code-input" v-model="accessCode" type="number" maxlength="6" placeholder="6 位数字" /></view>
       </view>
-      <button class="code-button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginTemporarily">使用访问码登录</button>
-      <view v-if="testLoginEnabled" class="test-login-panel"><text>隔离测试身份</text><button v-for="account in testAccounts" :key="account.code" :disabled="isLoggingIn" @click="loginWithTestAccount(account.code)">{{ account.label }}</button></view>
+      <button id="test-access-code-submit" class="code-button" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginWithAccessCode">访问码登录</button>
+      </view>
+      <button class="wechat-secondary" :loading="isLoggingIn" :disabled="isLoggingIn" @click="loginWithWechat">使用微信登录</button>
     </view>
     <view class="login-note">登录即表示同意小程序隐私保护说明</view>
     <view v-if="showProfileSetup" class="profile-mask">
@@ -237,5 +211,5 @@ const saveProfileAndEnter = async () => {
 .divider text{position:relative;padding:0 18rpx;background:#fff}.temporary-form{display:grid;grid-template-columns:1.15fr .85fr;gap:12rpx}.temporary-form>view{padding:16rpx 18rpx;border:1rpx solid #e5e7df;border-radius:16rpx;background:#fafbf8}.temporary-form text{display:block;color:#727d70;font-size:19rpx}.temporary-form input{height:48rpx;margin-top:5rpx;font-size:25rpx;line-height:48rpx}.code-button{width:100%;margin:18rpx 0 0;border:0;border-radius:16rpx;background:#ecefe7;color:#40543f;font-size:25rpx;line-height:78rpx}.login-note{margin-top:28rpx;color:#9ca39a;font-size:19rpx;text-align:center}
 .profile-mask{position:fixed;z-index:20;inset:0;display:flex;align-items:flex-end;padding:32rpx;background:rgba(28,39,29,.46);box-sizing:border-box}.profile-sheet{width:100%;padding:42rpx 34rpx 28rpx;border-radius:34rpx 34rpx 18rpx;background:#fff;box-sizing:border-box;text-align:center}.setup-kicker{color:#819073;font-size:18rpx;font-weight:700;letter-spacing:3rpx}.profile-sheet>strong{display:block;margin-top:12rpx;color:#304530;font-size:40rpx;letter-spacing:-2rpx}.profile-sheet>text{display:block;margin:14rpx auto 26rpx;color:#879084;font-size:23rpx;line-height:1.55}.setup-avatar{display:grid;place-items:center;width:132rpx;height:132rpx;margin:0 auto 24rpx;padding:0;overflow:hidden;border:0;border-radius:38rpx;background:#e8eedf;color:#56694e;font-size:23rpx}.setup-avatar::after,.setup-confirm::after{border:0}.setup-avatar image{width:100%;height:100%}.profile-sheet input{height:84rpx;padding:0 24rpx;border:1rpx solid #dbe5d7;border-radius:16rpx;background:#fafcf8;font-size:27rpx;text-align:left}.setup-confirm{width:100%;margin-top:18rpx;border:0;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx;line-height:88rpx}.setup-skip{margin-top:24rpx;color:#84917e;font-size:25rpx;line-height:48rpx}
 .page{padding-bottom:calc(40rpx + env(safe-area-inset-bottom))}.profile-mask{padding-bottom:calc(32rpx + env(safe-area-inset-bottom))}
-.test-login-panel{display:grid;grid-template-columns:1fr 1fr;gap:10rpx;margin-top:24rpx;padding-top:20rpx;border-top:1rpx dashed #d8dfd1}.test-login-panel>text{grid-column:1/-1;color:#71806a;font-size:21rpx}.test-login-panel button{margin:0;padding:0 12rpx;border:1rpx solid #dce5d4;border-radius:12rpx;background:#f4f7f0;color:#40543f;font-size:21rpx;line-height:64rpx}.test-login-panel button::after{border:0}
+.test-login-panel{display:block;margin-top:18rpx}.hero-title{font-size:44rpx;letter-spacing:-2rpx}.login-hero{padding-bottom:34rpx}.login-card{padding-top:30rpx}.wechat-secondary{display:block;width:auto;margin:18rpx auto 0;padding:0 18rpx;border:0;background:transparent;color:#66745f;font-size:22rpx;line-height:52rpx}.wechat-secondary::after{border:0}
 </style>
