@@ -20,7 +20,8 @@ type temporaryAuthStore interface {
 	ListTemporaryAccess(context.Context) ([]domain.TemporaryAccess, error)
 	UpsertTemporaryAccess(context.Context, string, string, string, string, time.Time) (domain.TemporaryAccess, error)
 	SetTemporaryAccessStatus(context.Context, string, string) error
-	LoginTemporaryUser(context.Context, string, string, time.Time) (domain.User, error)
+	LoginTemporaryUser(context.Context, string, string, time.Time) (domain.User, domain.TemporaryGrant, error)
+	ValidateTemporarySession(context.Context, string, uint64, uint64) error
 	FindBoundWechatUserByPhone(context.Context, string) (domain.User, error)
 }
 
@@ -139,7 +140,7 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "temporary authentication unavailable")
 		return
 	}
-	authenticatedUser, err := store.LoginTemporaryUser(r.Context(), phone, s.temporaryCodeHash(phone, code), time.Now())
+	authenticatedUser, grant, err := store.LoginTemporaryUser(r.Context(), phone, s.temporaryCodeHash(phone, code), time.Now())
 	if errors.Is(err, sql.ErrNoRows) {
 		s.recordLoginFailure(key)
 		writeError(w, http.StatusUnauthorized, "手机号或访问码错误，或访问码已过期")
@@ -150,7 +151,8 @@ func (s *Server) temporaryLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	s.clearLoginFailures(key)
 	role := s.wechatUserRole(r.Context(), authenticatedUser.ID)
-	token, err := s.tokens.issue(authenticatedUser.ID, role)
+	expires := min(s.tokens.now().Add(s.tokens.ttl).Unix(), grant.ExpiresAt.Unix())
+	token, err := s.tokens.issueClaims(tokenClaims{Subject: authenticatedUser.ID, Role: role, Expires: expires, TemporaryID: grant.ID, TemporaryVersion: grant.Version})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue access token")
 		return

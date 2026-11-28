@@ -54,6 +54,8 @@ function mysql(sql) {
     '[ "$MYSQL_DATABASE" = xiaopi_miniapp_test ] && MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -BN "$MYSQL_DATABASE" -e "$1"', 'sh', sql]).trim().split('\n').filter(Boolean)
 }
 const ui = {
+  'pages/admin/material-library': { guest: '.page', user: '.page', admin: '.material-page' },
+  'pages/admin/material-detail': { guest: '.detail-state', user: '.detail-state', admin: '.material-detail-page' },
   'pages/requests/history': { guest: '.empty.state button', user: '.hero', admin: '.page' },
   'pages/footprints/index': { guest: '.empty.state button', user: '.head', admin: '.page' },
   'pages/admin/index': { guest: '.page', user: '.page', admin: '.tabs' },
@@ -118,7 +120,7 @@ try {
       }
       await check(report.api, item, async () => {
         const query = route.method === 'GET' && route.path === '/api/v1/admin/building-rules' ? '?community=TEST%20Community%20A' : ''
-        const target = route.path.replace(/\{\w+\}/g, 'qa-role-test-nonexistent') + query
+        const target = (route.path === '/api/v1/properties/{id}' ? '/api/v1/properties/qa-property-1' : route.path.replace(/\{\w+\}/g, 'qa-role-test-nonexistent')) + query
         const response = await api(route.method, target, sessions[role], route.method === 'GET' || route.method === 'DELETE' ? undefined : {})
         item.actual = response.status
         if (refresh && expected === 'ALLOW') assert.ok(response.body.data?.accessToken)

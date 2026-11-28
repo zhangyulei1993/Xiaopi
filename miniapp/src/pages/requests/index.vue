@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { returnToMyPage } from "../../utils/permission-redirect";
+import { refreshCurrentSession } from "../../auth/refresh-session";
 import { watchPostEffect } from "vue";
 import { readPrivateCache, writePrivateCache } from "../../auth/private-cache";
 import { permissionAudit } from "../../utils/permission-audit";
 import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { computed, reactive, ref } from "vue";
 import { resolveAssetUrl } from "../../api/client";
-import { bindWechatPhone, createRentalRequest, getPublicConfig, getSubscriptionTemplates, getWechatUserProfile, refreshAuth, registerMessageSubscription } from "../../api/properties";
-import { getSession, saveSession } from "../../auth/session";
+import { bindWechatPhone, createRentalRequest, getPublicConfig, getSubscriptionTemplates, getWechatUserProfile, registerMessageSubscription } from "../../api/properties";
+import { getSession } from "../../auth/session";
 import { callPhone } from "../../utils/phone";
 import { requestMessageSubscription } from "../../utils/subscribe";
 
@@ -59,11 +61,8 @@ const refreshBoundProfile = async () => {
 	if (session?.role !== "user") return;
 	const profile = await getWechatUserProfile().catch(() => null);
 	if (!profile || getSession()?.accessToken !== session.accessToken) return;
-	if (profile.phone) {
-		form.phone = profile.phone;
-		uni.setStorageSync("xiaopi_bound_phone", profile.phone);
-		writePrivateCache(session, "user", requestPhoneCache, profile.phone, (key, value) => uni.setStorageSync(key, value));
-	}
+	form.phone = profile.phone || "";
+	writePrivateCache(session, "user", requestPhoneCache, form.phone, (key, value) => uni.setStorageSync(key, value));
 	if (profile.nickname && !form.contactName) form.contactName = profile.nickname;
 };
 onLoad(async (query) => {
@@ -72,7 +71,7 @@ onLoad(async (query) => {
   permissionAudit("guard", "request-form", allowed);
   if (!allowed) {
     permissionAudit("redirect", "request-form", "pages/me/index");
-    uni.switchTab({ url: "/pages/me/index" });
+    returnToMyPage();
     return;
   }
   syncFormSession();
@@ -96,7 +95,7 @@ onShow(() => {
   if (role === "admin") {
     appointmentCreated.value = false;
     permissionAudit("redirect", "request-form", "pages/me/index");
-    uni.switchTab({ url: "/pages/me/index" });
+    returnToMyPage();
     return;
   }
   if (role !== "user") {
@@ -181,10 +180,11 @@ const bindPhoneAfterAppointment = async (event: { detail: { code?: string } }) =
 	if (!code || bindingPhone.value) return;
 	bindingPhone.value = true;
 	try {
-		const result = await bindWechatPhone(code);
+		const token = getSession()?.accessToken;
+    const result = await bindWechatPhone(code);
+    if (getSession()?.accessToken !== token) throw new Error("登录账号已变化，请重试");
 		form.phone = result.phone;
-		uni.setStorageSync("xiaopi_bound_phone", result.phone);
-		const refreshed = await refreshAuth(); saveSession(refreshed.accessToken, refreshed.role);
+		await refreshCurrentSession("user");
 		appointmentCreated.value = false;
 		await submit();
 	} catch (error) { uni.showToast({ title: error instanceof Error ? error.message : "绑定失败", icon: "none" }); }

@@ -59,11 +59,15 @@ services:
     depends_on:
       mysql-test:
         condition: service_healthy
+    volumes:
+      - test_uploads_data:/workspace/backend/uploads
     ports:
       - "127.0.0.1:18083:8080"
     networks: [test_internal]
 
 volumes:
+  test_uploads_data:
+    name: xiaopi_miniapp_e2e_test_uploads_data
   test_mysql_data:
     name: xiaopi_miniapp_e2e_test_mysql_data
 

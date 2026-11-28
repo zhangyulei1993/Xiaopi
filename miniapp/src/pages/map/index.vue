@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import { listProperties, type Property } from '../../api/properties'
+import { onShow } from '@dcloudio/uni-app'
+import { listMapProperties, type Property } from '../../api/properties'
+import { normalizeCommunityName } from '../../utils/community-name'
 import { cacheMapProperties, getMapPropertyCache } from './mapPropertyCache'
 
 const cached = getMapPropertyCache()
@@ -17,7 +18,7 @@ const communityGroups = computed(() => {
   for (const item of properties.value) {
     if (item.status !== 'available') continue
     const name = item.community?.trim()
-    const key = name?.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+    const key = normalizeCommunityName(name || '')
     if (!key) continue
     const group = groups.get(key) ?? { name, items: [] }
     group.items.push(item)
@@ -43,8 +44,14 @@ const markers = computed(() => communities.value.map((group, index) => ({
 const active = computed(() => communities.value[(selected.value ?? 0) - 1])
 const viewport = ref<{ center: { latitude: number; longitude: number }; points: { latitude: number; longitude: number }[] }>()
 function initializeViewport() {
-  if (viewport.value) return
   const points = communities.value.map(({ latitude, longitude }) => ({ latitude, longitude }))
+  const previous = viewport.value
+  if (previous && points.length === previous.points.length && points.every((point, index) =>
+    point.latitude === previous.points[index].latitude && point.longitude === previous.points[index].longitude)) return
+  if (previous) {
+    viewport.value = { center: points[0] ?? previous.center, points }
+    return
+  }
   viewport.value = { center: points[0] ?? { latitude: 30.475, longitude: 114.421 }, points }
   startMapWatchdog()
 }
@@ -71,11 +78,12 @@ function selectMarker(event: { detail?: { markerId?: number }; markerId?: number
   selected.value = Number(event.detail?.markerId ?? event.markerId) || undefined
 }
 async function load() {
+  if (loading.value) return
   loading.value = true
   failed.value = false
   try {
-    properties.value = await listProperties()
-    cacheMapProperties(properties.value)
+    properties.value = await listMapProperties()
+    cacheMapProperties(properties.value, true)
     selected.value = undefined
   } catch {
     failed.value = true
@@ -87,7 +95,7 @@ async function load() {
 function openProperty(id: string) {
   uni.navigateTo({ url: '/pages/properties/detail?id=' + encodeURIComponent(id) })
 }
-onLoad(() => {
+onShow(() => {
   if (cached?.length) initializeViewport()
   void load()
 })
@@ -111,8 +119,8 @@ onBeforeUnmount(clearMapWatchdog)
       <button size="mini" @click="load">刷新房源</button>
     </view>
     <scroll-view v-if="mapUnavailable" scroll-y class="fallback-list">
-      <view v-if="loading && !communities.length" class="fallback-empty">正在加载房源…</view>
-      <view v-else-if="!communities.length" class="fallback-empty">{{ failed ? "房源加载失败，请点击刷新房源" : "暂时没有可在地图上显示的房源" }}</view>
+      <view v-if="loading && !communityGroups.length" class="fallback-empty">正在加载房源…</view>
+      <view v-else-if="!communityGroups.length" class="fallback-empty">{{ failed ? "房源加载失败，请点击刷新房源" : "暂时没有可在地图上显示的房源" }}</view>
       <view v-for="group in communityGroups" :key="group.name" class="fallback-community">
         <view class="fallback-community-heading"><strong>{{ group.name }}</strong><text>{{ group.items.length }} 套</text></view>
         <view v-for="item in group.items" :key="item.id" class="map-row" @click="openProperty(item.id)">

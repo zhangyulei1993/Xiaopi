@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { returnToMyPage } from "../../utils/permission-redirect";
+import { useForegroundUpload } from "../../utils/foreground-upload";
 import { usePropertyDoorplate } from "./usePropertyDoorplate";
 import { watchPostEffect } from "vue";
 import { readPrivateCache } from "../../auth/private-cache";
@@ -175,10 +177,10 @@ const roomCount = ref("1"),
   kitchenCount = ref("1"),
   bathroomCount = ref("1"),
   balcony = ref("0"),
-  toiletType = ref("独卫"),
-  bayWindow = ref("有飘窗"),
-  privateBathroom = ref(true),
-  hasBayWindow = ref(true);
+  toiletType = ref(""),
+  bayWindow = ref(""),
+  privateBathroom = ref<boolean | null>(null),
+  hasBayWindow = ref<boolean | null>(null);
 const {
   buildingNo,
   unitNo,
@@ -256,7 +258,7 @@ const applyWholeLayout = (value: string) => {
   const parsedRoomCount = Math.min(9, Math.max(1, roomMatch ? (/\d/.test(roomMatch[1]) ? Number(roomMatch[1]) : legacyNumber(roomMatch[1], 1)) : 1));
   roomCount.value = parsedRoomCount > 4 ? "custom" : String(parsedRoomCount);
   customRoomCount.value = String(parsedRoomCount);
-  hallCount.value = String(Math.min(3, Math.max(0, numberOf("厅", source.includes("无厅") ? 0 : 1))));
+  hallCount.value = String(Math.min(3, Math.max(0, numberOf("厅", 0))));
   kitchenCount.value = String(numberOf("厨", source.includes("厨") ? 1 : 0));
   bathroomCount.value = String(Math.min(4, Math.max(1, numberOf("卫", 1))));
   balcony.value = String(Math.min(4, Math.max(0, numberOf("阳台", source.includes("阳台") ? 1 : 0))));
@@ -900,8 +902,8 @@ watch(() => form.community, (community, previousCommunity) => {
   }
 }, { immediate: true });
 const syncLayout = () => {
-  toiletType.value = privateBathroom.value ? "独卫" : "非独卫";
-  bayWindow.value = hasBayWindow.value ? "有飘窗" : "无飘窗";
+  toiletType.value = privateBathroom.value === null ? "" : privateBathroom.value ? "独卫" : "非独卫";
+  bayWindow.value = hasBayWindow.value === null ? "" : hasBayWindow.value ? "有飘窗" : "无飘窗";
   if (rentType.value === "整租") {
     form.layout = wholeLayoutText.value;
     form.actualLayout = "";
@@ -1035,7 +1037,7 @@ const parseLayout = (value = "", rentTypeHint = "") => {
     const parsedRoomCount = Math.min(9, Math.max(1, roomMatch ? (/\d/.test(roomMatch[1]) ? Number(roomMatch[1]) : legacyNumber(roomMatch[1], 1)) : 1));
     roomCount.value = parsedRoomCount > 4 ? "custom" : String(parsedRoomCount);
     customRoomCount.value = String(parsedRoomCount);
-    hallCount.value = String(numberOf("厅", roomHall.includes("无厅") ? 0 : 1));
+    hallCount.value = String(numberOf("厅", 0));
     kitchenCount.value = String(numberOf("厨", roomHall.includes("厨") || parts.some((part) => part.includes("厨房")) ? 1 : 0));
     bathroomCount.value = String(numberOf("卫", 1));
     balcony.value = String(numberOf("阳台", roomHall.includes("阳台") || parts.some((part) => part.includes("阳台")) ? 1 : 0));
@@ -1044,10 +1046,10 @@ const parseLayout = (value = "", rentTypeHint = "") => {
     rentType.value = "合租";
     applyWholeLayout(String(form.wholeLayout || ""));
     roomType.value = parts.find((part) => roomTypes.includes(part)) || "";
-    toiletType.value = parts.find((part) => part === "独卫" || part === "非独卫") || "独卫";
-    bayWindow.value = parts.find((part) => part === "有飘窗" || part === "无飘窗") || "有飘窗";
-    privateBathroom.value = toiletType.value === "独卫";
-    hasBayWindow.value = bayWindow.value === "有飘窗";
+    toiletType.value = parts.find((part) => part === "独卫" || part === "非独卫") || "";
+    bayWindow.value = parts.find((part) => part === "有飘窗" || part === "无飘窗") || "";
+    privateBathroom.value = toiletType.value ? toiletType.value === "独卫" : null;
+    hasBayWindow.value = bayWindow.value ? bayWindow.value === "有飘窗" : null;
   }
 };
 const loadProperty = async () => {
@@ -1136,7 +1138,7 @@ onLoad(async (query) => {
   if (!allowed) {
     uni.showToast({ title: "暂无运营权限", icon: "none" });
     permissionAudit("redirect", "property-editor", "pages/me/index");
-    uni.switchTab({ url: "/pages/me/index" });
+    returnToMyPage();
     return;
   }
   id.value = String(query?.id || "");
@@ -1352,14 +1354,19 @@ const setExistingCover = (id: string) => {
   pendingCoverSelected.value = false;
   uni.showToast({ title: "已设为封面" });
 };
-const upload = (path: string, type: string, propertyId: string, sort: number) =>
-  new Promise<PropertyMedia>((resolve, reject) =>
+const uploadInForeground = useForegroundUpload(
+  () => { uploadProgress.value = "上传已暂停，返回后继续"; },
+  () => { uploadProgress.value = "正在恢复上传…"; },
+);
+const upload = (path: string, type: string, propertyId: string, sort: number, editBatch = "") => {
+  const uploadKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return uploadInForeground<PropertyMedia>((resolve, reject) =>
     uni.uploadFile({
       url: safeUploadUrl(`${API_ORIGIN}/api/v1/media/upload`),
       filePath: path,
       name: "file",
       header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
-      formData: { propertyId, mediaType: type, sort: String(sort) },
+      formData: { propertyId, uploadKey, editBatch, mediaType: type, sort: String(sort) },
       success: (res) => {
         let message = "素材上传失败";
         try {
@@ -1375,6 +1382,22 @@ const upload = (path: string, type: string, propertyId: string, sort: number) =>
       fail: (error) => reject(new Error(error.errMsg || "素材上传失败")),
     }),
   );
+};
+let pendingEditBatch = "";
+let createTaskKey = "";
+let createTaskPayload: Parameters<typeof createProperty>[0] | null = null;
+const createDraftOnce = async (payload: Parameters<typeof createProperty>[0]) => {
+  if (!createTaskKey) createTaskKey = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  if (!createTaskPayload) createTaskPayload = JSON.parse(JSON.stringify(payload));
+  const created = await createProperty({ ...createTaskPayload, createKey: createTaskKey });
+  id.value = created.id;
+  // The first response may have been lost while the user changed fields.
+  // Resolve the original creation before applying the current draft values.
+  if (JSON.stringify(createTaskPayload) !== JSON.stringify(payload)) {
+    return updateProperty({ ...payload, id: created.id });
+  }
+  return created;
+};
 const completedUploads = new Map<string, PropertyMedia>();
 type SaveMode = "draft" | "preview" | "publish";
 const save = async (mode: SaveMode = "draft") => {
@@ -1390,7 +1413,7 @@ const save = async (mode: SaveMode = "draft") => {
     });
     return;
   }
-  if (mode !== "draft" && !requiredReady.value) {
+  if ((mode !== "draft" || isLiveEditing.value) && !requiredReady.value) {
     uni.showModal({ title: "房源信息还未完成", content: publishValidationMessage.value, showCancel: false });
     return;
   }
@@ -1428,9 +1451,12 @@ const save = async (mode: SaveMode = "draft") => {
       roomSequence: rentType.value === "合租" ? Number(form.roomSequence) || 0 : 0,
       description: [selectedAmenities.length ? `配套设施：${selectedAmenities.join("、")}` : "", details].filter(Boolean).join("\n"),
     };
-    const property = id.value
-      ? await updateProperty({ ...payload, id: id.value })
-      : await createProperty(payload);
+    const atomicEdit = !!id.value && isLiveEditing.value;
+    if (atomicEdit && form.editRevision == null) throw new Error("请更新服务端后再保存已上架房源");
+    if (atomicEdit && !pendingEditBatch) pendingEditBatch = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let property = atomicEdit
+      ? { ...payload, id: id.value, status: currentStatus.value }
+      : id.value ? await updateProperty({ ...payload, id: id.value }) : await createDraftOnce(payload);
     id.value = property.id;
     saveStage = "上传图片和视频";
     const queue = [
@@ -1452,7 +1478,7 @@ const save = async (mode: SaveMode = "draft") => {
       const key = JSON.stringify([property.id, item.type, item.path]);
       let media = completedUploads.get(key);
       if (!media) {
-        media = await upload(item.path, item.type, property.id, item.sort);
+        media = await upload(item.path, item.type, property.id, item.sort, atomicEdit ? pendingEditBatch : "");
         completedUploads.set(key, media);
       }
       uploaded.push(media);
@@ -1467,7 +1493,16 @@ const save = async (mode: SaveMode = "draft") => {
       ? [...uploadedImages, ...existingImages]
       : [...existingImages, ...uploadedImages];
     const finalMedia = [...existingVideos, ...uploadedVideos, ...finalImages];
-    await replacePropertyMedia(property.id, finalMedia.map((item) => item.id));
+    const mediaIds = finalMedia.map(item => item.id);
+    saveStage = atomicEdit ? "保存修改" : "保存媒体列表";
+    uploadProgress.value = saveStage;
+    if (atomicEdit) {
+      const saved = await updateProperty({ ...payload, id: property.id, editBatch: pendingEditBatch, mediaIds });
+      form.editRevision = saved.editRevision;
+      pendingEditBatch = "";
+    } else {
+      await replacePropertyMedia(property.id, mediaIds);
+    }
     completedUploads.clear();
     existingMedia.value = finalMedia;
     images.value = [];
@@ -1501,7 +1536,7 @@ const save = async (mode: SaveMode = "draft") => {
     const reason = error instanceof Error ? error.message : "未知错误";
     uni.showModal({
       title: `${saveStage}未完成`,
-      content: `${reason}\n已填写内容仍保留，可检查后重试。`,
+      content: reason.includes("房源已更新") ? `${reason}。请先保留需要的修改，再重新打开房源核对。` : `${reason}\n已填写内容仍保留，可检查后重试。`,
       showCancel: false,
     });
   } finally {
@@ -1826,8 +1861,8 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
                 <view class="quick-group-title">合租房间</view>
                 <view class="quick-setting-row quick-setting-row-wide"><text>本次出租房型</text><view class="quick-choice-list"><button v-for="option in roomTypes" :key="option" :class="{ active: roomType === option }" @click="setSharedRoomType(option)">{{ option }}</button></view></view>
                 <view class="quick-setting-pair">
-                <view class="quick-setting-row"><text>独立卫生间（选填）</text><view class="quick-choice-list"><button :class="{ active: privateBathroom }" @click="privateBathroom = true; toiletType = '独卫'; syncLayout()">有</button><button :class="{ active: !privateBathroom }" @click="privateBathroom = false; toiletType = '非独卫'; syncLayout()">无</button></view></view>
-                <view class="quick-setting-row"><text>飘窗（选填）</text><view class="quick-choice-list"><button :class="{ active: hasBayWindow }" @click="hasBayWindow = true; bayWindow = '有飘窗'; syncLayout()">有</button><button :class="{ active: !hasBayWindow }" @click="hasBayWindow = false; bayWindow = '无飘窗'; syncLayout()">无</button></view></view>
+                <view class="quick-setting-row"><text>独立卫生间（选填）</text><view class="quick-choice-list"><button :class="{ active: privateBathroom === true }" @click="privateBathroom = true; toiletType = '独卫'; syncLayout()">有</button><button :class="{ active: privateBathroom === false }" @click="privateBathroom = false; toiletType = '非独卫'; syncLayout()">无</button></view></view>
+                <view class="quick-setting-row"><text>飘窗（选填）</text><view class="quick-choice-list"><button :class="{ active: hasBayWindow === true }" @click="hasBayWindow = true; bayWindow = '有飘窗'; syncLayout()">有</button><button :class="{ active: hasBayWindow === false }" @click="hasBayWindow = false; bayWindow = '无飘窗'; syncLayout()">无</button></view></view>
                 </view>
                 <view v-if="roomLayoutReady" class="quick-setting-row room-sequence-quick"><text>出租房间（选填）</text><view class="quick-choice-list"><button :class="{ active: !form.roomSequence }" @click="setRoomSequence(0)">不指定</button><button v-for="number in boundedRoomCount" :key="number" :class="{ active: Number(form.roomSequence) === number }" @click="setRoomSequence(number)">{{ number }}号房</button></view></view>
               </view>

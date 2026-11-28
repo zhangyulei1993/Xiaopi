@@ -1,6 +1,7 @@
-import { request } from "./client";
+import { ApiError, request } from "./client";
 
 export interface Property {
+  editRevision?: number;
   id: string;
   title: string;
   marketingPhrase?: string;
@@ -66,23 +67,35 @@ export interface FeaturedChannel {
   showInAreaEntry?: boolean;
 }
 export const listProperties = () => request<Property[]>("/v1/properties");
-export const createProperty = (property: Partial<Property>) =>
+export const getPropertyDetail = async (id: string) => {
+  try {
+    return await request<Property>(`/v1/properties/${encodeURIComponent(id)}`);
+  } catch (error) {
+    // Older API deployments do not expose the detail route yet.
+    if (!(error instanceof ApiError) || error.statusCode !== 404 || error.code === 404) throw error;
+    const item = (await listProperties()).find(property => property.id === id);
+    if (!item) throw error;
+    return item;
+  }
+};
+export const listMapProperties = () => request<Property[]>("/v1/properties?view=map");
+export const createProperty = (property: Partial<Property> & { createKey?: string }) =>
   request<Property>("/v1/properties", { method: "POST", data: property });
-export const updateProperty = (property: Partial<Property>) =>
+export const updateProperty = (property: Partial<Property> & { editBatch?: string; mediaIds?: string[] }) =>
   request<Property>("/v1/properties/update", {
     method: "PATCH",
     data: property,
   });
 export const listMaterialLibrary = () => request<Property[]>('/v1/admin/material-library');
-export const createMaterial = (property: Partial<Property>) =>
+export const createMaterial = (property: Partial<Property> & { createKey?: string }) =>
   request<Property>('/v1/admin/material-library', { method: 'POST', data: property });
 export const deleteMaterial = (propertyId: string) =>
   request(`/v1/admin/material-library/${encodeURIComponent(propertyId)}`, { method: 'DELETE' });
 export const convertMaterial = (propertyId: string) =>
   request<Property>(`/v1/admin/material-library/${encodeURIComponent(propertyId)}/convert`, { method: 'PATCH' });
 export const getMaterialCategories = () => request<string[]>('/v1/admin/material-library/categories');
-export const saveMaterialCategories = (categories: string[]) =>
-  request<string[]>('/v1/admin/material-library/categories', { method: 'PUT', data: { categories } });
+export const saveMaterialCategories = (change: { add?: string; remove?: string }) =>
+  request<string[]>('/v1/admin/material-library/categories', { method: 'PUT', data: change });
 export const renameMaterialCategory = (from: string, to: string) =>
   request<{ from: string; to: string }>('/v1/admin/material-library/categories/rename', { method: 'PATCH', data: { from, to } });
 export const deleteProperty = (propertyId: string) =>

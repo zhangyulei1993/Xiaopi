@@ -113,6 +113,17 @@ func (s *Server) wechatLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if store, ok := s.userAdminStore(); ok {
+		user, err := store.GetUser(r.Context(), userID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "账号资料读取失败")
+			return
+		}
+		if user.Status == domain.UserBlocked {
+			writeError(w, http.StatusForbidden, "账号已停用")
+			return
+		}
+	}
 	userRole := s.wechatUserRole(r.Context(), userID)
 	token, err := s.tokens.issue(userID, userRole)
 	if err != nil {
@@ -172,7 +183,11 @@ func (s *Server) refreshAuth(w http.ResponseWriter, r *http.Request) {
 		}
 		role = s.wechatUserRole(r.Context(), claims.Subject)
 	}
-	token, err := s.tokens.issue(claims.Subject, role)
+	if claims.TemporaryID == 0 {
+		claims.Expires = s.tokens.now().Add(s.tokens.ttl).Unix()
+	}
+	claims.Role = role
+	token, err := s.tokens.issueClaims(claims)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to refresh access token")
 		return

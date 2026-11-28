@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+var ErrAtomicPropertyEditRequired = errors.New("已上架房源需要统一保存，请更新小程序后重试")
+
+var ErrMaterialRoomSequence = errors.New("房间序号不能超过户型室数")
+var ErrPropertyEditConflict = errors.New("房源已更新，请核对最新内容后重新编辑")
+var ErrPropertyEditMedia = errors.New("媒体列表已变化，请重新确认")
+
+var ErrPropertyNotReady = errors.New("发布前请补齐房源资料")
+
+var ErrMaterialConversionChanged = errors.New("material changed during conversion")
+
 var ErrInvalidPropertyStatusTransition = errors.New("invalid property status transition")
 
 type PropertyStatus string
@@ -63,10 +73,12 @@ type Property struct {
 	OwnerID              string          `json:"ownerId"`
 	Media                []PropertyMedia `json:"media"`
 	CreatedAt            time.Time       `json:"createdAt"`
+	EditRevision         int             `json:"editRevision"`
 	UpdatedAt            time.Time       `json:"updatedAt"`
 }
 
 type PropertyMedia struct {
+	EditBatch  string `json:"-"`
 	ID         string `json:"id"`
 	PropertyID string `json:"propertyId"`
 	Type       string `json:"type"`

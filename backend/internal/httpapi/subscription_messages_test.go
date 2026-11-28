@@ -41,7 +41,7 @@ func (*subscriptionTestStore) MarkRentalRequestAdminNotified(context.Context, st
 func TestMessageSubscriptionAppointmentGrantRequiresAdmin(t *testing.T) {
 	t.Setenv("WECHAT_AREA_LISTING_TEMPLATE_ID", "area-template")
 	t.Setenv("WECHAT_APPOINTMENT_TEMPLATE_ID", "appointment-template")
-	store := &subscriptionTestStore{fakeStore: &fakeStore{}}
+	store := &subscriptionTestStore{fakeStore: &fakeStore{users: []domain.User{{ID: "customer", Status: domain.UserActive}}}}
 	server := testServer(store)
 	adminToken, err := server.tokens.issue("operator", roleAdmin)
 	if err != nil {

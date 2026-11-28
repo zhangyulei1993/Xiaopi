@@ -2593,3 +2593,23 @@ button, input, textarea { font: inherit; }
 .canvas-material-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:3px 0 7px}.canvas-material-summary>div{display:grid;justify-items:center;gap:2px;padding:6px 3px;border-radius:7px;background:#fff}.canvas-material-summary strong{color:#40543f;font-size:8px}.canvas-material-summary small{color:#7c877a;font-size:5.5px}
 .canvas-log-list article>span{grid-column:1/-1;justify-self:start;padding:2px 4px;border-radius:99px;background:#eef2e9;color:#52664c;font-size:4.8px}
 .page-phone-preview .canvas-avatar-preview-trigger{cursor:pointer}.page-phone-preview .canvas-avatar-crop-stage{position:relative;display:grid;width:190px;height:190px;margin:18px auto;place-items:center;overflow:hidden;border-radius:50%;background:linear-gradient(145deg,#e7eddc,#bdcbb7)}.page-phone-preview .canvas-avatar-crop-stage>span{display:grid;width:100%;height:100%;place-items:center;color:#40543f;font-size:112px;font-weight:750;transition:transform .15s}.page-phone-preview .canvas-avatar-crop-stage>i{position:absolute;inset:0;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 999px #14201955;pointer-events:none}.page-phone-preview .canvas-avatar-crop-preview .canvas-crop-controls small{color:#829080;font-size:9px;line-height:1.5}
+
+/* Keep detail canvas admin controls aligned with the real mini-program status flow. */
+.detail-canvas-admin-status{grid-auto-flow:row;grid-template-columns:repeat(2,minmax(0,1fr))}
+.detail-canvas-admin-status button{display:flex;min-height:28px!important;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:3px 4px!important;line-height:1.2}
+.detail-canvas-admin-status button small{font-size:5px;opacity:.8}
+.detail-canvas-admin-no-transition{grid-column:1/-1;display:flex;min-height:26px;align-items:center;justify-content:center;padding:2px 5px;border-radius:6px;background:#f1f4ed;color:#53634f;font-size:6px;text-align:center}
+.detail-canvas-media-pager{display:flex;align-items:center;gap:3px;padding:2px 4px;border:1px solid #ffffffa8;border-radius:5px;background:#18251d99;color:#fff;font-size:6px}
+.detail-canvas-media-pager button{display:grid;width:10px;height:10px;place-items:center;padding:0;border:0;border-radius:50%;background:#ffffff36;color:#fff;font-size:8px;line-height:1}
+.detail-canvas-nearby article em{overflow:hidden;margin-top:3px;color:#758273;font-size:5.5px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
+.detail-canvas-nearby article strong{display:flex;align-items:baseline;gap:3px}
+.detail-canvas-nearby article strong small{margin-left:auto;color:#879084;font-size:5.5px;font-weight:500}
+.detail-canvas-nearby article>div img{width:100%;height:100%;border-radius:7px;object-fit:cover}
+.detail-canvas-nearby-more{width:100%;margin-top:6px;padding:6px;border:0;border-radius:6px;background:#f2f4ed;color:#536a45;font-size:6px;font-weight:700}
+.page-phone-preview.preview-propertyDetail .detail-canvas-cover{display:block;width:calc(100% + 12px);max-width:none;height:auto;min-height:0;aspect-ratio:750 / 720;margin:0 -6px;flex:none;background-position:center;background-size:cover}
+.page-phone-preview.preview-propertyDetail .detail-canvas-media-tabs{right:10px;bottom:10px;left:10px;display:flex;width:auto;flex-wrap:nowrap;gap:5px}
+.page-phone-preview.preview-propertyDetail .detail-canvas-media-tabs>button{display:flex;width:auto;min-width:0;height:22px;flex:none;align-items:center;justify-content:center;padding:0 9px;white-space:nowrap;font-size:8px}
+.page-phone-preview.preview-propertyDetail .detail-canvas-cover>video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.detail-canvas-media-pager{display:flex;height:22px;align-items:center;gap:7px;padding:0 7px;border:1px solid rgba(255,255,255,.72);border-radius:7px;background:rgba(26,39,29,.62);color:#fff;font-size:8px;white-space:nowrap}
+.detail-canvas-media-pager button{display:grid;width:16px;height:16px;place-items:center;padding:0;border:0;border-radius:50%;background:#ffffff45;color:#fff;font-size:13px;line-height:1}
+.page-phone-preview.preview-propertyDetail .detail-canvas-media-pager{height:22px;box-sizing:border-box;white-space:nowrap}

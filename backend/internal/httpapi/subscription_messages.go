@@ -94,17 +94,22 @@ func shortText(value string, limit int) string {
 }
 func messageValue(value string) map[string]string { return map[string]string{"value": value} }
 
-func (s *Server) notifyAdminsOfRequest(ctx context.Context, item domain.RentalRequest) {
+func (s *Server) notifyAdminsOfRequest(ctx context.Context, item domain.RentalRequest, jobID uint64) error {
 	if item.Phone == "" {
-		return
+		return nil
 	}
 	store, ok := s.messageStore()
 	if !ok {
-		return
+		return nil
 	}
 	recipients, err := store.ListAdminMessageRecipients(ctx, appointmentTemplateID())
+	if paged, ok := s.store.(interface {
+		ListAdminMessageRecipientsForJob(context.Context, string, uint64) ([]domain.MessageRecipient, error)
+	}); ok && jobID != 0 {
+		recipients, err = paged.ListAdminMessageRecipientsForJob(ctx, appointmentTemplateID(), jobID)
+	}
 	if err != nil {
-		return
+		return err
 	}
 	typeName := map[string]string{"appointment": "预约看房", "area_subscription": "片区新房预约", "general": "找房需求"}[item.RequestType]
 	location := item.Location
@@ -116,25 +121,42 @@ func (s *Server) notifyAdminsOfRequest(ctx context.Context, item domain.RentalRe
 		note = "用户已提交预约"
 	}
 	data := map[string]any{"thing11": messageValue(shortText(location, 20)), "thing12": messageValue(typeName), "phone_number14": messageValue(item.Phone), "date5": messageValue(time.Now().Format("2006-01-02")), "thing6": messageValue(note)}
+	var retry error
+	if jobID != 0 && len(recipients) > 0 {
+		retry = errSubscriptionBatch
+	}
 	for _, recipient := range recipients {
-		if err := s.sendSubscribeMessage(ctx, recipient.OpenID, appointmentTemplateID(), "pages/admin/index", data); err == nil {
-			_ = store.ConsumeMessageSubscriptionGrant(ctx, recipient.GrantID)
+		sent, err := s.deliverSubscription(ctx, store, jobID, recipient, func() error {
+			return s.sendSubscribeMessage(ctx, recipient.OpenID, appointmentTemplateID(), "pages/admin/index", data)
+		})
+		if sent && err == nil {
 			_ = store.MarkRentalRequestAdminNotified(ctx, item.ID)
 			s.logOperation(ctx, recipient.UserID, "subscription", item.ID, "预约提醒已发送", typeName)
-		} else {
+		} else if err != nil {
+			retry = err
 			s.logOperation(ctx, recipient.UserID, "subscription", item.ID, "预约提醒发送失败", shortText(err.Error(), 100))
 		}
 	}
+	return retry
 }
 
-func (s *Server) notifyAreaSubscribers(ctx context.Context, property domain.Property) {
+func (s *Server) notifyAreaSubscribers(ctx context.Context, property domain.Property, jobID uint64) error {
 	store, ok := s.messageStore()
 	if !ok {
-		return
+		return nil
 	}
 	recipients, err := store.ListAreaMessageRecipients(ctx, areaTemplateID(), property)
+	if paged, ok := s.store.(interface {
+		ListAreaMessageRecipientsForJob(context.Context, string, domain.Property, uint64) ([]domain.MessageRecipient, error)
+	}); ok && jobID != 0 {
+		recipients, err = paged.ListAreaMessageRecipientsForJob(ctx, areaTemplateID(), property, jobID)
+	}
 	if err != nil {
-		return
+		return err
+	}
+	var retry error
+	if jobID != 0 && len(recipients) > 0 {
+		retry = errSubscriptionBatch
 	}
 	for _, recipient := range recipients {
 		payment := property.FeeText
@@ -146,47 +168,61 @@ func (s *Server) notifyAreaSubscribers(ctx context.Context, property domain.Prop
 			layout = "户型详见房源"
 		}
 		data := map[string]any{"thing2": messageValue(shortText(property.Community, 20)), "thing1": messageValue(shortText(recipient.Area, 20)), "amount4": messageValue(fmt.Sprintf("%d元", property.RentMonthly)), "thing5": messageValue(shortText(payment, 20)), "thing11": messageValue(layout)}
-		if err := s.sendSubscribeMessage(ctx, recipient.OpenID, areaTemplateID(), "pages/properties/detail?id="+url.QueryEscape(property.ID), data); err == nil {
-			_ = store.ConsumeMessageSubscriptionGrant(ctx, recipient.GrantID)
+		sent, err := s.deliverSubscription(ctx, store, jobID, recipient, func() error {
+			return s.sendSubscribeMessage(ctx, recipient.OpenID, areaTemplateID(), "pages/properties/detail?id="+url.QueryEscape(property.ID), data)
+		})
+		if sent && err == nil {
 			s.logOperation(ctx, recipient.UserID, "subscription", property.ID, "片区上新提醒已发送", recipient.Area)
-		} else {
+		} else if err != nil {
+			retry = err
 			s.logOperation(ctx, recipient.UserID, "subscription", property.ID, "片区上新提醒发送失败", shortText(err.Error(), 100))
 		}
 	}
+	return retry
 }
 
 func (s *Server) sendSubscribeMessage(ctx context.Context, openID, templateID, page string, data map[string]any) error {
 	appID, secret := os.Getenv("WECHAT_MINI_APP_ID"), os.Getenv("WECHAT_MINI_APP_SECRET")
 	if appID == "" || secret == "" {
-		return errors.New("wechat not configured")
+		return &domain.SubscriptionNotSent{Cause: errors.New("wechat not configured")}
 	}
 	tokenURL := "https://api.weixin.qq.com/cgi-bin/token?" + url.Values{"grant_type": {"client_credential"}, "appid": {appID}, "secret": {secret}}.Encode()
-	response, err := s.httpClient.Get(tokenURL)
+	tokenRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
 	if err != nil {
-		return err
+		return &domain.SubscriptionNotSent{Cause: errors.New("wechat token request invalid")}
+	}
+	response, err := s.httpClient.Do(tokenRequest)
+	if err != nil {
+		return &domain.SubscriptionNotSent{Cause: errors.New("wechat token request failed")}
 	}
 	defer response.Body.Close()
 	var token struct {
 		AccessToken string `json:"access_token"`
 	}
 	if json.NewDecoder(response.Body).Decode(&token) != nil || token.AccessToken == "" {
-		return errors.New("wechat token unavailable")
+		return &domain.SubscriptionNotSent{Cause: errors.New("wechat token unavailable")}
 	}
 	payload, _ := json.Marshal(map[string]any{"touser": openID, "template_id": templateID, "page": page, "data": data, "miniprogram_state": envOr("WECHAT_MINIPROGRAM_STATE", "formal"), "lang": "zh_CN"})
 	request, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token="+url.QueryEscape(token.AccessToken), bytes.NewReader(payload))
 	request.Header.Set("Content-Type", "application/json")
 	result, err := s.httpClient.Do(request)
 	if err != nil {
-		return err
+		return errors.New("wechat subscription request failed")
 	}
 	defer result.Body.Close()
 	var body struct {
-		ErrCode int    `json:"errcode"`
+		ErrCode *int   `json:"errcode"`
 		ErrMsg  string `json:"errmsg"`
 	}
-	_ = json.NewDecoder(result.Body).Decode(&body)
-	if body.ErrCode != 0 {
-		return fmt.Errorf("wechat subscribe message: %d %s", body.ErrCode, body.ErrMsg)
+	if result.StatusCode != http.StatusOK || json.NewDecoder(result.Body).Decode(&body) != nil || body.ErrCode == nil {
+		return errors.New("wechat subscription response invalid")
+	}
+	if *body.ErrCode != 0 {
+		return &domain.SubscriptionNotSent{
+			Cause:         fmt.Errorf("wechat subscribe message: %d %s", *body.ErrCode, body.ErrMsg),
+			InvalidGrant:  *body.ErrCode == 43101 || *body.ErrCode == 40003,
+			Configuration: *body.ErrCode == 40037 || *body.ErrCode == 47003 || *body.ErrCode == 41030,
+		}
 	}
 	return nil
 }

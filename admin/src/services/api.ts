@@ -5,7 +5,7 @@ export function createAdminApi({ baseUrl, onUnauthorized }: AdminApiOptions) {
     const token = localStorage.getItem('xiaopi_admin_token')
     const response = await fetch(`${baseUrl}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
+      headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
     })
     const body = await response.json().catch(() => ({ message: '服务返回异常' }))
     if (response.status === 401 || response.status === 403) {

@@ -66,13 +66,13 @@ try {
   const route = call('history-route', 'automation_runtime_info', '--action', 'currentPage')
   assert.equal(route.currentPage.path, 'pages/requests/history')
   const dom = fs.readFileSync(path.join(out, 'history-dom.log'), 'utf8')
-  for (const value of ['QA History Listing A','QA History Person A','QA Monday 10:30','QA Followup A','查看房源']) assert.ok(dom.includes(value), 'Missing UI value: ' + value)
+  for (const value of ['QA History Listing A','QA History Person A','QA Monday 10:30','查看房源']) assert.ok(dom.includes(value), 'Missing UI value: ' + value)
   assert.match(dom, /2025[年/.-]0?6[月/.-]15|0?6[/.]15[/.]2025/)
-  assert.doesNotMatch(dom, /QA History Listing B|QA Followup B/)
+  assert.doesNotMatch(dom, /QA History Listing B|QA Followup A|QA Followup B/)
   const responses = entries.filter(e => e.type === 'HTTP_RESPONSE' && e.detail.url === 'http://127.0.0.1:18083/api/v1/rental-requests/mine')
   assert.ok(responses.some(e => e.detail.method === 'GET' && e.detail.status === 200 && JSON.stringify(e.detail.response).includes('qa-history-e2e-a') && JSON.stringify(e.detail.response).includes('qa-property-1')))
-  assert.doesNotMatch(JSON.stringify(responses), /qa-history-e2e-b|QA History Listing B/)
-  report.assertions = ['QA user A history rendered with title, preferred time, date and follow-up', 'Associated property verified in GET response and UI link', 'QA user B fixture absent from response and DOM', 'No console errors or unapproved network requests']
+  assert.doesNotMatch(JSON.stringify(responses), /qa-history-e2e-b|QA History Listing B|QA Followup A|QA Followup B/)
+  report.assertions = ['QA user A history rendered with title, preferred time, date; internal follow-up notes excluded', 'Associated property verified in GET response and UI link', 'QA user B fixture absent from response and DOM', 'No console errors or unapproved network requests']
   report.status = 'PASS'
 } catch (error) {
   report.error = error.message

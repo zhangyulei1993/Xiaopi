@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -23,7 +24,11 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("xiaopi api listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, httpapi.NewServer(mysqlStore).Handler()); err != nil {
+	server := httpapi.NewServer(mysqlStore)
+	go server.RunStagedMediaCleanup(context.Background())
+	go server.RunSubscriptionOutbox(context.Background())
+	go server.RunCommunitySync(context.Background())
+	if err := http.ListenAndServe(":"+port, server.Handler()); err != nil {
 		log.Fatal(err)
 	}
 }

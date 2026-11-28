@@ -28,3 +28,15 @@ export const clearSession = () => {
 }
 
 export const hasRole = (role: SessionRole) => getSession()?.role === role
+
+export function sessionAccount(): string {
+  const session = getSession()
+  if (!session) return ""
+  try {
+    const raw = session.accessToken.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")
+    const bytes = new Uint8Array(uni.base64ToArrayBuffer(raw.padEnd(Math.ceil(raw.length / 4) * 4, "=")))
+    const text = decodeURIComponent(Array.from(bytes, byte => "%" + byte.toString(16).padStart(2, "0")).join(""))
+    const value = JSON.parse(text).sub
+    return typeof value === "string" ? value : ""
+  } catch { return "" }
+}

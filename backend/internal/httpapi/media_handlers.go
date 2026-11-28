@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -75,37 +77,31 @@ func (s *Server) updatePropertyStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
 		return
 	}
-	previousStatus := "未知"
+
 	propertyName := input.PropertyID
-	if properties, err := s.store.ListProperties(r.Context()); err == nil {
-		for _, property := range properties {
-			if property.ID == input.PropertyID {
-				previousStatus = string(property.Status)
-				propertyName = property.Community
-				if propertyName == "" {
-					propertyName = property.Title
-				}
-				break
-			}
+	if item, ok := s.findProperty(r.Context(), input.PropertyID); ok {
+		propertyName = item.Community
+		if propertyName == "" {
+			propertyName = item.Title
 		}
 	}
-	if err := s.store.UpdatePropertyStatus(r.Context(), input.PropertyID, input.Status, input.OperatorID, input.Note); err != nil {
-		if errors.Is(err, domain.ErrInvalidPropertyStatusTransition) {
+	previousStatus, err := s.store.UpdatePropertyStatus(r.Context(), input.PropertyID, input.Status, input.OperatorID, input.Note)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidPropertyStatusTransition) || errors.Is(err, domain.ErrPropertyNotReady) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 		return
 	}
+	if previousStatus == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
+		return
+	}
 	s.logOperation(r.Context(), input.OperatorID, "property", input.PropertyID, "变更房源状态", fmt.Sprintf("%s：%s → %s", propertyName, previousStatus, input.Status))
-	if input.Status == string(domain.PropertyPublished) || input.Status == string(domain.PropertyAvailable) {
-		if items, err := s.store.ListProperties(r.Context()); err == nil {
-			for _, item := range items {
-				if item.ID == input.PropertyID {
-					go s.notifyAreaSubscribers(context.Background(), item)
-					break
-				}
-			}
+	if input.Status == string(domain.PropertyAvailable) && !s.hasSubscriptionOutbox() {
+		if item, ok := s.findProperty(r.Context(), input.PropertyID); ok && item.Status == domain.PropertyAvailable {
+			go s.notifyAreaSubscribers(context.Background(), item, 0)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
@@ -124,28 +120,17 @@ func (s *Server) replacePropertyMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
 		return
 	}
-	var previous []domain.PropertyMedia
-	if properties, err := s.store.ListProperties(r.Context()); err == nil {
-		for _, property := range properties {
-			if property.ID == input.PropertyID {
-				previous = property.Media
-				break
-			}
-		}
-	}
 	if err := s.store.ReplacePropertyMedia(r.Context(), input.PropertyID, input.MediaIDs); err != nil {
+		if errors.Is(err, domain.ErrAtomicPropertyEditRequired) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": err.Error()})
 		return
 	}
-	kept := make(map[string]struct{}, len(input.MediaIDs))
-	for _, id := range input.MediaIDs {
-		kept[id] = struct{}{}
-	}
-	for _, media := range previous {
-		if _, ok := kept[media.ID]; !ok {
-			s.removeStoredUpload(media.URL)
-		}
-	}
+	// Media URLs can be shared by materials and converted listings. Retain
+	// committed files until a coordinated, delayed garbage collector can prove
+	// they are unreferenced; an immediate check races with concurrent conversion.
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", input.PropertyID, "更新房源素材", fmt.Sprintf("保留 %d 个素材", len(input.MediaIDs)))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
 }
@@ -241,6 +226,34 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to process file")
 		return
 	}
+	propertyID := r.FormValue("propertyId")
+	editBatch := r.FormValue("editBatch")
+	if len(editBatch) > 80 || (editBatch != "" && propertyID == "") {
+		writeError(w, http.StatusBadRequest, "媒体保存任务无效")
+		return
+	}
+	retryKey := r.FormValue("uploadKey")
+	mediaID := ""
+	finder, canFind := s.store.(interface {
+		FindPropertyMedia(context.Context, string, string) (domain.PropertyMedia, error)
+	})
+	if propertyID != "" && retryKey != "" && canFind {
+		if len(retryKey) > 128 {
+			writeError(w, http.StatusBadRequest, "invalid upload key")
+			return
+		}
+		hash := sha256.Sum256([]byte(propertyID + "\x00" + editBatch + "\x00" + retryKey))
+		mediaID = hex.EncodeToString(hash[:16])
+		existing, err := finder.FindPropertyMedia(r.Context(), propertyID, mediaID)
+		if err == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": existing})
+			return
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusInternalServerError, "failed to check previous upload")
+			return
+		}
+	}
 	name := fmt.Sprintf("%d-%s", time.Now().UnixNano(), filepath.Base(header.Filename))
 	mediaPath := "/uploads/" + name
 	localPath := ""
@@ -270,13 +283,13 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	mediaID := ""
 	mediaType := ""
 	sortOrder := 0
-	propertyID := r.FormValue("propertyId")
 	if propertyID != "" && s.store != nil {
 		var idErr error
-		mediaID, idErr = newID()
+		if mediaID == "" {
+			mediaID, idErr = newID()
+		}
 		if idErr != nil {
 			if localPath != "" {
 				_ = os.Remove(localPath)
@@ -294,11 +307,21 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 		if sortOrder < 0 {
 			sortOrder = 0
 		}
-		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: sortOrder}); err != nil {
+		if err := s.store.AddPropertyMedia(r.Context(), domain.PropertyMedia{ID: mediaID, PropertyID: propertyID, Type: mediaType, URL: mediaPath, Sort: sortOrder, EditBatch: editBatch}); err != nil {
 			if localPath != "" {
 				_ = os.Remove(localPath)
 			} else {
 				s.removeStoredUpload(mediaPath)
+			}
+			if retryKey != "" && canFind {
+				if existing, lookupErr := finder.FindPropertyMedia(r.Context(), propertyID, mediaID); lookupErr == nil {
+					writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": existing})
+					return
+				}
+			}
+			if errors.Is(err, domain.ErrAtomicPropertyEditRequired) {
+				writeError(w, http.StatusConflict, err.Error())
+				return
 			}
 			writeError(w, http.StatusInternalServerError, "failed to save media")
 			return

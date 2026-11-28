@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 15174",
+    "dev": "VITE_API_BASE=http://127.0.0.1:18083/api vite --host 127.0.0.1 --port 5174 --strictPort",
     "build": "VITE_BASE_PATH=/ vite build"
   },
   "dependencies": {

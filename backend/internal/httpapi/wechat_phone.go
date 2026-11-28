@@ -47,11 +47,11 @@ func (s *Server) bindWechatPhone(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to bind phone")
 		return
 	}
-	if messageStore, ok := s.messageStore(); ok {
+	if messageStore, ok := s.messageStore(); ok && !s.hasSubscriptionOutbox() {
 		if items, err := messageStore.ListUnnotifiedRentalRequests(r.Context(), userID); err == nil {
 			for _, item := range items {
 				item.Phone = phone
-				go s.notifyAdminsOfRequest(context.Background(), item)
+				go s.notifyAdminsOfRequest(context.Background(), item, 0)
 			}
 		}
 	}

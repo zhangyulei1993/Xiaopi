@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { returnToMyPage } from "../../utils/permission-redirect";
 import { watchPostEffect } from "vue";
 import { permissionAudit } from "../../utils/permission-audit";
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
-import { request } from "../../api/client";
+import { ApiError, request } from "../../api/client";
 import { getSubscriptionTemplates, listContactEvents, registerMessageSubscription, type Property, type PropertyLead, type RentalRequest, type OperationLog, type FavoriteContact, type ContactEvent } from "../../api/properties";
 import { hasRole } from "../../auth/session";
 import { usePagePresentation } from "../../utils/presentation";
@@ -16,8 +17,7 @@ const tab = ref<"requests" | "interests" | "leads">("requests"),
   activities = ref<OperationLog[]>([]),
   interests = ref<FavoriteContact[]>([]),
 	contactEvents = ref<ContactEvent[]>([]),
-  loading = ref(false),
-  loadFailed = ref(false),
+
   subscribingAppointmentReminders = ref(false);
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("adminWorkbench", "小皮工作台", "房源运营与数据处理");
 const summary = computed(() => ({
@@ -27,27 +27,34 @@ const summary = computed(() => ({
     requests.value.filter((item) => !item.status || item.status === "new").length,
   incomplete: properties.value.filter((item) => !item.community || !item.location || !item.latitude || !item.longitude || !item.media?.length).length,
 }));
+const pending = ref<string[]>([]);
+const failedSections = ref<string[]>([]);
+const tabSections = { requests: ["客户需求"], interests: ["关注记录", "联系记录"], leads: ["房源线索"] };
+const loading = computed(() => tabSections[tab.value].some(section => pending.value.includes(section)));
+const tabFailed = computed(() => tabSections[tab.value].some(section => failedSections.value.includes(section)));
+let loadSequence = 0;
 const load = async () => {
-  loading.value = true;
-  loadFailed.value = false;
-  try {
-    [leads.value, properties.value, requests.value, activities.value, interests.value, contactEvents.value] = await Promise.all([
-      request<PropertyLead[]>("/v1/property-leads"),
-      request<Property[]>("/v1/properties"),
-      request<RentalRequest[]>("/v1/admin/rental-requests"),
-      request<OperationLog[]>("/v1/admin/operation-logs").catch(() => []),
-	  request<FavoriteContact[]>("/v1/admin/favorite-contacts").catch(() => []),
-	  listContactEvents().catch(() => []),
-    ]);
-  } catch (error) {
-    loadFailed.value = true;
-    uni.showToast({
-      title: error instanceof Error ? error.message : "加载失败",
-      icon: "none",
-    });
-  } finally {
-    loading.value = false;
+  const sequence = ++loadSequence;
+  failedSections.value = [];
+  pending.value = ["房源线索", "房源", "客户需求", "操作记录", "关注记录", "联系记录"];
+  async function read<T>(section: string, requestData: () => Promise<T>, apply: (data: T) => void) {
+    try {
+      const data = await requestData();
+      if (sequence === loadSequence) apply(data);
+    } catch {
+      if (sequence === loadSequence) failedSections.value.push(section);
+    } finally {
+      if (sequence === loadSequence) pending.value = pending.value.filter(name => name !== section);
+    }
   }
+  await Promise.all([
+    read("房源线索", () => request<PropertyLead[]>("/v1/property-leads"), data => { leads.value = data; }),
+    read("房源", () => request<Property[]>("/v1/properties"), data => { properties.value = data; }),
+    read("客户需求", () => request<RentalRequest[]>("/v1/admin/rental-requests"), data => { requests.value = data; }),
+    read("操作记录", () => request<OperationLog[]>("/v1/admin/operation-logs"), data => { activities.value = data; }),
+    read("关注记录", () => request<FavoriteContact[]>("/v1/admin/favorite-contacts"), data => { interests.value = data; }),
+    read("联系记录", listContactEvents, data => { contactEvents.value = data; }),
+  ]);
 };
 onShow(async () => {
   permissionAudit("onShow", "admin-workbench");
@@ -57,7 +64,7 @@ onShow(async () => {
   if (!allowed) {
     uni.showToast({ title: "暂无运营权限", icon: "none" });
     permissionAudit("redirect", "admin-workbench", "pages/me/index");
-    uni.switchTab({ url: "/pages/me/index" });
+    returnToMyPage();
     return;
   }
   const requestedTab = String(uni.getStorageSync("xiaopi_admin_tab") || "");
@@ -101,10 +108,10 @@ const statusLabels: Record<string, string> = {
 };
 const statusLabel = (status?: string) => statusLabels[String(status || "new")] || status || "待联系";
 const canFollowUp = (status?: string) => !["contacted", "converted", "closed", "completed", "invalid"].includes(String(status || "new"));
-const canConvertLead = (status?: string) => !["converted", "closed"].includes(String(status || "new"));
+const canConvertLead = (status?: string) => !["converted", "closed", "invalid"].includes(String(status || "new"));
 const convert = async (lead: PropertyLead) => {
   if (!canConvertLead(lead.status)) {
-    uni.showToast({ title: lead.status === "converted" ? "这条线索已转为房源" : "已关闭的线索不能转为房源", icon: "none" });
+    uni.showToast({ title: lead.status === "converted" ? "这条线索已转为房源" : "这条线索当前不能转为房源", icon: "none" });
     return;
   }
   try {
@@ -131,12 +138,15 @@ const convert = async (lead: PropertyLead) => {
   }
 };
 const contactLead = (phoneNumber: string) => callPhone(phoneNumber, "客户手机号缺失");
-const followUp = async (type: "lead" | "request", id: string, status?: string) => {
+const followUp = async (type: "lead" | "request", id: string, status?: string, note?: string) => {
   if (!canFollowUp(status)) return;
   try {
-    await request(type === "lead" ? "/v1/property-leads/follow-up" : "/v1/admin/rental-requests/follow-up", { method:"PATCH", data:{ id, status:"contacted", followUpNote:"已在工作台联系客户" } });
+    await request(type === "lead" ? "/v1/property-leads/follow-up" : "/v1/admin/rental-requests/follow-up", { method:"PATCH", data:{ id, status:"contacted", followUpNote: note || "已在工作台联系客户" } });
     uni.showToast({ title:"已标记为已联系" }); await load();
-  } catch (error) { uni.showToast({ title:error instanceof Error ? error.message : "更新失败", icon:"none" }); }
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "更新失败", icon: "none" });
+    if (error instanceof ApiError && (error.statusCode === 404 || error.statusCode === 409)) await load();
+  }
 };
 if (import.meta.env.MODE === "test") {
   watchPostEffect(() => permissionAudit("render-state", "admin-workbench", leads.value.length + properties.value.length + requests.value.length + activities.value.length + interests.value.length + contactEvents.value.length > 0));
@@ -151,8 +161,9 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
       ><view
         ><view class="title">房源总览</view
         ></view
-      ><view class="head-actions"><button class="subscribe-reminder" :disabled="subscribingAppointmentReminders" @click="subscribeAppointmentReminders">{{ subscribingAppointmentReminders ? "处理中…" : "订阅预约提醒" }}</button><view class="refresh" @click="load">刷新</view></view></view
+      ><view class="head-actions"><button class="subscribe-reminder" :disabled="subscribingAppointmentReminders" @click="subscribeAppointmentReminders">{{ subscribingAppointmentReminders ? "处理中…" : "订阅预约提醒" }}</button><view class="refresh" @click="!pending.length && load()">刷新</view></view></view
     ><view class="subscribe-reminder-note">每次授权对应一条预约通知；可再次授权后续提醒</view
+    ><view v-if="failedSections.length" class="load-error"><text>{{ failedSections.join("、") }}加载失败，统计可能不完整。</text><button size="mini" @click="load" :disabled="!!pending.length">重试</button></view
     ><view class="summary"
       ><view
         ><strong>{{ summary.draft }}</strong
@@ -164,7 +175,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
         ><strong>{{ summary.incomplete }}</strong
         ><text>待补资料</text></view
       ></view
-    ><view class="activity-entry card" @click="openOperationLogs"><view class="activity-entry-head"><view><strong>操作记录</strong><text>分类查看并按时间回溯管理员操作</text></view><text class="activity-entry-link">查看全部 ›</text></view><view v-for="item in activities.slice(0, 3)" :key="item.id" class="activity-entry-row"><strong>{{ item.action }}</strong><text>{{ item.detail || item.targetType }}</text></view><view v-if="!activities.length" class="activity-entry-empty">暂无操作记录</view></view
+    ><view class="activity-entry card" @click="openOperationLogs"><view class="activity-entry-head"><view><strong>操作记录</strong><text>分类查看并按时间回溯管理员操作</text></view><text class="activity-entry-link">查看全部 ›</text></view><view v-for="item in activities.slice(0, 3)" :key="item.id" class="activity-entry-row"><strong>{{ item.action }}</strong><text>{{ item.detail || item.targetType }}</text></view><view v-if="!activities.length && !pending.includes('操作记录') && !failedSections.includes('操作记录')" class="activity-entry-empty">暂无操作记录</view></view
     ><view class="tabs"
       ><text id="workbench-tab-requests" :class="{ active: tab === 'requests' }" @click="tab = 'requests'"
         >客户需求 {{ requests.length }}</text
@@ -174,7 +185,6 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
         >房源线索 {{ leads.length }}</text
       ></view
     ><view v-if="loading" class="muted empty">加载中...</view
-    ><view v-else-if="loadFailed" class="empty load-error"><strong>工作台数据加载失败</strong><text>当前显示的待办和统计可能不完整。</text><button @click="load">重新加载</button></view
     ><template v-else-if="tab === 'leads'"
       ><view v-for="lead in leads" :key="lead.id" class="card item"
         ><view class="row"
@@ -188,12 +198,12 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
         ><view class="note">{{ lead.note || copyText("暂无补充说明") }}</view
         ><view class="actions"
           ><button :disabled="!lead.sourcePhone" @click="contactLead(lead.sourcePhone)">{{ lead.sourcePhone ? "联系客户" : "手机号待补" }}</button
-          ><button :disabled="!canFollowUp(lead.status)" @click="followUp('lead', lead.id, lead.status)">{{ canFollowUp(lead.status) ? "标记已联系" : statusLabel(lead.status) }}</button
+          ><button :disabled="!canFollowUp(lead.status)" @click="followUp('lead', lead.id, lead.status, lead.followUpNote)">{{ canFollowUp(lead.status) ? "标记已联系" : statusLabel(lead.status) }}</button
           ><button class="primary" :disabled="!canConvertLead(lead.status)" @click="convert(lead)">
-            {{ lead.status === "converted" ? "已转房源" : lead.status === "closed" ? "已关闭" : "转为房源草稿" }}
+            {{ lead.status === "converted" ? "已转房源" : lead.status === "closed" || lead.status === "invalid" ? statusLabel(lead.status) : "转为房源草稿" }}
           </button></view
         ></view
-      ><view v-if="!leads.length" class="empty muted"
+      ><view v-if="!tabFailed && !leads.length" class="empty muted"
         >{{ copyText("暂无房源线索") }}</view
       ></template
     ><template v-else-if="tab === 'requests'"
@@ -204,13 +214,13 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
         ><view class="muted info">{{ item.location || '地区待确认' }} · {{ item.layout || '户型不限' }}</view
         ><view class="property-meta"><text>¥ {{ item.budgetMin || 0 }}–{{ item.budgetMax || '不限' }} / 月</text><text>{{ item.moveInDate || '入住时间待定' }}</text></view
         ><view v-if="item.note" class="note">{{ item.note }}</view
-        ><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? "联系客户" : "手机号待补" }}</button><button :disabled="!canFollowUp(item.status)" @click="followUp('request', String(item.id), item.status)">{{ canFollowUp(item.status) ? "标记已联系" : statusLabel(item.status) }}</button><button class="primary" @click="openPropertyList()">匹配房源</button></view
+        ><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? "联系客户" : "手机号待补" }}</button><button :disabled="!canFollowUp(item.status)" @click="followUp('request', String(item.id), item.status, item.followUpNote)">{{ canFollowUp(item.status) ? "标记已联系" : statusLabel(item.status) }}</button><button class="primary" @click="openPropertyList()">匹配房源</button></view
         ></view
-      ><view v-if="!requests.length" class="empty muted">{{ copyText("暂无客户需求") }}</view
+      ><view v-if="!tabFailed && !requests.length" class="empty muted">{{ copyText("暂无客户需求") }}</view
       ></template
     ><template v-else-if="tab === 'interests'"
       ><view v-for="item in contactEvents" :key="item.id" class="card item"><view class="row"><view class="title small">{{ item.propertyName || '房源' }}</view><text class="status">{{ item.type === 'phone_entry_click' ? '拨号入口点击' : '咨询入口点击' }}</text></view><view class="muted">{{ item.nickname || '微信用户' }} · {{ item.phone || '手机号待绑定' }}</view><view class="property-meta"><text>{{ item.source === 'detail' ? '详情页触发' : item.source || '页面触发' }}</text><text>{{ item.createdAt ? new Date(item.createdAt).toLocaleString() : '' }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone || '')">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view
-      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!interests.length && !contactEvents.length" class="empty muted">{{ copyText("暂无用户意向") }}记录</view></template
+      ><view v-for="item in interests" :key="`${item.userId}-${item.propertyId}`" class="card item"><view class="row"><view class="title small">{{ item.propertyName }}</view><text class="status">已关注</text></view><view class="muted">{{ item.nickname || '微信用户' }}</view><view class="property-meta"><text>{{ item.phone || '手机号待绑定' }}</text><text>{{ new Date(item.createdAt).toLocaleDateString() }}</text></view><view class="actions"><button :disabled="!item.phone" @click="contactLead(item.phone)">{{ item.phone ? '联系用户' : '等待绑定手机号' }}</button></view></view><view v-if="!tabFailed && !interests.length && !contactEvents.length" class="empty muted">{{ copyText("暂无用户意向") }}记录</view></template
     ></view
   >
 </template>

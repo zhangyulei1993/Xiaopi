@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"xiaopi/backend/internal/domain"
 )
 
 type doorplate struct {
@@ -34,12 +36,23 @@ func (s *Server) doorplates(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "读取门牌库失败")
 		return
 	}
+	saveCatalog := func(payload []byte) error {
+		if atomic, ok := store.(interface {
+			CompareAndSwapAppConfig(context.Context, string, []byte, []byte) error
+		}); ok {
+			return atomic.CompareAndSwapAppConfig(r.Context(), key, raw, payload)
+		}
+		return store.UpsertAppConfig(r.Context(), key, payload)
+	}
+
 	originalRows, _ := json.Marshal(rows)
 	rows = consolidateDoorplateRows(rows)
+	previousCount := len(rows)
+	importCount := 0
 	if r.Method == http.MethodGet {
 		consolidatedRows, _ := json.Marshal(rows)
 		if !bytes.Equal(originalRows, consolidatedRows) {
-			if err := store.UpsertAppConfig(r.Context(), key, consolidatedRows); err != nil {
+			if err := saveCatalog(consolidatedRows); err != nil {
 				writeError(w, 500, "归并重复小区名称失败")
 				return
 			}
@@ -58,32 +71,32 @@ func (s *Server) doorplates(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, row)
 			}
 		}
-		if len(filtered) != len(rows) {
-			payload, marshalErr := json.Marshal(filtered)
-			if marshalErr != nil || store.UpsertAppConfig(r.Context(), key, payload) != nil {
-				writeError(w, 500, "删除小区门牌数据失败")
-				return
-			}
-		}
-		plans, planErr := loadDoorplatePlans(r.Context(), store)
-		if planErr != nil {
+
+		plansRaw, err := store.GetAppConfig(r.Context(), "doorplate_collection_plans")
+		plans := map[string]doorplatePlan{}
+		if (err != nil && !errors.Is(err, sql.ErrNoRows)) || (err == nil && json.Unmarshal(plansRaw, &plans) != nil) {
 			writeError(w, 500, "读取采集计划失败")
 			return
 		}
-		plansChanged := false
 		for name, plan := range plans {
 			if normalizeCommunityName(name) == identity || normalizeCommunityName(plan.Community) == identity {
 				delete(plans, name)
-				plansChanged = true
 			}
 		}
-		if plansChanged {
-			payload, marshalErr := json.Marshal(plans)
-			if marshalErr != nil || store.UpsertAppConfig(r.Context(), "doorplate_collection_plans", payload) != nil {
-				writeError(w, 500, "删除小区采集计划失败")
-				return
-			}
+		catalogAfter, _ := json.Marshal(filtered)
+		plansAfter, _ := json.Marshal(plans)
+		atomic, ok := store.(interface {
+			DeleteCommunityDataAtomic(context.Context, []byte, []byte, []byte, []byte) error
+		})
+		if !ok {
+			writeError(w, 503, "小区删除暂不可用")
+			return
 		}
+		if err := atomic.DeleteCommunityDataAtomic(r.Context(), raw, plansRaw, catalogAfter, plansAfter); err != nil {
+			writeError(w, 409, "小区数据已变化或保存失败，请刷新后重试")
+			return
+		}
+
 		rows = filtered
 	}
 	if r.Method == http.MethodPost {
@@ -141,9 +154,14 @@ func (s *Server) doorplates(w http.ResponseWriter, r *http.Request) {
 			}
 			input[i].Community = canonical[identity]
 		}
+		importCount = len(input)
 		rows = consolidateDoorplateRows(append(rows, input...))
-		raw, _ = json.Marshal(rows)
-		if err := store.UpsertAppConfig(r.Context(), key, raw); err != nil {
+		payload, _ := json.Marshal(rows)
+		if err := saveCatalog(payload); err != nil {
+			if errors.Is(err, domain.ErrConfigConflict) {
+				writeError(w, http.StatusConflict, "门牌库已更新，请刷新预览后重新导入")
+				return
+			}
 			writeError(w, 500, "保存门牌库失败")
 			return
 		}
@@ -162,6 +180,11 @@ func (s *Server) doorplates(w http.ResponseWriter, r *http.Request) {
 	counts := map[string]int{}
 	for _, row := range rows {
 		counts[row.Community]++
+	}
+	if r.Method == http.MethodPost && r.URL.Query().Get("receipt") == "1" {
+		added := len(rows) - previousCount
+		writeJSON(w, 200, map[string]any{"code": 0, "data": map[string]any{"counts": counts, "added": added, "duplicates": importCount - added}})
+		return
 	}
 	writeJSON(w, 200, map[string]any{"code": 0, "data": counts})
 }
@@ -282,6 +305,10 @@ func (s *Server) ensureDoorplateCollectionPlan(ctx context.Context, community st
 	rows = consolidateDoorplateRows(rows)
 	known := doorplateCommunities(rows)
 	catalogNames := known
+	locationBefore, beforeErr := store.GetAppConfig(ctx, communityLocationKey)
+	if beforeErr != nil && !errors.Is(beforeErr, sql.ErrNoRows) {
+		return beforeErr
+	}
 	locations, err := loadCommunityLocations(ctx, store)
 	if err != nil {
 		return errors.New("读取小区位置失败")
@@ -290,6 +317,10 @@ func (s *Server) ensureDoorplateCollectionPlan(ctx context.Context, community st
 		known = append(known, name)
 	}
 	const key = "doorplate_collection_plans"
+	plansBefore, beforeErr := store.GetAppConfig(ctx, "doorplate_collection_plans")
+	if beforeErr != nil && !errors.Is(beforeErr, sql.ErrNoRows) {
+		return beforeErr
+	}
 	plans, err := loadDoorplatePlans(ctx, store)
 	if err != nil {
 		return errors.New("读取采集计划失败")
@@ -339,7 +370,7 @@ func (s *Server) ensureDoorplateCollectionPlan(ctx context.Context, community st
 				if err != nil {
 					return err
 				}
-				if err := store.UpsertAppConfig(ctx, communityLocationKey, payload); err != nil {
+				if err := compareCommunityConfig(ctx, store, communityLocationKey, locationBefore, payload); err != nil {
 					return err
 				}
 			}
@@ -364,7 +395,7 @@ func (s *Server) ensureDoorplateCollectionPlan(ctx context.Context, community st
 	if err != nil {
 		return err
 	}
-	return store.UpsertAppConfig(ctx, key, payload)
+	return compareCommunityConfig(ctx, store, key, plansBefore, payload)
 }
 
 func (s *Server) doorplatePlans(w http.ResponseWriter, r *http.Request) {
@@ -399,7 +430,7 @@ func (s *Server) doorplatePlans(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		payload, err := json.Marshal(plans)
-		if err != nil || store.UpsertAppConfig(r.Context(), key, payload) != nil {
+		if err != nil || compareCommunityConfig(r.Context(), store, key, raw, payload) != nil {
 			writeError(w, 500, "删除采集计划失败")
 			return
 		}
@@ -453,12 +484,42 @@ func (s *Server) doorplatePlans(w http.ResponseWriter, r *http.Request) {
 		}
 		plans[canonical] = plan
 		payload, err := json.Marshal(plans)
-		if err != nil || store.UpsertAppConfig(r.Context(), key, payload) != nil {
+		if err != nil || compareCommunityConfig(r.Context(), store, key, raw, payload) != nil {
 			writeError(w, 500, "保存采集计划失败")
 			return
 		}
 	}
-	writeJSON(w, 200, map[string]any{"code": 0, "data": plans})
+	writeJSON(w, 200, map[string]any{"code": 0, "data": consolidateDoorplatePlans(plans)})
+}
+
+// Consolidate historical aliases for display while retaining the stored plans.
+func consolidateDoorplatePlans(plans map[string]doorplatePlan) map[string]doorplatePlan {
+	keys := make([]string, 0, len(plans))
+	for name := range plans {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+	canonical := make(map[string]string, len(keys))
+	result := make(map[string]doorplatePlan, len(keys))
+	progress := map[string]int{"pending": 1, "active": 2, "done": 3}
+	for _, name := range keys {
+		identity := normalizeCommunityName(name)
+		if identity == "" {
+			continue
+		}
+		display := canonical[identity]
+		if display == "" {
+			display = name
+			canonical[identity] = display
+		}
+		plan := plans[name]
+		current, exists := result[display]
+		if !exists || progress[plan.Status] > progress[current.Status] {
+			plan.Community = display
+			result[display] = plan
+		}
+	}
+	return result
 }
 
 type communityLocation struct {
@@ -502,6 +563,11 @@ func (s *Server) communityLocations(w http.ResponseWriter, r *http.Request) {
 		}
 		s.doorplateMu.Lock()
 		defer s.doorplateMu.Unlock()
+		locationBefore, beforeErr := store.GetAppConfig(r.Context(), communityLocationKey)
+		if beforeErr != nil && !errors.Is(beforeErr, sql.ErrNoRows) {
+			writeError(w, 500, "读取小区位置失败")
+			return
+		}
 		locations, err := loadCommunityLocations(r.Context(), store)
 		if err == nil {
 			known := make([]string, 0, len(locations))
@@ -533,10 +599,14 @@ func (s *Server) communityLocations(w http.ResponseWriter, r *http.Request) {
 			}
 			if err == nil {
 				payload, _ := json.Marshal(locations)
-				err = store.UpsertAppConfig(r.Context(), communityLocationKey, payload)
+				err = compareCommunityConfig(r.Context(), store, communityLocationKey, locationBefore, payload)
 			}
 		}
 		if err != nil {
+			if errors.Is(err, domain.ErrConfigConflict) {
+				writeError(w, 409, "小区位置已更新，请重试")
+				return
+			}
 			writeError(w, 500, "保存小区位置失败")
 			return
 		}
@@ -563,10 +633,11 @@ func consolidateCommunityLocations(locations map[string]communityLocation) map[s
 		if err != nil {
 			continue
 		}
-		// Prefer data stored under the canonical display name. Otherwise the
-		// sorted key order makes legacy alias consolidation repeatable.
-		if _, exists := result[canonical]; !exists || name == canonical {
-			result[canonical] = locations[name]
+		// Use a confirmed pin when the canonical record has an incomplete location.
+		current, exists := result[canonical]
+		candidate := locations[name]
+		if !exists || (!communityLocationHasPosition(current) && communityLocationHasPosition(candidate)) {
+			result[canonical] = candidate
 		}
 	}
 	return result
@@ -588,4 +659,13 @@ func loadCommunityLocations(ctx context.Context, store appConfigStore) (map[stri
 		locations = map[string]communityLocation{}
 	}
 	return locations, err
+}
+
+func compareCommunityConfig(ctx context.Context, storage appConfigStore, key string, before, after []byte) error {
+	if atomic, ok := storage.(interface {
+		CompareAndSwapAppConfig(context.Context, string, []byte, []byte) error
+	}); ok {
+		return atomic.CompareAndSwapAppConfig(ctx, key, before, after)
+	}
+	return storage.UpsertAppConfig(ctx, key, after)
 }

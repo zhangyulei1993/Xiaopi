@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -48,9 +49,17 @@ func (s *Server) listMaterialLibrary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createMaterial(w http.ResponseWriter, r *http.Request) {
-	var p domain.Property
-	if err := decodeJSON(w, r, &p); err != nil {
+	var input struct {
+		domain.Property
+		CreateKey string `json:"createKey"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "素材信息无效")
+		return
+	}
+	p := input.Property
+	if len(input.CreateKey) > 100 {
+		writeError(w, 400, "素材任务编号无效")
 		return
 	}
 	p.Title = strings.TrimSpace(p.Title)
@@ -71,11 +80,16 @@ func (s *Server) createMaterial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "小区分类读取失败")
 		return
 	}
-	if !containsString(categories, p.MaterialCategory) {
+	canonical, _ := resolveCommunityName(p.MaterialCategory, categories)
+	if !containsString(categories, canonical) {
 		writeError(w, http.StatusBadRequest, "请先创建或选择有效的小区分类")
 		return
 	}
-	p.Community = p.MaterialCategory
+	if strings.TrimSpace(p.Title) == p.MaterialCategory {
+		p.Title = canonical
+	}
+	p.MaterialCategory = canonical
+	p.Community = canonical
 	if strings.TrimSpace(p.Location) == "" {
 		p.Location = p.Community
 	}
@@ -84,6 +98,7 @@ func (s *Server) createMaterial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "素材创建失败")
 		return
 	}
+
 	now := time.Now()
 	p.ID = id
 	p.IsMaterial = true
@@ -91,7 +106,12 @@ func (s *Server) createMaterial(w http.ResponseWriter, r *http.Request) {
 	p.OwnerID = claimsFromContext(r.Context()).Subject
 	p.CreatedAt = now
 	p.UpdatedAt = now
-	if err := s.store.CreateProperty(r.Context(), p); err != nil {
+	p, err = s.createPropertyWithTask(r.Context(), p, input.CreateKey)
+	if err != nil {
+		if errors.Is(err, domain.ErrPropertyEditConflict) {
+			writeError(w, http.StatusConflict, "小区分类已更新，请刷新后重新选择")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "素材保存失败")
 		return
 	}
@@ -125,11 +145,8 @@ func (s *Server) deleteMaterial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "素材删除失败")
 		return
 	}
-	if target.ConvertedPropertyID == "" {
-		for _, media := range target.Media {
-			s.removeStoredUpload(media.URL)
-		}
-	}
+	// Keep committed files: converted listings may still reference the same
+	// URL, including while conversion or another edit is in flight.
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "material", id, "删除房源素材", fmt.Sprintf("%s · %s", target.MaterialCategory, target.Title))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
 }
@@ -178,31 +195,29 @@ func (s *Server) convertMaterial(w http.ResponseWriter, r *http.Request) {
 		if converted.Title == "" {
 			converted.Title = converted.Community
 		}
-		if err := s.store.CreateProperty(r.Context(), converted); err != nil {
-			writeError(w, http.StatusInternalServerError, "素材转换失败")
+		converted.Media = make([]domain.PropertyMedia, 0, len(item.Media))
+		for index, media := range item.Media {
+			mediaID, err := newID()
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "素材媒体复制失败")
+				return
+			}
+			media.ID, media.PropertyID, media.Sort = mediaID, propertyID, index
+			converted.Media = append(converted.Media, media)
+		}
+		store, ok := s.store.(interface {
+			CommitMaterialConversion(context.Context, domain.Property, domain.Property) error
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "素材转换暂不可用")
 			return
 		}
-		for index, media := range item.Media {
-			mediaID, mediaErr := newID()
-			if mediaErr != nil {
-				_ = s.store.DeleteProperty(r.Context(), propertyID)
-				writeError(w, http.StatusInternalServerError, "素材媒体复制失败")
+		if err := store.CommitMaterialConversion(r.Context(), item, converted); err != nil {
+			if errors.Is(err, domain.ErrMaterialConversionChanged) {
+				writeError(w, http.StatusConflict, "素材已更新，请重试转换")
 				return
 			}
-			media.ID = mediaID
-			media.PropertyID = propertyID
-			media.Sort = index
-			if err := s.store.AddPropertyMedia(r.Context(), media); err != nil {
-				_ = s.store.DeleteProperty(r.Context(), propertyID)
-				writeError(w, http.StatusInternalServerError, "素材媒体复制失败")
-				return
-			}
-		}
-		item.ConvertedPropertyID = propertyID
-		item.UpdatedAt = time.Now()
-		if err := s.store.UpdateProperty(r.Context(), item); err != nil {
-			_ = s.store.DeleteProperty(r.Context(), propertyID)
-			writeError(w, http.StatusInternalServerError, "素材归档失败")
+			writeError(w, http.StatusInternalServerError, "素材转换失败")
 			return
 		}
 		s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "material", id, "素材转为房源", fmt.Sprintf("%s · %s", item.Community, item.Title))
@@ -233,6 +248,8 @@ func (s *Server) materialCategories(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		Categories []string `json:"categories"`
+		Add        string   `json:"add"`
+		Remove     string   `json:"remove"`
 	}
 	if err := decodeJSON(w, r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "分类数据无效")
@@ -242,19 +259,57 @@ func (s *Server) materialCategories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "旧小区分类迁移失败")
 		return
 	}
+	before, err := store.GetAppConfig(r.Context(), materialCategoriesConfigKey)
+	if err != nil {
+		writeError(w, 500, "分类读取失败")
+		return
+	}
+	var baseline materialCategoryConfig
+	if json.Unmarshal(before, &baseline) != nil {
+		writeError(w, 500, "分类格式异常")
+		return
+	}
+	removed := []string{}
+	if input.Add != "" || input.Remove != "" {
+		input.Categories = []string{}
+		for _, name := range baseline.Communities {
+			if input.Remove != "" && normalizeCommunityName(name) == normalizeCommunityName(input.Remove) {
+				removed = append(removed, name)
+			} else {
+				input.Categories = append(input.Categories, name)
+			}
+		}
+		if input.Add != "" {
+			input.Categories = append(input.Categories, input.Add)
+		}
+	} else {
+		for _, name := range baseline.Communities {
+			found := false
+			for _, candidate := range input.Categories {
+				if normalizeCommunityName(name) == normalizeCommunityName(candidate) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				removed = append(removed, name)
+			}
+		}
+	}
 	seen := map[string]bool{}
 	categories := make([]string, 0, len(input.Categories))
 	for _, category := range input.Categories {
 		category = strings.TrimSpace(category)
-		if category == "" || len([]rune(category)) > 60 || seen[category] {
+		identity := normalizeCommunityName(category)
+		if identity == "" || len([]rune(category)) > 60 || seen[identity] {
 			continue
 		}
-		seen[category] = true
+		seen[identity] = true
 		categories = append(categories, category)
 	}
 	allowed := make(map[string]bool, len(categories))
 	for _, category := range categories {
-		allowed[category] = true
+		allowed[normalizeCommunityName(category)] = true
 	}
 	if s.store != nil {
 		properties, listErr := s.store.ListProperties(r.Context())
@@ -263,15 +318,22 @@ func (s *Server) materialCategories(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, property := range properties {
-			if property.IsMaterial && property.MaterialCategory != "" && !allowed[property.MaterialCategory] {
+			if property.IsMaterial && property.MaterialCategory != "" && !allowed[normalizeCommunityName(property.MaterialCategory)] {
 				writeError(w, http.StatusConflict, "该小区分类仍有素材，请先删除素材或转为正式房源，再移除分类")
 				return
 			}
 		}
 	}
 	payload, _ := json.Marshal(materialCategoryConfig{Version: materialCategoriesSchemaVersion, Communities: categories})
-	if err := store.UpsertAppConfig(r.Context(), materialCategoriesConfigKey, payload); err != nil {
-		writeError(w, http.StatusInternalServerError, "素材分类保存失败")
+	atomic, ok := s.store.(interface {
+		ChangeMaterialCategoriesAtomic(context.Context, []byte, []byte, []string) error
+	})
+	if !ok {
+		writeError(w, 503, "分类保存暂不可用")
+		return
+	}
+	if err := atomic.ChangeMaterialCategoriesAtomic(r.Context(), before, payload, removed); err != nil {
+		writeError(w, 409, "分类已更新或仍有素材，请刷新后重试")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": categories})
@@ -320,91 +382,51 @@ func (s *Server) renameMaterialCategory(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, "原小区分类不存在")
 		return
 	}
-	properties, err := s.store.ListProperties(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "素材读取失败")
+	atomic, ok := s.store.(interface {
+		RenameMaterialCategoryAtomic(context.Context, string, string, []byte, []byte, []byte, []byte) error
+	})
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "素材分类修改暂不可用")
 		return
 	}
-	locations, err := loadCommunityLocations(r.Context(), store)
-	if err != nil {
+	categoryRaw, err := store.GetAppConfig(r.Context(), materialCategoriesConfigKey)
+	var currentConfig materialCategoryConfig
+	if err != nil || json.Unmarshal(categoryRaw, &currentConfig) != nil || !equalStrings(currentConfig.Communities, categories) {
+		writeError(w, http.StatusConflict, "分类已更新，请刷新后重试")
+		return
+	}
+	locationRaw, err := store.GetAppConfig(r.Context(), communityLocationKey)
+	locations := map[string]communityLocation{}
+	if (err != nil && !errors.Is(err, sql.ErrNoRows)) || (err == nil && json.Unmarshal(locationRaw, &locations) != nil) {
 		writeError(w, http.StatusInternalServerError, "小区位置读取失败")
 		return
 	}
-	originalLocations := make(map[string]communityLocation, len(locations))
-	for name, location := range locations {
-		originalLocations[name] = location
+	if locations == nil {
+		locations = map[string]communityLocation{}
 	}
-	var categoryLocation *communityLocation
-	var oldLocationKey string
-	for name, location := range locations {
-		if normalizeCommunityName(name) == normalizeCommunityName(from) {
-			copy := location
-			categoryLocation = &copy
-			oldLocationKey = name
-			break
-		}
-	}
-	locationChanged := false
-	updated := make([]domain.Property, 0)
-	rollback := func() {
-		for index := len(updated) - 1; index >= 0; index-- {
-			_ = s.store.UpdateProperty(r.Context(), updated[index])
-		}
-		if locationChanged {
-			payload, _ := json.Marshal(originalLocations)
-			_ = store.UpsertAppConfig(r.Context(), communityLocationKey, payload)
-		}
-	}
-	for _, property := range properties {
-		if !property.IsMaterial || strings.TrimSpace(property.MaterialCategory) != from {
+	var nextLocations []byte
+	for name, position := range consolidateCommunityLocations(locations) {
+		if normalizeCommunityName(name) != normalizeCommunityName(from) || normalizeCommunityName(name) == normalizeCommunityName(to) {
 			continue
 		}
-		original := property
-		property.MaterialCategory = to
-		if strings.TrimSpace(property.Community) == from {
-			property.Community = to
-		}
-		if strings.TrimSpace(property.Location) == from {
-			property.Location = to
-		}
-		if strings.TrimSpace(property.Title) == from {
-			property.Title = to
-		}
-		property.UpdatedAt = time.Now()
-		if err := s.store.UpdateProperty(r.Context(), property); err != nil {
-			rollback()
-			writeError(w, http.StatusInternalServerError, "素材分类修改失败，已回滚已更新的素材")
-			return
-		}
-		updated = append(updated, original)
-	}
-	if categoryLocation != nil {
-		for name, location := range locations {
-			if normalizeCommunityName(name) != normalizeCommunityName(to) {
-				continue
-			}
-			if location != *categoryLocation {
-				rollback()
+		for target, existing := range locations {
+			if normalizeCommunityName(target) == normalizeCommunityName(to) && existing != position {
 				writeError(w, http.StatusConflict, "目标名称已关联其他小区位置")
 				return
 			}
 		}
-		if normalizeCommunityName(oldLocationKey) != normalizeCommunityName(to) {
-			locations[to] = *categoryLocation
-			payload, _ := json.Marshal(locations)
-			if err := store.UpsertAppConfig(r.Context(), communityLocationKey, payload); err != nil {
-				rollback()
-				writeError(w, http.StatusInternalServerError, "小区位置关联修改失败")
-				return
-			}
-			locationChanged = true
-		}
+		locations[to] = position
+		nextLocations, _ = json.Marshal(locations)
+		break
 	}
 	categories[fromIndex] = to
 	payload, _ := json.Marshal(materialCategoryConfig{Version: materialCategoriesSchemaVersion, Communities: categories})
-	if err := store.UpsertAppConfig(r.Context(), materialCategoriesConfigKey, payload); err != nil {
-		rollback()
-		writeError(w, http.StatusInternalServerError, "分类保存失败，已回滚素材归属")
+	if err := atomic.RenameMaterialCategoryAtomic(r.Context(), from, to, categoryRaw, locationRaw, payload, nextLocations); err != nil {
+		if errors.Is(err, domain.ErrPropertyEditConflict) {
+			writeError(w, http.StatusConflict, "分类或小区位置已更新，请刷新后重试")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "素材分类修改失败")
 		return
 	}
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "material_category", from, "修改素材小区分类", from+" → "+to)
@@ -431,12 +453,14 @@ func (s *Server) readMaterialCategories(r *http.Request) ([]string, error) {
 			_ = json.Unmarshal(raw, &categories)
 		}
 	}
-	seen := map[string]bool{}
+	updates := []domain.Property{}
+	canonical := map[string]string{}
 	clean := make([]string, 0, len(categories))
 	for _, category := range categories {
 		category = strings.TrimSpace(category)
-		if category != "" && (versioned || !legacyMaterialCategories[category]) && !seen[category] {
-			seen[category] = true
+		identity := normalizeCommunityName(category)
+		if identity != "" && (versioned || !legacyMaterialCategories[category]) && canonical[identity] == "" {
+			canonical[identity] = category
 			clean = append(clean, category)
 		}
 	}
@@ -470,34 +494,47 @@ func (s *Server) readMaterialCategories(r *http.Request) ([]string, error) {
 				property.Location = community
 				dirty = true
 			}
+			if identity := normalizeCommunityName(community); identity != "" {
+				name := canonical[identity]
+				if name == "" {
+					name = community
+					canonical[identity] = name
+					clean = append(clean, name)
+				}
+				if property.Community != name || property.MaterialCategory != name {
+					if property.Title == property.Community {
+						property.Title = name
+					}
+					if property.Location == property.Community {
+						property.Location = name
+					}
+					property.Community, property.MaterialCategory = name, name
+					dirty = true
+				}
+			}
 			if dirty {
-				if updateErr := s.store.UpdateProperty(r.Context(), property); updateErr != nil {
-					return nil, updateErr
-				}
-			}
-			category = strings.TrimSpace(property.MaterialCategory)
-			if category == "" {
-				category = community
-				if category != "" {
-					property.MaterialCategory = category
-					if strings.TrimSpace(property.Location) == "" {
-						property.Location = category
-					}
-					if updateErr := s.store.UpdateProperty(r.Context(), property); updateErr != nil {
-						return nil, updateErr
-					}
-				}
-			}
-			if category != "" && !seen[category] {
-				seen[category] = true
-				clean = append(clean, category)
+				updates = append(updates, property)
 			}
 		}
 	}
-	if !versioned || !equalStrings(categories, clean) {
+	if len(updates) > 0 || !versioned || !equalStrings(categories, clean) {
 		payload, _ := json.Marshal(materialCategoryConfig{Version: materialCategoriesSchemaVersion, Communities: clean})
-		if err := store.UpsertAppConfig(r.Context(), materialCategoriesConfigKey, payload); err != nil {
-			return nil, err
+		if atomic, ok := s.store.(interface {
+			NormalizeMaterialCategoriesAtomic(context.Context, []byte, []byte, []domain.Property) error
+		}); ok {
+			if err := atomic.NormalizeMaterialCategoriesAtomic(r.Context(), raw, payload, updates); err != nil {
+				return nil, err
+			}
+		} else {
+			// Stores used by legacy migration tests have no transaction support.
+			for _, property := range updates {
+				if err := s.store.UpdateProperty(r.Context(), property); err != nil {
+					return nil, err
+				}
+			}
+			if err := store.UpsertAppConfig(r.Context(), materialCategoriesConfigKey, payload); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return clean, nil

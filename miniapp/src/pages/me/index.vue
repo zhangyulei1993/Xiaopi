@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { refreshCurrentSession } from "../../auth/refresh-session";
 import { onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { API_ORIGIN, safeUploadUrl, resolveAssetUrl } from "../../api/client";
@@ -11,7 +12,6 @@ import {
 import {
   bindWechatPhone,
   getWechatUserProfile,
-  refreshAuth,
   updateWechatUserProfile,
   wechatLogin,
 } from "../../api/properties";
@@ -35,20 +35,23 @@ const avatarDisplay = computed(() =>
 const { presentation, loadPresentation, pageStyle } = usePagePresentation("me", "我的", "管理关注与找房需求");
 
 onShow(async () => {
-  await loadPresentation();
+  void loadPresentation();
   const session = getSession();
   role.value = session?.role || null;
-  phone.value = String(uni.getStorageSync("xiaopi_bound_phone") || "");
+  phone.value = "";
+  nickname.value = "";
+  savedNickname.value = "";
+  avatarUrl.value = "";
   if (!session) return;
   try {
-    const refreshed = await refreshAuth();
-    saveSession(refreshed.accessToken, refreshed.role);
+    const refreshed = await refreshCurrentSession();
     role.value = refreshed.role;
     const profile = await getWechatUserProfile();
+    if (getSession()?.accessToken !== refreshed.accessToken) return;
     nickname.value = profile.nickname || "";
     savedNickname.value = profile.nickname || "";
     avatarUrl.value = profile.avatarUrl || "";
-    phone.value = profile.phone || phone.value;
+    phone.value = profile.phone || "";
     const croppedAvatar = String(uni.getStorageSync("xiaopi-avatar-crop-result") || "");
     if (croppedAvatar) {
       uni.removeStorageSync("xiaopi-avatar-crop-result");
@@ -60,7 +63,6 @@ onShow(async () => {
 		phone.value = "";
 		nickname.value = "";
 		avatarUrl.value = "";
-		uni.removeStorageSync("xiaopi_bound_phone");
 	}
   }
 });
@@ -197,11 +199,11 @@ const bindPhone = async (event: {
   }
   isBindingPhone.value = true;
   try {
+    const token = getSession()?.accessToken;
     const result = await bindWechatPhone(code);
+    if (getSession()?.accessToken !== token) throw new Error("登录账号已变化，请重试");
     phone.value = result.phone;
-    uni.setStorageSync("xiaopi_bound_phone", result.phone);
-    const refreshed = await refreshAuth();
-    saveSession(refreshed.accessToken, refreshed.role);
+    const refreshed = await refreshCurrentSession();
     role.value = refreshed.role;
     uni.showToast({
       title: refreshed.role === "admin" ? "已进入管理员身份" : "手机号绑定成功",
@@ -223,7 +225,6 @@ const logout = () => {
     success: (res) => {
       if (!res.confirm) return;
       clearSession();
-      uni.removeStorageSync("xiaopi_bound_phone");
       role.value = null;
       phone.value = "";
       uni.showToast({ title: "已退出登录" });

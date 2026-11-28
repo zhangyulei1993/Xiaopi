@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { refreshCurrentSession } from "../../auth/refresh-session";
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { clearSession, getSession, saveSession } from '../../auth/session'
 import { API_ORIGIN, safeUploadUrl, resetReauthentication } from '../../api/client'
-import { getWechatUserProfile, refreshAuth, temporaryLogin, testAccessLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
+import { getWechatUserProfile, temporaryLogin, testAccessLogin, updateWechatUserProfile, wechatLogin } from '../../api/properties'
 import { usePagePresentation } from '../../utils/presentation'
 
 const isLoggingIn = ref(false)
@@ -42,9 +43,8 @@ const showLoginError = (message = '登录失败，请稍后重试') => {
 
 const enterApp = () => uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/home/index' }) })
 
-const completeLogin = async (accessToken: string, role?: 'user' | 'admin', boundPhone = '', askProfile = false) => {
+const completeLogin = async (accessToken: string, role?: 'user' | 'admin', askProfile = false) => {
   saveSession(accessToken, role === 'admin' ? 'admin' : 'user')
-  if (boundPhone) uni.setStorageSync('xiaopi_bound_phone', boundPhone)
   if (askProfile) {
     try {
       const profile = await getWechatUserProfile()
@@ -71,7 +71,7 @@ const loginWithWechat = () => {
     success: async (res) => {
       try {
         const result = await wechatLogin(res.code)
-        await completeLogin(result.accessToken, result.role, '', true)
+        await completeLogin(result.accessToken, result.role, true)
       } catch (error) {
         showLoginError(error instanceof Error ? error.message : undefined)
       } finally {
@@ -94,16 +94,13 @@ const loginWithAccessCode = async () => {
   isLoggingIn.value = true
   try {
     clearSession()
-    uni.removeStorageSync('xiaopi_bound_phone')
     uni.removeStorageSync('xiaopi_show_favorites')
     const result = testLoginEnabled
       ? await testAccessLogin(phone.value.trim(), accessCode.value.trim())
       : await temporaryLogin(phone.value.trim(), accessCode.value.trim())
     if (testLoginEnabled && !result.testOnly) throw new Error('测试登录服务未启用')
     saveSession(result.accessToken, result.role === 'admin' ? 'admin' : 'user')
-    const refreshed = await refreshAuth()
-    saveSession(refreshed.accessToken, refreshed.role)
-    uni.setStorageSync('xiaopi_bound_phone', result.phone)
+    await refreshCurrentSession()
     uni.removeStorageSync('xiaopi_show_favorites')
     uni.showToast({ title: '登录成功' })
     setTimeout(enterApp, 300)

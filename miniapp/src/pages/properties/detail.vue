@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DetailMediaGallery from "../../components/DetailMediaGallery.vue";
 import { onLoad, onPageScroll, onShow, onShareAppMessage } from "@dcloudio/uni-app";
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { request, resolveAssetUrl, safeDownloadUrl } from "../../api/client";
@@ -10,12 +11,13 @@ import {
 	getWechatUserProfile,
   listFavorites,
   listProperties,
-	recordContactEvent,
+  getPropertyDetail,
   recordFootprint,
   setFavorite,
   type Property,
 } from "../../api/properties";
 import { getSession } from "../../auth/session";
+import { flushPendingContactEvents, recordOrQueueContact } from "../../utils/contact-event-queue";
 import { amenityIcon } from "../../utils/amenities";
 import { callPhone } from "../../utils/phone";
 import { usePagePresentation } from "../../utils/presentation";
@@ -94,7 +96,15 @@ const { presentation, loadPresentation, pageStyle } = usePagePresentation(
   "房源详情",
   "真实房源，放心查看",
 );
+let audienceToken = "";
 const syncAudience = () => {
+  const token = getSession()?.accessToken || "";
+  if (token !== audienceToken) {
+    audienceToken = token;
+    boundPhone.value = "";
+    appointmentName.value = "";
+    appointmentOpen.value = false;
+  }
   activeRole.value = getSession()?.role || "";
   if (activeRole.value !== "admin") return;
   // A management login must never inherit a tenant-side action from the page
@@ -108,12 +118,12 @@ const load = async (id = "") => {
   loadFailed.value = false;
   try {
     await loadPresentation();
-    const [items, config] = await Promise.all([
-      listProperties(),
+    const [property, config] = await Promise.all([
+      getPropertyDetail(id),
       getPublicConfig().catch(() => null),
     ]);
-    allProperties.value = items;
-    item.value = items.find((property) => property.id === id) || null;
+    allProperties.value = [];
+    item.value = property;
 	if (item.value && getSession()?.role === "user") await recordFootprint(id).catch(() => null);
     activeMediaIndex.value = 0;
     playingVideoIndex.value = -1;
@@ -128,6 +138,11 @@ const load = async (id = "") => {
       facilities: config?.propertyDetail?.facilities?.length ? config.propertyDetail.facilities : defaultDetailFacilities,
     };
     featuredChannels.value = config?.featuredChannels || [];
+    if (detailModuleEnabled("nearby")) {
+      void listProperties().then(items => {
+        if (item.value?.id === id) allProperties.value = items;
+      }).catch(() => undefined);
+    }
     const publicFields = Array.isArray(config?.listingTitle?.enabledFields)
       ? config!.listingTitle!.enabledFields!
       : ["community", "layout", "rentType", "fee"];
@@ -149,8 +164,10 @@ const load = async (id = "") => {
     };
     if (activeRole.value === "user") {
       favorite.value = (await listFavorites().catch((): string[] => [])).includes(id);
-		const profile = await getWechatUserProfile().catch(() => null);
-		boundPhone.value = String(profile?.phone || uni.getStorageSync("xiaopi_bound_phone") || "");
+		const token = getSession()?.accessToken;
+    const profile = await getWechatUserProfile().catch(() => null);
+    if (getSession()?.accessToken !== token) return;
+		boundPhone.value = String(profile?.phone || "");
 		if (!appointmentName.value) appointmentName.value = String(profile?.nickname || "").trim();
 	}
 		resumePendingAction();
@@ -783,8 +800,10 @@ const closeAppointmentFromBackdrop = (event: Event) => {
 const openAppointment = async () => {
   if (!item.value || !requireUser("appointment")) return;
   if (!boundPhone.value) {
+    const token = getSession()?.accessToken;
     const profile = await getWechatUserProfile().catch(() => null);
-    boundPhone.value = String(profile?.phone || uni.getStorageSync("xiaopi_bound_phone") || "");
+    if (getSession()?.accessToken !== token) return;
+    boundPhone.value = String(profile?.phone || "");
     if (!appointmentName.value) appointmentName.value = String(profile?.nickname || "").trim();
   }
   appointmentOpen.value = true;
@@ -801,9 +820,10 @@ const bindAppointmentPhone = async (event: { detail: { code?: string } }) => {
   if (!code || appointmentBinding.value) return;
   appointmentBinding.value = true;
   try {
+    const token = getSession()?.accessToken;
     const result = await bindWechatPhone(code);
+    if (getSession()?.accessToken !== token) return;
     boundPhone.value = result.phone;
-    uni.setStorageSync("xiaopi_bound_phone", result.phone);
     uni.showToast({ title: "手机号已绑定" });
   } catch (error) {
     uni.showToast({ title: error instanceof Error ? error.message : "手机号绑定失败", icon: "none" });
@@ -845,26 +865,8 @@ const submitAppointment = async () => {
   }
 };
 type ContactEntryType = "consult_entry_click" | "phone_entry_click";
-const pendingContactEventsKey = "xiaopi_pending_contact_events";
-const pendingContactEvents = () => (uni.getStorageSync(pendingContactEventsKey) as Array<{ propertyId: string; type: ContactEntryType }> | undefined) || [];
-const queueContactEvent = (propertyId: string, type: ContactEntryType) => {
-  const queued = pendingContactEvents().filter((event) => event.propertyId !== propertyId || event.type !== type);
-  uni.setStorageSync(pendingContactEventsKey, [...queued, { propertyId, type }].slice(-10));
-};
-const flushPendingContactEvents = async () => {
-  if (getSession()?.role !== "user") return;
-  const remaining: Array<{ propertyId: string; type: ContactEntryType }> = [];
-  for (const event of pendingContactEvents()) {
-    try { await recordContactEvent({ ...event, source: "detail" }); }
-    catch { remaining.push(event); }
-  }
-  if (remaining.length) uni.setStorageSync(pendingContactEventsKey, remaining);
-  else uni.removeStorageSync(pendingContactEventsKey);
-};
 const recordContact = (type: ContactEntryType) => {
-  if (getSession()?.role !== "user" || !item.value) return;
-  const propertyId = item.value.id;
-  void recordContactEvent({ propertyId, type, source: "detail" }).catch(() => queueContactEvent(propertyId, type));
+  if (item.value) recordOrQueueContact({ propertyId: item.value.id, type });
 };
 const openProperty = (id: string) =>
   uni.redirectTo({ url: `/pages/properties/detail?id=${id}` });
@@ -946,59 +948,15 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
     ><text>房源暂时加载失败</text><small>检查网络后重试，或返回列表稍后再看。</small><button @click="retryLoad">重新加载</button></view
     ><view v-else-if="item" class="page detail-page" :class="{ 'admin-detail-view': isAdmin }" :style="pageStyle">
     <canvas canvas-id="share-card-canvas" class="share-card-canvas" :width="600" :height="480"></canvas>
-    <view v-if="showScrolledTitle" class="detail-scrolled-header" :style="{ paddingTop: `${statusBarHeight}px` }">
-      <view class="detail-scrolled-back" @click="goBack"><text>‹</text></view>
-      <text class="detail-scrolled-title">{{ presentation.title || "房源详情" }}</text>
-    </view>
-    <view v-if="!showScrolledTitle" class="detail-media-back" @click="goBack"><text>‹</text></view>
+    <cover-view v-if="showScrolledTitle" class="detail-scrolled-header" :style="{ height: `${statusBarHeight + 44}px` }">
+      <cover-view class="detail-scrolled-back" @tap.stop="goBack">‹</cover-view>
+      <cover-view class="detail-scrolled-title">{{ presentation.title || "房源详情" }}</cover-view>
+    </cover-view>
+    <cover-view v-if="!showScrolledTitle" class="detail-media-back" @tap.stop="goBack"><cover-view class="detail-back-glyph">‹</cover-view></cover-view>
     <view v-if="!mediaItems.length" class="detail-cover detail-cover-empty"
       ><image class="property-placeholder-image" :src="propertyPlaceholderIcon" mode="aspectFit" /><text>{{ copyText("暂无实拍图") }}</text><small>{{ copyText("联系小皮了解房源详情") }}</small></view
-    ><view v-else class="media-gallery" :class="{ 'portrait-video': activeVideoIsPortrait, 'video-active': mediaItems[activeMediaIndex]?.type === 'video', 'video-playing': playingVideoIndex === activeMediaIndex }"
-      ><swiper class="media-swiper" :style="{ height: `${mediaViewportHeight}rpx` }" circular :current="activeMediaIndex" @change="handleMediaChange">
-        <swiper-item v-for="(media, index) in mediaItems" :key="`${media.url}-${index}`">
-          <image
-            v-if="media.type === 'image' && shouldLoadMedia(index)"
-            class="media-image"
-            :src="mediaUrl(media.url)"
-            lazy-load
-            mode="aspectFill"
-            :show-menu-by-longpress="false"
-            @click="previewImage(media.url)" />
-          <view v-else-if="media.type === 'video' && shouldLoadMedia(index)" class="video-stage">
-            <video
-              :id="`detail-video-${index}`"
-              class="media-video"
-              :src="mediaUrl(media.url)"
-              :poster="videoPoster"
-              controls
-              show-play-btn
-              :show-center-play-btn="true"
-              show-progress
-              show-fullscreen-btn
-              enable-progress-gesture
-              enable-play-gesture
-              preload="metadata"
-              object-fit="cover"
-              @longpress="showVideoActions(index)"
-              @loadedmetadata="readVideoMetadata(index, $event)"
-              @play="onVideoPlay(index)"
-              @pause="playingVideoIndex = -1"
-              @ended="playingVideoIndex = -1"
-            ></video>
-          </view>
-          <view v-else class="media-loading">加载媒体中</view>
-        </swiper-item>
-      </swiper
-      ><view v-if="showMediaFullscreenHint && (mediaItems[activeMediaIndex]?.type !== 'video' || playingVideoIndex === activeMediaIndex)" class="media-fullscreen-hint" :class="{ 'video-hint': mediaItems[activeMediaIndex]?.type === 'video', 'image-hint': mediaItems[activeMediaIndex]?.type !== 'video' }"><text>{{ mediaItems[activeMediaIndex]?.type === 'video' ? '全屏观看' : '点击图片查看大图' }}</text><text class="hint-arrow">{{ mediaItems[activeMediaIndex]?.type === 'video' ? '↘' : '↗' }}</text></view>
-      <view v-if="isAdmin && mediaItems[activeMediaIndex]?.type === 'video'" class="video-actions-button" @click.stop="showVideoActions(activeMediaIndex)">视频操作</view>
-      <view v-if="imageMediaIndices.length || videoMediaIndex >= 0" class="media-strip">
-        <view class="media-strip-row">
-          <view v-if="videoMediaIndex >= 0" class="media-thumb video" :class="{ active: activeMediaIndex === videoMediaIndex }" @click="selectMedia(videoMediaIndex)"><text class="media-thumb-label">视频</text></view>
-          <view v-if="imageMediaIndices.length" class="media-thumb" :class="{ active: mediaItems[activeMediaIndex]?.type === 'image' }" @click="selectMedia(mediaItems[activeMediaIndex]?.type === 'image' ? activeMediaIndex : imageMediaIndices[0])"><text class="media-thumb-label">照片 {{ mediaItems[activeMediaIndex]?.type === 'image' ? activeImageNumber : 1 }}/{{ imageMediaIndices.length }}</text></view>
-        </view>
-      </view>
-      </view
-    ><view v-if="detailModuleEnabled('overview')" class="card overview"
+    ><DetailMediaGallery v-else :media-items="mediaItems" :active-media-index="activeMediaIndex" :playing-video-index="playingVideoIndex" :active-video-is-portrait="activeVideoIsPortrait" :video-poster="videoPoster" :show-media-fullscreen-hint="showMediaFullscreenHint" :image-media-indices="imageMediaIndices" :video-media-index="videoMediaIndex" :active-image-number="activeImageNumber" :is-admin="isAdmin" @image-click="previewImage" @video-action="showVideoActions" @change="handleMediaChange" @select="selectMedia" @metadata="readVideoMetadata" @play="onVideoPlay" @stop="playingVideoIndex = -1" />
+    <view v-if="detailModuleEnabled('overview')" class="card overview"
       ><view v-if="isAdminPreview" class="admin-preview-tag">{{ adminPreviewLabel }}</view
       ><view class="overview-top"
         ><view class="price" :class="{ pending: priceText === '待补充' }">{{ priceText }} <text class="price-unit">{{ priceUnit }}</text></view
@@ -1420,7 +1378,7 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .detail-page{padding:0 24rpx 250rpx}.detail-page-head{display:none}.media-gallery{margin:0 -24rpx;border-radius:0;box-shadow:none}.media-strip{position:absolute;z-index:3;right:18rpx;bottom:calc(16px + 1px);left:18rpx;width:auto;margin:0;white-space:nowrap;transition:opacity .18s ease}.media-strip-row{gap:8rpx;padding:0}.media-thumb{position:relative;width:66rpx;height:48rpx;padding:0;overflow:hidden;border:1rpx solid rgba(255,255,255,.68);border-radius:8rpx;background:rgba(28,38,30,.24);box-shadow:0 3rpx 10rpx rgba(0,0,0,.2);box-sizing:border-box}.media-thumb image{width:100%;height:100%;opacity:.66}.media-thumb .media-thumb-label{position:absolute;right:0;bottom:0;left:0;padding:3rpx 2rpx;background:rgba(28,38,30,.66);color:#fff;font-size:14rpx;line-height:1.15;text-align:center}.media-thumb.video .media-thumb-label{top:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(34,50,37,.76);font-size:16rpx}.media-thumb.active{border-color:#fff;box-shadow:0 0 0 2rpx rgba(64,84,63,.72),0 3rpx 10rpx rgba(0,0,0,.2)}.media-thumb small{display:none}.media-counter{bottom:16rpx;right:18rpx;font-size:18rpx}.media-gallery.video-active .media-strip{bottom:calc(104rpx - 20px + 1px)}
 .media-fullscreen-hint{position:absolute;z-index:4;right:76rpx;bottom:calc(3px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:7rpx;padding:10rpx 14rpx;border:1rpx solid rgba(255,255,255,.34);border-radius:999rpx;background:rgba(18,25,19,.56);box-shadow:0 3rpx 12rpx rgba(0,0,0,.14);color:rgba(255,255,255,.94);font-size:20rpx;white-space:nowrap;pointer-events:none}.media-fullscreen-hint.video-hint{animation:video-hint-pulse 1s ease-in-out 3}.media-fullscreen-hint.image-hint{top:50%;right:auto;bottom:auto;left:50%;padding:13rpx 18rpx;transform:translate(-50%,-50%);font-size:22rpx;animation:media-image-hint-in .25s ease both}.media-fullscreen-hint .hint-arrow{font-size:22rpx}@keyframes video-hint-pulse{0%,100%{opacity:1}50%{opacity:.42}}@keyframes media-image-hint-in{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
 .media-thumb{display:flex;width:auto;min-width:66rpx;align-items:center;justify-content:center;padding:0 15rpx;border-color:rgba(255,255,255,.58);background:rgba(27,38,29,.48)}.media-thumb.video{min-width:66rpx;padding:0 15rpx;background:rgba(27,38,29,.62);font-size:inherit}.media-thumb .media-thumb-label{position:static;display:block;padding:0;background:transparent;color:rgba(255,255,255,.96);font-size:17rpx;font-weight:600;line-height:1;white-space:nowrap}.media-thumb.active{border-color:rgba(255,255,255,.96);background:rgba(55,77,56,.82);box-shadow:0 0 0 2rpx rgba(255,255,255,.35),0 3rpx 10rpx rgba(0,0,0,.2)}
-.detail-page{position:relative}.detail-media-back{position:absolute;z-index:6;top:calc(var(--status-bar-height, 0px) + 16rpx);left:22rpx;display:grid;width:58rpx;height:58rpx;place-items:center;border:1rpx solid rgba(255,255,255,.56);border-radius:50%;background:rgba(23,31,24,.38);box-shadow:0 3rpx 12rpx rgba(0,0,0,.16)}.detail-media-back text{color:#fff;font-size:54rpx;font-weight:300;line-height:48rpx;transform:translateY(-3rpx)}.detail-media-back:active{opacity:.75;transform:scale(.96)}
+.detail-page{position:relative}.detail-media-back{position:absolute;z-index:6;top:calc(var(--status-bar-height, 0px) + 16rpx);left:22rpx;display:grid;width:88rpx;height:88rpx;place-items:center;border:1rpx solid rgba(255,255,255,.56);border-radius:50%;background:rgba(23,31,24,.38);box-shadow:0 3rpx 12rpx rgba(0,0,0,.16)}.detail-media-back .detail-back-glyph{color:#fff;font-size:54rpx;font-weight:300;line-height:88rpx;text-align:center}.detail-media-back:active{opacity:.75;transform:scale(.96)}
 .detail-module-kicker{margin-top:18rpx;color:#80907a;font-size:20rpx;font-weight:700;letter-spacing:1rpx;line-height:1.2}.detail-section-heading.compact{margin-bottom:18rpx}.location-heading>text{flex:none;padding:6rpx 10rpx;border-radius:8rpx;background:#edf0dc;color:#536a45;font-size:19rpx;font-weight:700}
 .facility-group-label{margin:0 0 16rpx;color:#667362;font-size:21rpx;font-weight:700;letter-spacing:.5rpx}.facility-group-label.environment-label{margin-top:24rpx}.amenity-grid{padding-bottom:2rpx}.environment-list{margin-top:0}.nearby-card{padding:26rpx!important}.nearby-heading{margin-bottom:18rpx}.nearby-item{display:grid;grid-template-columns:170rpx minmax(0,1fr);gap:18rpx;min-height:0;padding:18rpx 0;border-top:1rpx solid #eeece7}.nearby-cover{display:grid;width:170rpx;height:126rpx;overflow:hidden;place-items:center;border-radius:15rpx;background:#e9ede3;color:#687563;font-size:23rpx;font-weight:700}.nearby-cover image{display:block;width:100%;height:100%}.nearby-content{display:flex;min-width:0;flex-direction:column}.nearby-content>strong{display:-webkit-box;overflow:hidden;color:#29382d;font-size:25rpx;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.nearby-content>small{overflow:hidden;margin-top:7rpx;color:#7e887d;font-size:20rpx;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.nearby-footer{display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto}.nearby-footer>text{color:#879084;font-size:19rpx}.nearby-price{text-align:left}.nearby-price strong{color:#d76440;font-size:28rpx;line-height:1}.nearby-price strong small{display:inline;margin:0 0 0 2rpx;color:#9b8d83;font-size:17rpx;font-weight:500}.nearby-more{border-radius:12rpx;background:#f2f4ed;line-height:58rpx}
 .nearby-heading{margin-bottom:14rpx}.nearby-item{grid-template-columns:184rpx minmax(0,1fr);gap:14rpx;margin-bottom:12rpx;padding:10rpx;border:1rpx solid #e9e1d7;border-radius:16rpx;background:#fffdf9;box-shadow:0 5rpx 14rpx rgba(72,70,50,.04)}.nearby-cover{position:relative;width:184rpx;height:138rpx;border-radius:11rpx}.nearby-cover>small{position:absolute;top:7rpx;left:7rpx;margin:0;padding:4rpx 7rpx;border-radius:6rpx;background:#168d82;color:#fff;font-size:17rpx;font-weight:750;line-height:1}.nearby-content{min-height:138rpx;padding:2rpx 2rpx 1rpx 0}.nearby-content>strong{font-size:24rpx;line-height:1.32;-webkit-line-clamp:2}.nearby-content>.nearby-area{margin-top:5rpx;color:#778176;font-size:19rpx;line-height:1.25}.nearby-tags{display:flex;gap:5rpx;overflow:hidden;margin-top:7rpx;white-space:nowrap}.nearby-tags text{flex:none;padding:4rpx 6rpx;border-radius:5rpx;background:#edf0dc;color:#536a45;font-size:16rpx;line-height:1.1}.nearby-tags text:nth-child(2n){background:#f8eadf;color:#b7644b}.nearby-price strong{font-size:27rpx}.nearby-more{margin-top:2rpx;line-height:62rpx}
@@ -1438,9 +1396,9 @@ function copyText(fallback: string) { return presentation.value?.copy?.[fallback
 .detail-tags-classic .detail-tags,.detail-tags-grouped{padding:0;border-radius:0;background:transparent;gap:8rpx}.detail-tags-classic .detail-tags text,.detail-tags-grouped text{background:#fff!important;border:1rpx solid #dce4d5}
 .floating-appointment{position:fixed;z-index:8;top:50%;right:24rpx;display:flex;width:96rpx;height:96rpx;flex-direction:column;align-items:center;justify-content:center;gap:3rpx;margin:0;padding:0;border:0;border-radius:26rpx;transform:translateY(-50%);background:#40543f;box-shadow:0 10rpx 24rpx rgba(38,57,38,.24);color:#fff;line-height:1}.floating-appointment::after{border:0}.floating-appointment text{font-size:25rpx;font-weight:800}.floating-appointment small{font-size:19rpx;line-height:1}.floating-appointment:active{opacity:.8;transform:translateY(-50%) scale(.96)}.appointment-mask{position:fixed;z-index:30;inset:0;display:flex;align-items:flex-end;background:rgba(20,30,22,.46)}.appointment-sheet{box-sizing:border-box;width:100%;padding:30rpx 30rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:30rpx 30rpx 0 0;background:#fffdf9}.appointment-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:26rpx}.appointment-sheet-head view{display:flex;min-width:0;flex-direction:column;gap:8rpx}.appointment-sheet-head strong{color:#2c3b2e;font-size:36rpx;line-height:1.2}.appointment-sheet-head view text{overflow:hidden;color:#7a8378;font-size:23rpx;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.appointment-sheet-head>text{width:54rpx;height:54rpx;border-radius:50%;background:#f0f1eb;color:#667260;font-size:42rpx;line-height:49rpx;text-align:center}.appointment-field{padding:22rpx 0;border-top:1rpx solid #ecebe5}.appointment-field>text{display:block;margin-bottom:15rpx;color:#697568;font-size:22rpx}.appointment-field input{height:78rpx;padding:0 20rpx;border-radius:14rpx;background:#f4f5ef;color:#2f3d30;font-size:28rpx}.appointment-field strong{color:#334032;font-size:30rpx;font-weight:600}.appointment-times{display:flex;flex-wrap:wrap;gap:8rpx}.appointment-times text{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-height:64rpx;padding:0 12rpx;border:1rpx solid #dfe5d9;border-radius:10rpx;background:#fff;color:#667260;font-size:22rpx;line-height:1.2;text-align:center}.appointment-times text.active{border-color:#40543f;background:#40543f;color:#fff}.appointment-submit,.appointment-bind button{margin-top:26rpx;border-radius:16rpx;background:#40543f;color:#fff;font-size:28rpx;font-weight:750}.appointment-submit::after,.appointment-bind button::after{border:0}.appointment-bind{display:flex;flex-direction:column;gap:13rpx;padding:16rpx 0}.appointment-bind strong{color:#334032;font-size:30rpx}.appointment-bind text{color:#7b8579;font-size:23rpx;line-height:1.55}.appointment-bind button{width:100%}
 .detail-scrolled-header{position:fixed;z-index:24;top:0;right:0;left:0;box-sizing:content-box;height:36px;background:rgba(255,253,249,.98);box-shadow:0 1px 8px rgba(40,52,39,.08);}
-.detail-scrolled-back{position:absolute;bottom:0;left:14px;display:grid;width:36px;height:36px;place-items:center;color:#40543f;}
+.detail-scrolled-back{position:absolute;bottom:0;left:14px;display:block;width:44px;height:44px;text-align:center;font-size:34px;line-height:44px;color:#40543f;}
 .detail-scrolled-back text{font-size:34px;font-weight:300;line-height:1;}
-.detail-scrolled-title{position:absolute;right:98px;bottom:0;left:98px;overflow:hidden;height:36px;color:#29382d;font-size:15px;font-weight:700;line-height:36px;text-align:center;text-overflow:ellipsis;white-space:nowrap;}
+.detail-scrolled-title{position:absolute;right:98px;bottom:0;left:98px;overflow:hidden;height:44px;color:#29382d;font-size:15px;font-weight:700;line-height:44px;text-align:center;text-overflow:ellipsis;white-space:nowrap;}
 .detail-cover-empty .property-placeholder-image{width:132rpx;height:104rpx;opacity:.8;}
 .detail-cover-empty{gap:9rpx;}
 </style>

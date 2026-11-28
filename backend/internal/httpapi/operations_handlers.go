@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,7 +22,15 @@ func (s *Server) updatePropertyLeadFollowUp(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := s.store.UpdatePropertyLeadFollowUp(r.Context(), input.ID, input.Status, strings.TrimSpace(input.FollowUpNote)); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to update lead")
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "该房源线索已不存在，请刷新列表")
+			return
+		}
+		if errors.Is(err, domain.ErrLeadFollowUpConflict) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "房源线索跟进保存失败")
 		return
 	}
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "lead", input.ID, "更新客户线索", input.Status)
@@ -38,7 +48,11 @@ func (s *Server) updateRentalRequestFollowUp(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := s.store.UpdateRentalRequestFollowUp(r.Context(), input.ID, input.Status, strings.TrimSpace(input.FollowUpNote)); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to update request")
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "该租客需求已不存在，请刷新列表")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "租客需求跟进保存失败")
 		return
 	}
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "request", input.ID, "更新客户需求", input.Status)
@@ -123,6 +137,40 @@ func (s *Server) listContactEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+}
+
+func (s *Server) queryContactEvents(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	page, pageSize := 1, 20
+	for _, field := range []struct {
+		name  string
+		value *int
+		max   int
+	}{{"page", &page, 1_000_000}, {"pageSize", &pageSize, 100}} {
+		if raw := query.Get(field.name); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value < 1 || value > field.max {
+				writeError(w, http.StatusBadRequest, "分页参数不正确")
+				return
+			}
+			*field.value = value
+		}
+	}
+	store, ok := s.store.(interface {
+		ListContactEventsPage(context.Context, int, int) ([]domain.ContactEvent, int, error)
+	})
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "联系记录分页暂不可用")
+		return
+	}
+	items, total, err := store.ListContactEventsPage(r.Context(), pageSize, (page-1)*pageSize)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "联系记录读取失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": map[string]any{
+		"items": items, "total": total, "page": page, "pageSize": pageSize,
+	}})
 }
 
 func (s *Server) createContactEvent(w http.ResponseWriter, r *http.Request) {
@@ -227,27 +275,53 @@ func (s *Server) createRentalRequest(w http.ResponseWriter, r *http.Request) {
 	item.UserID = userID
 	item.Status = "new"
 	item.CreatedAt = time.Now()
-	// Protect against double taps and network retries. The store lookup also
-	// covers a retried request after the process has restarted.
-	if item.RequestType == "appointment" {
-		s.appointmentMu.Lock()
-		defer s.appointmentMu.Unlock()
-		current, err := s.store.FindRecentAppointment(r.Context(), userID, item.PropertyID, item.CreatedAt.Add(-30*time.Minute))
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to check appointment")
-			return
-		}
-		if current != nil {
-			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "appointment already submitted", "data": current})
-			return
-		}
-	}
-	item.ID, _ = newID()
-	if err := s.store.CreateRentalRequest(r.Context(), item); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create rental request")
+	id, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create request id")
 		return
 	}
-	go s.notifyAdminsOfRequest(context.Background(), item)
+	item.ID = id
+	store, atomicAppointment := s.store.(interface {
+		CreateAppointmentOnce(context.Context, domain.RentalRequest) (*domain.RentalRequest, error)
+	})
+	if item.RequestType == "appointment" && atomicAppointment {
+		existing, err := store.CreateAppointmentOnce(r.Context(), item)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "可租房源不存在或已下架")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create appointment")
+			return
+		}
+		if existing != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "appointment already submitted", "data": existing})
+			return
+		}
+	} else {
+		// Protect against double taps and network retries. The store lookup also
+		// covers a retried request after the process has restarted.
+		if item.RequestType == "appointment" {
+			s.appointmentMu.Lock()
+			defer s.appointmentMu.Unlock()
+			current, err := s.store.FindRecentAppointment(r.Context(), userID, item.PropertyID, item.CreatedAt.Add(-30*time.Minute))
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to check appointment")
+				return
+			}
+			if current != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "appointment already submitted", "data": current})
+				return
+			}
+		}
+		if err := s.store.CreateRentalRequest(r.Context(), item); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create rental request")
+			return
+		}
+	}
+	if !s.hasSubscriptionOutbox() {
+		go s.notifyAdminsOfRequest(context.Background(), item, 0)
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"code": 0, "message": "success", "data": item})
 }
 
@@ -260,7 +334,35 @@ func (s *Server) listMyRentalRequests(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list rental requests")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": items})
+	type customerRequest struct {
+		ID                string    `json:"id"`
+		RequestType       string    `json:"requestType"`
+		PropertyID        string    `json:"propertyId,omitempty"`
+		PropertyTitle     string    `json:"propertyTitle,omitempty"`
+		PropertyAvailable bool      `json:"propertyAvailable"`
+		ContactName       string    `json:"contactName"`
+		Phone             string    `json:"phone"`
+		PreferredTime     string    `json:"preferredTime"`
+		Location          string    `json:"location"`
+		Layout            string    `json:"layout"`
+		BudgetMin         int64     `json:"budgetMin"`
+		BudgetMax         int64     `json:"budgetMax"`
+		MoveInDate        string    `json:"moveInDate"`
+		Note              string    `json:"note"`
+		Status            string    `json:"status"`
+		CreatedAt         time.Time `json:"createdAt"`
+	}
+	result := make([]customerRequest, 0, len(items))
+	for _, item := range items {
+		result = append(result, customerRequest{
+			ID: item.ID, RequestType: item.RequestType, PropertyID: item.PropertyID, PropertyTitle: item.PropertyTitle,
+			PropertyAvailable: item.PropertyAvailable, ContactName: item.ContactName, Phone: item.Phone,
+			PreferredTime: item.PreferredTime, Location: item.Location, Layout: item.Layout,
+			BudgetMin: item.BudgetMin, BudgetMax: item.BudgetMax, MoveInDate: item.MoveInDate, Note: item.Note,
+			Status: item.Status, CreatedAt: item.CreatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": result})
 }
 
 func (s *Server) listFavoriteContacts(w http.ResponseWriter, r *http.Request) {

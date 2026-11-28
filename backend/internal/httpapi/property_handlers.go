@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,6 +33,17 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
+		if r.URL.Query().Get("view") == "map" {
+			if store, ok := s.store.(appConfigStore); ok {
+				locations, err := loadCommunityLocations(r.Context(), store)
+				if err != nil {
+					log.Printf("load confirmed community map positions: %v", err)
+				} else {
+					items = append([]domain.Property(nil), items...)
+					applyConfirmedMapPositions(items, locations)
+				}
+			}
+		}
 		if showAll {
 			writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": withoutMaterials(items)})
 			return
@@ -54,6 +66,42 @@ func (s *Server) listProperties(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success", "data": publicProperties(s.properties, config)})
+}
+
+func (s *Server) getPropertyDetail(w http.ResponseWriter, r *http.Request) {
+	item, ok := s.findProperty(r.Context(), r.PathValue("id"))
+	if !ok || item.IsMaterial {
+		writeError(w, http.StatusNotFound, "房源不存在或不可见")
+		return
+	}
+	if claims, ok := s.optionalClaims(r); ok && s.effectiveRole(r.Context(), claims) == roleAdmin {
+		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "data": item})
+		return
+	}
+	if item.Status != domain.PropertyAvailable {
+		writeError(w, http.StatusNotFound, "房源不存在或不可见")
+		return
+	}
+	config, err := s.loadPublicConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "房源配置读取失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "data": publicProperties([]domain.Property{item}, config)[0]})
+}
+
+func applyConfirmedMapPositions(items []domain.Property, locations map[string]communityLocation) {
+	confirmed := make(map[string]communityLocation)
+	for name, location := range consolidateCommunityLocations(locations) {
+		if communityLocationHasPosition(location) {
+			confirmed[normalizeCommunityName(name)] = location
+		}
+	}
+	for index := range items {
+		if location, ok := confirmed[normalizeCommunityName(items[index].Community)]; ok {
+			items[index].Latitude, items[index].Longitude = location.Latitude, location.Longitude
+		}
+	}
 }
 
 func publicDoorplateLabel(item domain.Property) string {
@@ -178,6 +226,12 @@ func (s *Server) isAvailableProperty(ctx context.Context, propertyID string) boo
 }
 
 func (s *Server) findProperty(ctx context.Context, propertyID string) (domain.Property, bool) {
+	if store, ok := s.store.(interface {
+		GetProperty(context.Context, string) (domain.Property, error)
+	}); ok {
+		item, err := store.GetProperty(ctx, propertyID)
+		return item, err == nil
+	}
 	var items []domain.Property
 	if s.store != nil {
 		loaded, err := s.store.ListProperties(ctx)
@@ -210,9 +264,18 @@ func normalizeCoverFocus(value int) int {
 }
 
 func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
-	var p domain.Property
-	if err := decodeJSON(w, r, &p); err != nil {
+	var input struct {
+		domain.Property
+		CreateKey string `json:"createKey"`
+	}
+
+	if err := decodeJSON(w, r, &input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid property"})
+		return
+	}
+	p := input.Property
+	if len(input.CreateKey) > 100 {
+		writeError(w, 400, "房源任务编号无效")
 		return
 	}
 	p.Title, p.Community, p.MarketingPhrase = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community), strings.TrimSpace(p.MarketingPhrase)
@@ -245,7 +308,13 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 	p.CreatedAt = time.Now()
 	p.UpdatedAt = p.CreatedAt
 	if s.store != nil {
-		if err := s.store.CreateProperty(r.Context(), p); err != nil {
+		var err error
+		p, err = s.createPropertyWithTask(r.Context(), p, input.CreateKey)
+		if errors.Is(err, domain.ErrPropertyEditConflict) {
+			writeError(w, 409, "创建任务已变化，请确认原草稿后重试")
+			return
+		}
+		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
 			return
 		}
@@ -260,10 +329,19 @@ func (s *Server) createProperty(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
-	var p domain.Property
-	if err := decodeJSON(w, r, &p); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"code": 400, "message": "invalid property payload"})
+	var input struct {
+		domain.Property
+		EditBatch string    `json:"editBatch"`
+		Revision  *int      `json:"editRevision"`
+		MediaIDs  *[]string `json:"mediaIds"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "房源数据无效")
 		return
+	}
+	p := input.Property
+	if input.Revision != nil {
+		p.EditRevision = *input.Revision
 	}
 	p.Title, p.Community, p.MarketingPhrase = strings.TrimSpace(p.Title), strings.TrimSpace(p.Community), strings.TrimSpace(p.MarketingPhrase)
 	canonicalCommunity, communityErr := resolveKnownCommunity(r.Context(), s.store, p.Community)
@@ -297,8 +375,60 @@ func (s *Server) updateProperty(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "data store unavailable")
 		return
 	}
-	if err := s.store.UpdateProperty(r.Context(), p); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"code": 500, "message": err.Error()})
+	if input.EditBatch != "" {
+		if len(input.EditBatch) > 80 || input.MediaIDs == nil || len(*input.MediaIDs) > 100 {
+			writeError(w, http.StatusBadRequest, "媒体保存任务无效")
+			return
+		}
+		store, ok := s.store.(interface {
+			CommitPropertyEdit(context.Context, domain.Property, string, []string) (int, error)
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "房源统一保存暂不可用")
+			return
+		}
+		revision, err := store.CommitPropertyEdit(r.Context(), p, input.EditBatch, *input.MediaIDs)
+		if errors.Is(err, domain.ErrPropertyEditConflict) || errors.Is(err, domain.ErrPropertyEditMedia) || errors.Is(err, domain.ErrPropertyNotReady) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "房源保存失败")
+			return
+		}
+		p.EditRevision = revision
+	} else if p.IsMaterial {
+		if input.Revision == nil || *input.Revision < 0 {
+			writeError(w, http.StatusConflict, "缺少素材版本，请刷新后重新编辑")
+			return
+		}
+		store, ok := s.store.(interface {
+			UpdateMaterialRevision(context.Context, domain.Property) (int, error)
+		})
+		if !ok {
+			writeError(w, http.StatusServiceUnavailable, "素材编辑暂不可用")
+			return
+		}
+		revision, err := store.UpdateMaterialRevision(r.Context(), p)
+		if errors.Is(err, domain.ErrPropertyEditConflict) {
+			writeError(w, http.StatusConflict, "素材已更新，请刷新后重新编辑")
+			return
+		}
+		if errors.Is(err, domain.ErrMaterialRoomSequence) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "素材保存失败")
+			return
+		}
+		p.EditRevision = revision
+	} else if err := s.store.UpdateProperty(r.Context(), p); err != nil {
+		if errors.Is(err, domain.ErrAtomicPropertyEditRequired) || errors.Is(err, domain.ErrPropertyEditConflict) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "房源保存失败")
 		return
 	}
 	if err := s.ensureDoorplateCollectionPlan(r.Context(), p.Community, communityLocation{Address: p.Location, Latitude: p.Latitude, Longitude: p.Longitude}); err != nil {
@@ -337,25 +467,7 @@ func (s *Server) deleteProperty(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "删除房源失败")
 		return
 	}
-	for _, media := range property.Media {
-		sharedWithMaterial := false
-		for _, candidate := range items {
-			if candidate.IsMaterial && candidate.ConvertedPropertyID == propertyID {
-				for _, retained := range candidate.Media {
-					if retained.URL == media.URL {
-						sharedWithMaterial = true
-						break
-					}
-				}
-			}
-			if sharedWithMaterial {
-				break
-			}
-		}
-		if !sharedWithMaterial {
-			s.removeStoredUpload(media.URL)
-		}
-	}
+	// Shared media remain available until delayed cleanup confirms they have no other references.
 	s.logOperation(r.Context(), claimsFromContext(r.Context()).Subject, "property", propertyID, "删除房源", fmt.Sprintf("%s（删除前状态：%s）", property.Title, property.Status))
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "message": "success"})
 }

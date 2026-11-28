@@ -20,7 +20,7 @@ type Store interface {
 	ListPropertyLeads(context.Context) ([]domain.PropertyLead, error)
 	CreatePropertyLead(context.Context, domain.PropertyLead) error
 	UpdatePropertyLeadFollowUp(context.Context, string, string, string) error
-	UpdatePropertyStatus(context.Context, string, string, string, string) error
+	UpdatePropertyStatus(context.Context, string, string, string, string) (string, error)
 	ConvertLeadToProperty(context.Context, string, domain.Property) error
 	AddPropertyMedia(context.Context, domain.PropertyMedia) error
 	ReplacePropertyMedia(context.Context, string, []string) error
@@ -82,7 +82,7 @@ func NewServerWithConfig(dataStore Store, config Config) *Server {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/uploads/", staticMediaCache(http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads")))))
+	mux.Handle("/uploads/", staticMediaCache(http.StripPrefix("/uploads/", http.FileServer(http.Dir(mediaStorageDir())))))
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("POST /api/v1/admin/login", s.adminLogin)
 	mux.HandleFunc("GET /api/v1/admin/web-accounts", s.manageWebAdmins)
@@ -135,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/admin/material-library/categories", s.requireRoles(s.materialCategories, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/admin/material-library/categories/rename", s.requireRoles(s.renameMaterialCategory, roleAdmin))
 	mux.HandleFunc("GET /api/v1/properties", s.listProperties)
+	mux.HandleFunc("GET /api/v1/properties/{id}", s.getPropertyDetail)
 	mux.HandleFunc("POST /api/v1/properties", s.requireRoles(s.createProperty, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/properties/update", s.requireRoles(s.updateProperty, roleAdmin))
 	mux.HandleFunc("DELETE /api/v1/properties/{propertyID}", s.requireRoles(s.deleteProperty, roleAdmin))
@@ -148,6 +149,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/rental-requests", s.requireRoles(s.listRentalRequests, roleAdmin))
 	mux.HandleFunc("PATCH /api/v1/admin/rental-requests/follow-up", s.requireRoles(s.updateRentalRequestFollowUp, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/contact-events", s.requireRoles(s.listContactEvents, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/contact-events/query", s.requireRoles(s.queryContactEvents, roleAdmin))
+	mux.HandleFunc("GET /api/v1/admin/subscription-jobs", s.requireRoles(s.manageSubscriptionJobs, roleAdmin))
+	mux.HandleFunc("POST /api/v1/admin/subscription-jobs/{id}/retry", s.requireRoles(s.manageSubscriptionJobs, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/operation-logs", s.requireRoles(s.listOperationLogs, roleAdmin))
 	mux.HandleFunc("GET /api/v1/admin/operation-logs/query", s.requireRoles(s.queryOperationLogs, roleAdmin))
 	mux.HandleFunc("POST /api/v1/rental-requests", s.requireRoles(s.createRentalRequest, roleUser))

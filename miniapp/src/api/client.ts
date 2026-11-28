@@ -78,11 +78,11 @@ export function request<T>(url: string, options: RequestOptions = {}) {
           return
         }
 
-		if (res.statusCode === 401) {
+		if (res.statusCode === 401 && getSession()?.accessToken === session?.accessToken) {
           const hadSession = Boolean(session?.accessToken)
           clearSession()
           if (hadSession) beginReauthentication()
-        } else if (res.statusCode === 404 && url.startsWith('/v1/auth/')) clearSession()
+        } else if (res.statusCode === 404 && url.startsWith('/v1/auth/') && getSession()?.accessToken === session?.accessToken) clearSession()
         reject(new ApiError(body?.message || `请求失败（${res.statusCode}）`, res.statusCode, body?.code))
       },
       fail: (error) => reject(new ApiError(error.errMsg || '网络连接失败')),

@@ -556,6 +556,17 @@
       "handler": "s.listProperties"
     },
     {
+      "method": "GET",
+      "path": "/api/v1/properties/{id}",
+      "expected": {
+        "guest": "ALLOW",
+        "user": "ALLOW",
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.getPropertyDetail"
+    },
+    {
       "method": "POST",
       "path": "/api/v1/properties",
       "expected": {
@@ -697,6 +708,39 @@
       },
       "probe": "GET",
       "handler": "s.requireRoles(s.listContactEvents, roleAdmin)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/contact-events/query",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.queryContactEvents"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/subscription-jobs",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "GET",
+      "handler": "s.manageSubscriptionJobs"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/subscription-jobs/{id}/retry",
+      "expected": {
+        "guest": 401,
+        "user": 403,
+        "admin": "ALLOW"
+      },
+      "probe": "WRITE",
+      "handler": "s.manageSubscriptionJobs"
     },
     {
       "method": "GET",
@@ -933,6 +977,14 @@
       "expected": {
         "guest": "返回我的",
         "user": "返回我的",
+        "admin": "运营页面"
+      }
+    },
+    {
+      "route": "pages/admin/material-detail",
+      "expected": {
+        "guest": "无权查看",
+        "user": "无权查看",
         "admin": "运营页面"
       }
     },

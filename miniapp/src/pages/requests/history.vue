@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { returnToMyPage } from "../../utils/permission-redirect";
 import { usePagePresentation } from "../../utils/presentation";
 const { presentation, loadPresentation } = usePagePresentation("requestHistory", "我的找房记录", "预约、订阅和找房需求都会保留在这里");
 import { watchPostEffect } from "vue";
@@ -13,7 +14,7 @@ const loading = ref(true);
 const loadFailed = ref(false);
 const needsLogin = ref(false);
 const typeLabel = (type: RentalRequest["requestType"]) => ({ appointment: "预约看房", area_subscription: "片区订阅", general: "找房需求" }[type] || "找房需求");
-const statusLabel = (status?: string) => ({ new: "待联系", contacted: "已联系", closed: "已完成" }[String(status || "new")] || "处理中");
+const statusLabel = (status?: string) => ({ new: "待联系", contacted: "已联系", inspection_pending: "待看房", matched: "已匹配", completed: "已完成", closed: "已关闭", invalid: "无效" }[String(status || "new")] || "处理中");
 const statusClass = (status?: string) => `status-${String(status || "new")}`;
 const titleOf = (item: RentalRequest) => item.requestType === "appointment"
   ? item.propertyTitle || item.location || "预约房源"
@@ -26,7 +27,7 @@ const detailOf = (item: RentalRequest) => {
   return [item.layout, budget].filter(Boolean).join(" · ");
 };
 const dateOf = (item: RentalRequest) => item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "刚刚提交";
-const activeCount = computed(() => items.value.filter((item) => !["closed", "completed"].includes(item.status || "new")).length);
+const activeCount = computed(() => items.value.filter((item) => !["closed", "completed", "invalid"].includes(item.status || "new")).length);
 
 const load = async () => {
   permissionAudit("onShow", "request-history");
@@ -39,7 +40,7 @@ const load = async () => {
     needsLogin.value = role !== "admin";
     if (role === "admin") {
       permissionAudit("redirect", "request-history", "pages/me/index");
-      uni.switchTab({ url: "/pages/me/index" });
+      returnToMyPage();
     }
     return;
   }

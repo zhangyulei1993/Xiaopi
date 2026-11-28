@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { returnToMyPage } from "../../utils/permission-redirect";
 import { watchPostEffect } from "vue";
 import { permissionAudit } from "../../utils/permission-audit";
 import { onShow } from "@dcloudio/uni-app";
@@ -28,7 +29,7 @@ onShow(async () => {
     needsLogin.value = role !== "admin";
     if (role === "admin") {
       permissionAudit("redirect", "footprints", "pages/me/index");
-    uni.switchTab({ url: "/pages/me/index" });
+    returnToMyPage();
     }
     return;
   }

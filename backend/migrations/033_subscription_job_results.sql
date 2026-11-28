@@ -1,0 +1,3 @@
+ALTER TABLE subscription_outbox
+  ADD COLUMN result VARCHAR(16) NOT NULL DEFAULT '',
+  ADD COLUMN last_error VARCHAR(500) NOT NULL DEFAULT '';

@@ -11,3 +11,9 @@ type TemporaryAccess struct {
 	CreatedBy  string    `json:"createdBy"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
+
+type TemporaryGrant struct {
+	ID        uint64
+	Version   uint64
+	ExpiresAt time.Time
+}

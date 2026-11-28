@@ -1,0 +1,6 @@
+ALTER TABLE properties
+  ADD COLUMN edit_revision INT UNSIGNED NOT NULL DEFAULT 0,
+  ADD COLUMN last_edit_commit VARCHAR(80) NOT NULL DEFAULT '';
+
+ALTER TABLE property_media
+  ADD COLUMN edit_batch VARCHAR(80) NOT NULL DEFAULT '';

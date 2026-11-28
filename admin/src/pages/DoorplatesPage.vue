@@ -313,10 +313,15 @@ async function importRows() {
   busy.value = true
   error.value = ''
   try {
-    const before = preview.value
     const importedCommunities = new Set(mappedRows.value.map(row => normalizeCommunityIdentity(row.community))).size
-    counts.value = await props.api(path, { method: 'POST', body: JSON.stringify(mappedRows.value) })
-    importResult.value = { added: before.added, duplicates: before.duplicates, invalid: invalidRows.value.length, communities: importedCommunities }
+    const result = await props.api<{ counts: Record<string, number>; added: number; duplicates: number }>(path + '?receipt=1', { method: 'POST', body: JSON.stringify(mappedRows.value) })
+    if (!result.counts) {
+      counts.value = result as unknown as Record<string, number>
+      error.value = '导入请求已完成，当前 API 未返回实际导入统计。'
+    } else {
+      counts.value = result.counts
+      importResult.value = { added: result.added, duplicates: result.duplicates, invalid: invalidRows.value.length, communities: importedCommunities }
+    }
     pending.value = []
     declaredCommunities.value = []
     invalidRows.value = []

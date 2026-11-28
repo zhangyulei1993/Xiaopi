@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { returnToMyPage } from "../../utils/permission-redirect";
+import { useForegroundUpload } from "../../utils/foreground-upload";
 import { onHide, onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { API_ORIGIN, request, resolveAssetUrl, safeUploadUrl } from "../../api/client";
 import {
   convertMaterial,
+  listProperties,
   createMaterial,
   deleteMaterial,
   getMaterialCategories,
@@ -54,14 +57,33 @@ const saving = ref(false);
 const maxImageBytes = 10 * 1024 * 1024;
 const maxVideoBytes = 40 * 1024 * 1024;
 const materials = ref<Property[]>([]);
+const linkedProperties = ref<Property[] | null>(null);
+const linkedProperty = (item: Property) => linkedProperties.value?.find(property => property.id === item.convertedPropertyId);
+const isConverted = (item: Property) => Boolean(item.convertedPropertyId && (linkedProperties.value === null || linkedProperty(item)));
+const isDraft = (property: Property) => ["draft", "pending_review"].includes(property.status);
+const linkedActionLabel = (item: Property) => {
+  const property = linkedProperty(item);
+  return property && isDraft(property) ? "继续编辑草稿" : "查看房源";
+};
 const categories = ref<string[]>([]);
 const activeCommunity = ref("全部");
 const activeLayout = ref("全部");
 const showConvertedArchive = ref(false);
 const formOpen = ref(false);
 const rentType = ref<"整租" | "合租">("整租");
-const area = ref("");
+const sharedRoomType = ref("主卧");
+const materialRoomCount = ref(1);
+const materialHallCount = ref(1);
+const materialHasKitchen = ref(true);
+const materialBathroomCount = ref(1);
+const materialBalconyCount = ref(0);
+const materialRoomSequence = ref(0);
+const materialFloor = ref("");
+const materialAmenities = ref(["冰箱", "洗衣机", "空调", "热水器"]);
+const materialAmenityOptions = ["冰箱", "洗衣机", "空调", "热水器", "电视", "宽带", "燃气", "油烟机", "沙发", "衣柜", "书桌", "床", "电梯", "阳台"];
 const draftId = ref("");
+let createKey = "";
+const createSnapshot = ref<Parameters<typeof createMaterial>[0] | null>(null);
 const uploadedMedia = ref<PropertyMedia[]>([]);
 const uploadProgress = ref("");
 const categoryManagerOpen = ref(false);
@@ -83,12 +105,24 @@ const communityDirectory = ref<Record<string, number>>({});
 const communityLocations = ref<Record<string, { address: string; latitude: number; longitude: number }>>({});
 const communityPlans = ref<Record<string, { community?: string }>>({});
 const selectedMapLocation = ref<{ address: string; latitude: number; longitude: number } | null>(null);
-const title = ref("");
-const layout = ref("");
 const rentMonthly = ref("");
-const description = ref("");
 const category = ref("");
+// When adding from a community category, that category is already the
+// destination. Keep it visible as context and skip the redundant picker.
+const entryCategoryFixed = ref(false);
 const pendingMedia = ref<PendingMedia[]>([]);
+const materialLayoutText = computed(() => [
+  `${materialRoomCount.value}室`,
+  `${materialHallCount.value}厅`,
+  materialHasKitchen.value ? "1厨" : "",
+  materialBathroomCount.value ? `${materialBathroomCount.value}卫` : "",
+  materialBalconyCount.value ? `${materialBalconyCount.value}阳台` : "",
+].filter(Boolean).join(""));
+const toggleMaterialAmenity = (name: string) => {
+  materialAmenities.value = materialAmenities.value.includes(name)
+    ? materialAmenities.value.filter(item => item !== name)
+    : [...materialAmenities.value, name];
+};
 
 const mediaPathExtension = (path: string) => {
   const cleanPath = path.split(/[?#]/u, 1)[0];
@@ -109,7 +143,7 @@ const stripBuildingSuffix = (value: string) => value.trim()
   .replace(/[-—·\s]+$/u, "").trim();
 const materialCommunity = (item: Property) => String(item.materialCategory || item.community || "待整理").trim();
 const materialLayout = (item: Property) => {
-  const source = String(item.layout || item.wholeLayout || "").trim();
+  const source = String((item.rentType === "合租" ? item.wholeLayout || item.layout : item.layout || item.wholeLayout) || "").trim();
   const roomPlan = source.match(/[1-9]\d*\s*室(?:\s*[1-9]\d*\s*厅)?/u)?.[0]?.replace(/\s+/g, "") || "";
   if (roomPlan) return roomPlan;
   if (/主卧/u.test(source)) return "合租主卧";
@@ -119,7 +153,7 @@ const materialLayout = (item: Property) => {
 };
 const layoutFilterOptions = ["一室", "两室", "三室", "四室", "五室", "六室+"];
 const materialLayoutGroup = (item: Property) => {
-  const source = String(item.layout || item.wholeLayout || materialLayout(item));
+  const source = String((item.rentType === "合租" ? item.wholeLayout || item.layout : item.layout || item.wholeLayout) || materialLayout(item));
   const roomLabel = source.match(/(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*室/u)?.[1] || "";
   const roomCount = Number(roomLabel) || ({ 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 } as Record<string, number>)[roomLabel] || 0;
   if (!roomCount) return "";
@@ -128,7 +162,7 @@ const materialLayoutGroup = (item: Property) => {
 };
 const communityOptions = computed(() => {
   const names = new Map<string, string>();
-  for (const name of [...categories.value, ...materials.value.filter(item => !item.convertedPropertyId).map(materialCommunity)]) {
+  for (const name of [...categories.value, ...materials.value.map(materialCommunity)]) {
     const trimmed = name.trim();
     const key = normalizeCommunityName(trimmed);
     if (key && !names.has(key)) names.set(key, trimmed);
@@ -162,18 +196,18 @@ const canCreateCommunityCategory = computed(() => {
     !categories.value.some(item => normalizeCommunityName(item) === normalizeCommunityName(name));
 });
 const selectedCommunityLocation = computed(() => selectedMapLocation.value || Object.entries(communityLocations.value).find(([name]) => normalizeCommunityName(name) === normalizeCommunityName(category.value))?.[1] || null);
-const activeMaterials = computed(() => materials.value.filter(item => Boolean(item.convertedPropertyId) === showConvertedArchive.value));
-const filteredMaterials = computed(() => activeMaterials.value.filter(item => showConvertedArchive.value || (
+const activeMaterials = computed(() => materials.value.filter(item => !showConvertedArchive.value || isConverted(item)));
+const filteredMaterials = computed(() => activeMaterials.value.filter(item =>
   (activeCommunity.value === "全部" || normalizeCommunityName(materialCommunity(item)) === normalizeCommunityName(activeCommunity.value)) &&
-  (activeLayout.value === "全部" || materialLayoutGroup(item) === activeLayout.value))));
-const convertedCount = computed(() => materials.value.filter(item => item.convertedPropertyId).length);
-const countForCommunity = (name: string) => materials.value.filter(item => !item.convertedPropertyId &&
+  (activeLayout.value === "全部" || materialLayoutGroup(item) === activeLayout.value)));
+const convertedCount = computed(() => materials.value.filter(isConverted).length);
+const countForCommunity = (name: string) => activeMaterials.value.filter(item =>
   (name === "全部" || normalizeCommunityName(materialCommunity(item)) === normalizeCommunityName(name)) &&
   (activeLayout.value === "全部" || materialLayoutGroup(item) === activeLayout.value)).length;
-const countForLayout = (name: string) => materials.value.filter(item => !item.convertedPropertyId &&
+const countForLayout = (name: string) => activeMaterials.value.filter(item =>
   (activeCommunity.value === "全部" || normalizeCommunityName(materialCommunity(item)) === normalizeCommunityName(activeCommunity.value)) &&
   (name === "全部" || materialLayoutGroup(item) === name)).length;
-const categoryMaterials = (name: string) => materials.value.filter(item => !item.convertedPropertyId && normalizeCommunityName(materialCommunity(item)) === normalizeCommunityName(name));
+const categoryMaterials = (name: string) => materials.value.filter(item => normalizeCommunityName(materialCommunity(item)) === normalizeCommunityName(name));
 const categoryLocation = (name: string) => {
   const fromLibrary = Object.entries(communityLocations.value).find(([community]) => normalizeCommunityName(community) === normalizeCommunityName(name))?.[1];
   if (fromLibrary) return fromLibrary;
@@ -183,21 +217,22 @@ const categoryLocation = (name: string) => {
 const imageCount = computed(() => pendingMedia.value.filter(item => item.type === "image").length);
 const hasVideo = computed(() => pendingMedia.value.some(item => item.type === "video"));
 const mediaUrl = (url: string) => resolveAssetUrl(url);
-const previewMaterialImages = (item: Property, current: PropertyMedia) => {
-  const images = (item.media || []).filter(media => media.type === "image");
-  uni.previewImage({ current: mediaUrl(current.url), urls: images.map(media => mediaUrl(media.url)) });
+const openMaterialDetail = (item: Property) => {
+  uni.navigateTo({ url: `/pages/admin/material-detail?id=${encodeURIComponent(item.id)}` });
 };
 const refresh = async () => {
   loading.value = true;
   try {
-    const [kinds, items, config, directory, locations, plans] = await Promise.all([
+    const [kinds, items, config, directory, locations, plans, properties] = await Promise.all([
       getMaterialCategories(), listMaterialLibrary(), getPublicConfig().catch(() => null),
       request<Record<string, number>>("/v1/admin/doorplates").catch(() => ({})),
       request<Record<string, { address: string; latitude: number; longitude: number }>>("/v1/admin/community-locations").catch(() => ({})),
       request<Record<string, { community?: string }>>("/v1/admin/doorplate-plans").catch(() => ({})),
+      listProperties().catch(() => null),
     ]);
     if (config) tagConfig.value = config.listingTitle;
     materials.value = items;
+    linkedProperties.value = properties;
     categories.value = kinds;
     communityDirectory.value = directory;
     communityLocations.value = locations;
@@ -212,7 +247,7 @@ let stopSessionKeepAlive: (() => void) | null = null;
 onShow(async () => {
   if (!hasRole("admin")) {
     uni.showToast({ title: "仅管理员可使用素材库", icon: "none" });
-    setTimeout(() => uni.navigateBack(), 250);
+    returnToMyPage();
     return;
   }
   stopSessionKeepAlive?.();
@@ -279,7 +314,7 @@ const chooseCommunity = async (rawName: string, location?: LocationSearchItem) =
       }
     }
     selectedMapLocation.value = null;
-    if (!targetCategory && !existing) categories.value = await saveMaterialCategories([...categories.value, canonical]);
+    if (!targetCategory && !existing) categories.value = await saveMaterialCategories({ add: canonical });
     if (communityPickerReturnTo.value === "entry") category.value = canonical;
     if (communityPickerReturnTo.value === "entry") activeCommunity.value = canonical;
     communityPickerOpen.value = false;
@@ -330,7 +365,7 @@ const removeCategory = (value: string) => {
     success: async result => {
       if (!result.confirm) return;
       try {
-        categories.value = await saveMaterialCategories(categories.value.filter(item => item !== value));
+        categories.value = await saveMaterialCategories({ remove: value });
         if (activeCommunity.value === value) activeCommunity.value = "全部";
         if (category.value === value) selectCategory(categories.value[0] || "");
         await refresh();
@@ -344,11 +379,17 @@ const openCategoryActions = (name: string) => {
   categoryActionName.value = name;
   categoryActionOpen.value = true;
 };
-const performCategoryAction = (action: "view" | "rename" | "location" | "remove") => {
+const performCategoryAction = (action: "view" | "add" | "rename" | "location" | "remove") => {
   const name = categoryActionName.value;
   categoryActionOpen.value = false;
   if (!name) return;
   if (action === "view") viewCategory(name);
+  if (action === "add") {
+    viewCategory(name);
+    showConvertedArchive.value = false;
+    activeLayout.value = "全部";
+    openEntry();
+  }
   if (action === "rename") {
     renameCategoryFrom.value = name;
     renameCategoryValue.value = name;
@@ -432,13 +473,19 @@ const chooseVideo = () => {
     fail: error => { if (!String(error.errMsg || "").includes("cancel")) uni.showToast({ title: "选择视频失败", icon: "none" }); },
   });
 };
-const upload = (file: PendingMedia, propertyId: string, sort: number) => new Promise<PropertyMedia>((resolve, reject) => {
-  uni.uploadFile({
+const uploadInForeground = useForegroundUpload(
+  () => { uploadProgress.value = "上传已暂停，返回后继续"; },
+  () => { uploadProgress.value = "正在恢复上传…"; },
+);
+const upload = (file: PendingMedia, propertyId: string, sort: number) => {
+  const uploadKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return uploadInForeground<PropertyMedia>((resolve, reject) => {
+  return uni.uploadFile({
     url: safeUploadUrl(`${API_ORIGIN}/api/v1/media/upload`),
     filePath: file.path,
     name: "file",
     header: { Authorization: `Bearer ${getSession()?.accessToken || ""}` },
-    formData: { propertyId, mediaType: file.type, sort: String(sort) },
+    formData: { propertyId, uploadKey, mediaType: file.type, sort: String(sort) },
     success: response => {
       try {
         const body = JSON.parse(String(response.data || "{}"));
@@ -451,22 +498,58 @@ const upload = (file: PendingMedia, propertyId: string, sort: number) => new Pro
     fail: error => reject(new Error(error.errMsg || "素材上传失败")),
   });
 });
+};
 const resetForm = () => {
-  title.value = "";
-  layout.value = "";
+  createKey = "";
+  createSnapshot.value = null;
   rentMonthly.value = "";
-  description.value = "";
   pendingMedia.value = [];
   rentType.value = "整租";
-  area.value = "";
+  sharedRoomType.value = "主卧";
+  materialRoomCount.value = 1;
+  materialHallCount.value = 1;
+  materialHasKitchen.value = true;
+  materialBathroomCount.value = 1;
+  materialBalconyCount.value = 0;
+  materialRoomSequence.value = 0;
+  materialFloor.value = "";
+  materialAmenities.value = ["冰箱", "洗衣机", "空调", "热水器"];
   draftId.value = "";
   uploadedMedia.value = [];
   selectedMapLocation.value = null;
   category.value = "";
+  entryCategoryFixed.value = false;
 };
-const hasUnsavedEntry = () => !!(pendingMedia.value.length || title.value || layout.value || rentMonthly.value || area.value || description.value);
+const hasUnsavedEntry = () => !!(
+  pendingMedia.value.length || rentMonthly.value || materialFloor.value || materialRoomSequence.value ||
+  rentType.value !== "整租" || sharedRoomType.value !== "主卧" || materialRoomCount.value !== 1 ||
+  materialHallCount.value !== 1 || !materialHasKitchen.value || materialBathroomCount.value !== 1 ||
+  materialBalconyCount.value !== 0 || materialAmenities.value.join("|") !== "冰箱|洗衣机|空调|热水器"
+);
 const closeEntry = () => {
-  if (saving.value || draftId.value) return;
+  if (saving.value) return;
+  if (draftId.value) {
+    uni.showActionSheet({
+      itemList: uploadedMedia.value.length ? ["继续上传", "保留已上传素材并退出", "删除本次素材"] : ["继续上传", "删除本次素材"],
+      success: async ({ tapIndex }) => {
+        if (tapIndex === 0) return;
+        const keepUploaded = uploadedMedia.value.length > 0 && tapIndex === 1;
+        const id = draftId.value;
+        saving.value = true;
+        try {
+          if (keepUploaded) await replacePropertyMedia(id, uploadedMedia.value.map(item => item.id));
+          else await deleteMaterial(id);
+          resetForm();
+          formOpen.value = false;
+          await refresh();
+          uni.showToast({ title: keepUploaded ? "已保留上传素材" : "已删除本次素材", icon: "none" });
+        } catch (error) {
+          uni.showModal({ title: "操作未完成", content: error instanceof Error ? error.message : "请检查网络后重试", showCancel: false });
+        } finally { saving.value = false; }
+      },
+    });
+    return;
+  }
   if (!hasUnsavedEntry()) {
     resetForm();
     formOpen.value = false;
@@ -483,7 +566,11 @@ const closeEntry = () => {
   });
 };
 const openEntry = () => {
-  if (activeCommunity.value !== "全部" && !draftId.value && !pendingMedia.value.length) selectCategory(activeCommunity.value);
+  const selectedCategory = activeCommunity.value !== "全部" ? activeCommunity.value : "";
+  if (!draftId.value && !pendingMedia.value.length) {
+    selectCategory(selectedCategory);
+    entryCategoryFixed.value = Boolean(selectedCategory);
+  }
   formOpen.value = true;
 };
 const viewCategory = (value: string) => {
@@ -501,7 +588,7 @@ const saveMaterial = async () => {
   if (saving.value) return;
   const community = category.value;
   if (!community) {
-    uni.showToast({ title: "先选择小区", icon: "none" });
+    uni.showToast({ title: "先选择分类", icon: "none" });
     openCommunityPicker();
     return;
   }
@@ -515,26 +602,31 @@ const saveMaterial = async () => {
     return;
   }
   saving.value = true;
-  let createdInThisSave = false;
   try {
-    await refreshCurrentSession("admin");
     if (!draftId.value) {
-      const created = await createMaterial({
-        title: title.value.trim() || [community, layout.value.trim()].filter(Boolean).join(" · ").slice(0, 60),
+      if (!createKey) createKey = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+      if (!createSnapshot.value) createSnapshot.value = {
+        createKey,
+        title: community,
         community,
         location: selectedCommunityLocation.value?.address || community,
         latitude: Number(selectedCommunityLocation.value?.latitude) || 0,
         longitude: Number(selectedCommunityLocation.value?.longitude) || 0,
-        layout: rentType.value === "合租" ? "" : layout.value.trim(),
+        layout: rentType.value === "合租" ? sharedRoomType.value : materialLayoutText.value,
         rentMonthly: Math.max(0, Number(rentMonthly.value) || 0),
         rentType: rentType.value,
-        areaSqm: Math.max(0, Number(area.value) || 0),
-        ...(rentType.value === "合租" ? { wholeLayout: layout.value.trim() } : {}),
-        description: description.value.trim(),
+        floorInfo: materialFloor.value ? `${Number(materialFloor.value)}楼` : "",
+        roomSequence: rentType.value === "合租" ? Math.min(materialRoomCount.value, Math.max(0, Number(materialRoomSequence.value) || 0)) : 0,
+        ...(rentType.value === "合租" ? { wholeLayout: materialLayoutText.value } : {}),
+        description: materialAmenities.value.length ? `配套设施：${materialAmenities.value.join("、")}` : "",
         materialCategory: community,
-      });
+      };
+    }
+    await refreshCurrentSession("admin");
+    if (!draftId.value) {
+
+      const created = await createMaterial(createSnapshot.value!);
       draftId.value = created.id;
-      createdInThisSave = true;
     }
     for (let index = uploadedMedia.value.length; index < pendingMedia.value.length; index++) {
       uploadProgress.value = `上传 ${index + 1}/${pendingMedia.value.length}`;
@@ -547,18 +639,9 @@ const saveMaterial = async () => {
     await refresh();
     uni.showToast({ title: "素材已保存" });
   } catch (error) {
-    if (createdInThisSave && uploadedMedia.value.length === 0 && draftId.value) {
-      try {
-        await deleteMaterial(draftId.value);
-        draftId.value = "";
-        uploadedMedia.value = [];
-      } catch {
-        // Keep the resumable draft if rollback cannot reach the server.
-      }
-    }
     uni.showModal({
       title: "保存未完成",
-      content: error instanceof Error ? error.message : "请重试保存",
+      content: `${error instanceof Error ? error.message : "请重试保存"}。可继续上传，或点击退出录入选择保留已上传素材。`,
       showCancel: false,
     });
   } finally {
@@ -583,15 +666,31 @@ const removeMaterial = (item: Property) => {
     },
   });
 };
-const openConvertedProperty = (item: Property) => {
-  if (!item.convertedPropertyId) return;
-  uni.navigateTo({ url: `/pages/admin/property-edit?id=${encodeURIComponent(item.convertedPropertyId)}` });
+const openConvertedProperty = async (item: Property) => {
+  if (!item.convertedPropertyId || saving.value) return;
+  saving.value = true;
+  let missing = false;
+  try {
+    await refreshCurrentSession("admin");
+    linkedProperties.value = await listProperties();
+    const property = linkedProperty(item);
+    missing = !property;
+    if (property) {
+      const page = isDraft(property) ? "/pages/admin/property-edit" : "/pages/properties/detail";
+      uni.navigateTo({ url: `${page}?id=${encodeURIComponent(property.id)}` });
+    }
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : "打开房源失败", icon: "none" });
+  } finally {
+    saving.value = false;
+  }
+  if (missing) convert(item);
 };
 const convert = (item: Property) => {
   if (saving.value || item.id === draftId.value) return;
   uni.showModal({
     title: "转为房源草稿",
-    content: "将复制为房源草稿，原素材会保留在“已转房源”分类中。补齐信息后可发布。",
+    content: "将复制为房源草稿，原素材会保留在原分类并标记已转换。补齐信息后可发布。",
     confirmText: "转为草稿",
     success: async result => {
       if (!result.confirm) return;
@@ -600,7 +699,6 @@ const convert = (item: Property) => {
         await refreshCurrentSession("admin");
         const converted = await convertMaterial(item.id);
         await refresh();
-        showConvertedArchive.value = true;
         uni.navigateTo({ url: `/pages/admin/property-edit?id=${encodeURIComponent(converted.id)}` });
       } catch (error) {
         uni.showToast({ title: error instanceof Error ? error.message : "转换失败", icon: "none" });
@@ -614,53 +712,75 @@ const convert = (item: Property) => {
 
 <template>
   <view class="material-page">
-    <view class="page-head"><view><strong>房源素材库</strong><small>按小区和户型整理，随时转为房源草稿。</small></view><button :disabled="saving || !!draftId" @click="formOpen ? closeEntry() : openEntry()">{{ formOpen ? "收起" : "＋ 新增素材" }}</button></view>
+    <view class="page-head"><view><strong>房源素材库</strong><small>按小区和户型整理，随时转为房源草稿。</small></view><button :disabled="saving" @click="formOpen ? closeEntry() : openEntry()">{{ formOpen ? (draftId ? "退出录入" : "收起") : "＋ 新增素材" }}</button></view>
 
     <view class="summary-row"><view><strong>{{ materials.length }}</strong><text>素材</text></view><view><strong>{{ categories.length }}</strong><text>分类</text></view><view><strong>{{ materials.reduce((sum, item) => sum + (item.media?.length || 0), 0) }}</strong><text>媒体</text></view></view>
 
     <view v-if="formOpen" class="entry-card">
       <view class="card-heading"><strong>新增素材</strong><text>发布时再补全信息</text></view>
-      <view class="community-select-control" @click="!draftId && openCommunityPicker()"><view><strong>{{ category || "选择小区" }}</strong><small>{{ category ? (selectedCommunityLocation?.address || "位置待补") : "小区库优先，可搜地图" }}</small></view><text>{{ draftId ? "已关联" : category ? "更换 ›" : "选择 ›" }}</text></view>
-      <view class="media-picker-row"><button class="choose-image-button" :disabled="saving || !!draftId || imageCount >= 9" @click="chooseImages">＋ 图片 <small>{{ imageCount }}/9</small></button><button class="choose-video-button" :disabled="saving || !!draftId || hasVideo" @click="chooseVideo">＋ 视频 <small>{{ hasVideo ? 1 : 0 }}/1</small></button><text>图片 ≤10MB，视频 ≤40MB / 60秒</text></view>
-      <view v-if="pendingMedia.length" class="pending-media"><view v-for="(media, index) in pendingMedia" :key="media.path" class="pending-item"><image v-if="media.type === 'image'" :src="media.path" mode="aspectFill"/><view v-else class="video-pending"><video :src="media.path" controls object-fit="cover" :show-fullscreen-btn="false"/></view><button v-if="!saving && !draftId" @click="pendingMedia.splice(index, 1)">×</button></view></view>
-      <view v-if="!draftId" class="material-basic">
+      <view v-if="entryCategoryFixed && category" class="community-select-control fixed-category"><view><strong>{{ category }}</strong><small>当前分类 · 素材已归入该小区分类</small></view><text>已选分类</text></view>
+      <view v-else class="community-select-control" @click="!saving && !createSnapshot && !draftId && openCommunityPicker()"><view><strong>{{ category || "选择分类" }}</strong><small>{{ category ? (selectedCommunityLocation?.address || "位置待补") : "分类按小区归属 · 可从已有分类中选择" }}</small></view><text>{{ draftId ? "已关联" : category ? "更换 ›" : "选择 ›" }}</text></view>
+      <view class="media-picker-row"><button class="choose-image-button" :disabled="saving || !!createSnapshot || !!draftId || imageCount >= 9" @click="chooseImages">＋ 图片 <small>{{ imageCount }}/9</small></button><button class="choose-video-button" :disabled="saving || !!createSnapshot || !!draftId || hasVideo" @click="chooseVideo">＋ 视频 <small>{{ hasVideo ? 1 : 0 }}/1</small></button><text>图片 ≤10MB，视频 ≤40MB / 60秒</text></view>
+      <view v-if="pendingMedia.length" class="pending-media"><view v-for="(media, index) in pendingMedia" :key="media.path" class="pending-item"><image v-if="media.type === 'image'" :src="media.path" mode="aspectFill"/><view v-else class="video-pending"><video :src="media.path" controls object-fit="cover" :show-fullscreen-btn="false"/></view><button v-if="!saving && !createSnapshot && !draftId" @click="pendingMedia.splice(index, 1)">×</button></view></view>
+      <view class="material-basic" :class="{ 'entry-locked': saving || !!createSnapshot }">
         <view class="form-row">
           <text>出租方式</text>
           <view class="material-rent-types">
-            <button :class="{ active: rentType === '整租' }" @click="rentType = '整租'">整租</button>
-            <button :class="{ active: rentType === '合租' }" @click="rentType = '合租'">合租</button>
+            <button :disabled="saving || !!createSnapshot" :class="{ active: rentType === '整租' }" @click="rentType = '整租'">整租</button>
+            <button :disabled="saving || !!createSnapshot" :class="{ active: rentType === '合租' }" @click="rentType = '合租'">合租</button>
           </view>
         </view>
-        <view class="form-pair"><label>{{ rentType === "合租" ? "整套户型" : "户型" }}<input v-model="layout" maxlength="32" placeholder="如：2室1厅" /></label><label>月租<input v-model="rentMonthly" type="number" placeholder="元/月" /></label></view>
-        <view class="form-pair"><label>面积<input v-model="area" type="digit" placeholder="㎡" /></label><label>素材名称<input v-model="title" maxlength="60" placeholder="默认小区名" /></label></view>
-        <view class="form-row"><text>备注（选填）</text><textarea v-model="description" maxlength="500" placeholder="记录房源特点" /></view>
+        <view class="material-layout-settings">
+          <view class="material-field-title">{{ rentType === "合租" ? "整套户型" : "房屋户型" }}</view>
+          <view class="material-choice-row"><button :disabled="saving || !!createSnapshot" v-for="count in [1,2,3,4,5,6,7,8,9]" :key="count" :class="{ active: materialRoomCount === count }" @click="materialRoomCount = count; materialRoomSequence = Math.min(materialRoomSequence, count)">{{ `${count}室` }}</button></view>
+          <view class="material-choice-grid">
+            <view><text>客厅</text><view class="material-choice-row"><button :disabled="saving || !!createSnapshot" v-for="count in [0,1,2,3]" :key="count" :class="{ active: materialHallCount === count }" @click="materialHallCount = count">{{ count ? `${count}厅` : "无" }}</button></view></view>
+            <view><text>厨房</text><view class="material-choice-row"><button :disabled="saving || !!createSnapshot" :class="{ active: materialHasKitchen }" @click="materialHasKitchen = true">有</button><button :disabled="saving || !!createSnapshot" :class="{ active: !materialHasKitchen }" @click="materialHasKitchen = false">无</button></view></view>
+            <view><text>卫生间</text><view class="material-choice-row"><button :disabled="saving || !!createSnapshot" v-for="count in [1,2,3,4]" :key="count" :class="{ active: materialBathroomCount === count }" @click="materialBathroomCount = count">{{ count }}个</button></view></view>
+            <view><text>阳台</text><view class="material-choice-row"><button :disabled="saving || !!createSnapshot" v-for="count in [0,1,2,3,4]" :key="count" :class="{ active: materialBalconyCount === count }" @click="materialBalconyCount = count">{{ count ? `${count}个` : "无" }}</button></view></view>
+          </view>
+        </view>
+        <view v-if="rentType === '合租'" class="material-layout-settings">
+          <view class="material-field-title">出租房型</view>
+          <view class="material-choice-row"><button :disabled="saving || !!createSnapshot" v-for="room in ['主卧','次卧','单间','床位']" :key="room" :class="{ active: sharedRoomType === room }" @click="sharedRoomType = room">{{ room }}</button></view>
+          <view class="material-field-title room-sequence-title">房间序号 <small>选填</small></view>
+          <view class="material-choice-row"><button :disabled="saving || !!createSnapshot" :class="{ active: !materialRoomSequence }" @click="materialRoomSequence = 0">不指定</button><button :disabled="saving || !!createSnapshot" v-for="number in Math.min(materialRoomCount, 9)" :key="number" :class="{ active: materialRoomSequence === number }" @click="materialRoomSequence = number">{{ number }}号房</button></view>
+        </view>
+        <view class="material-field-pair">
+          <label>楼层 <small>选填</small><view class="material-floor-input"><input :disabled="saving || !!createSnapshot" v-model="materialFloor" type="number" maxlength="2" placeholder="输入楼层" /><text>楼</text></view></label>
+          <label>月租 <input :disabled="saving || !!createSnapshot" v-model="rentMonthly" type="number" placeholder="元/月" /></label>
+        </view>
+        <view class="material-layout-settings">
+          <view class="material-field-title">房屋设施</view>
+          <view class="material-choice-row"><button :disabled="saving || !!createSnapshot" v-for="name in materialAmenityOptions" :key="name" :class="{ active: materialAmenities.includes(name) }" @click="toggleMaterialAmenity(name)">{{ name }}</button></view>
+        </view>
       </view>
       <button class="save-button" :loading="saving" :disabled="saving || !pendingMedia.length" @click="saveMaterial">{{ uploadProgress || (saving ? "保存中…" : draftId ? "继续保存" : "保存素材") }}</button>
     </view>
 
     <view v-if="!formOpen" class="filter-panel">
       <view class="community-filter-heading"><strong>{{ materials.length ? "素材分类" : "小区分类" }}</strong><button @click="toggleCategoryManager">{{ categoryManagerOpen ? "收起分类" : "分类管理" }}</button></view>
-      <view v-if="materials.length" class="material-archive-row"><button :class="{ active: !showConvertedArchive }" @click="showConvertedArchive = false">素材库 <text>{{ materials.length - convertedCount }}</text></button><button :class="{ active: showConvertedArchive }" @click="showConvertedArchive = true">已转房源 <text>{{ convertedCount }}</text></button></view>
-      <template v-if="materials.length && !showConvertedArchive">
-        <view class="filter-row community-filter-row"><button class="community-filter-trigger" @click="openCommunityFilter"><text class="community-filter-current">{{ activeCommunity }}</text><text class="community-filter-count">{{ countForCommunity(activeCommunity) }} 份</text><small>选择小区</small></button></view>
+      <view v-if="materials.length" class="material-archive-row"><button :class="{ active: !showConvertedArchive }" @click="showConvertedArchive = false">全部素材 <text>{{ materials.length }}</text></button><button :class="{ active: showConvertedArchive }" @click="showConvertedArchive = true">已转房源 <text>{{ convertedCount }}</text></button></view>
+      <template v-if="materials.length">
+        <view class="filter-row community-filter-row"><button class="community-filter-trigger" @click="openCommunityFilter"><text class="community-filter-current">{{ activeCommunity }}</text><text class="community-filter-count">{{ countForCommunity(activeCommunity) }} 份</text><small>选择分类</small></button></view>
         <view class="filter-row layout-filter-row"><strong>户型</strong><view class="category-scroll"><view class="category-row"><button :class="{ active: activeLayout === '全部' }" @click="viewLayout('全部')">全部 {{ countForLayout('全部') }}</button><button v-for="name in layoutFilterOptions" :key="name" :class="{ active: activeLayout === name }" @click="viewLayout(name)">{{ name }} {{ countForLayout(name) }}</button></view></view></view>
       </template>
     </view>
-    <view v-if="communityFilterOpen && !formOpen" class="community-filter-mask" @click="communityFilterOpen = false"><view class="community-filter-sheet" @click.stop><view class="community-filter-head"><view><strong>选择小区</strong><small>共 {{ communityOptions.length }} 个</small></view><button class="community-filter-add" @click="startAddCommunityCategory('filter')">＋ 添加分类</button><text @click="communityFilterOpen = false">×</text></view><input v-model.trim="communityFilterQuery" class="community-filter-search" placeholder="搜索小区名称"/><scroll-view scroll-y class="community-filter-options"><view class="community-filter-grid"><view v-for="name in filteredCommunityOptions" :key="name" class="community-filter-option" :class="{ active: activeCommunity === name }" @click="viewCategory(name)"><text class="community-filter-name">{{ name }}</text><text class="community-filter-count">{{ countForCommunity(name) }}</text></view><view v-if="!filteredCommunityOptions.length" class="community-filter-no-result">没有匹配的小区</view></view></scroll-view></view></view>
+    <view v-if="communityFilterOpen && !formOpen" class="community-filter-mask" @click="communityFilterOpen = false"><view class="community-filter-sheet" @click.stop><view class="community-filter-head"><view><strong>选择分类</strong><small>分类按小区归属 · 共 {{ communityOptions.length }} 个</small></view><button class="community-filter-add" @click="startAddCommunityCategory('filter')">＋ 添加分类</button><text @click="communityFilterOpen = false">×</text></view><input v-model.trim="communityFilterQuery" class="community-filter-search" placeholder="搜索分类名称（小区名）"/><scroll-view scroll-y class="community-filter-options"><view class="community-filter-grid"><view v-for="name in filteredCommunityOptions" :key="name" class="community-filter-option" :class="{ active: activeCommunity === name }" @click="viewCategory(name)"><text class="community-filter-name">{{ name }}</text><text class="community-filter-count">{{ countForCommunity(name) }}</text></view><view v-if="!filteredCommunityOptions.length" class="community-filter-no-result">没有匹配的分类</view></view></scroll-view></view></view>
     <view v-if="categoryManagerOpen && !formOpen" class="category-manager">
       <view class="category-manager-heading"><view><strong>小区分类</strong></view><button class="manager-add-category" @click="startAddCommunityCategory('manager')">＋ 添加分类</button></view>
-      <view v-if="!categories.length" class="category-manager-empty"><strong>还没有分类</strong><text>选择小区开始归档。</text><button @click="openCommunityPicker('', 'manager')">选择小区</button></view>
+      <view v-if="!categories.length" class="category-manager-empty"><strong>还没有分类</strong><text>选择小区，即可建立对应分类。</text><button @click="openCommunityPicker('', 'manager')">选择小区并建分类</button></view>
       <view class="community-category-grid"><view v-for="name in categories" :key="name" class="community-category-mini" @click="openCategoryActions(name)"><view><strong>{{ name }}</strong><text>{{ categoryMaterials(name).length }} 份素材</text></view><text class="community-category-address-compact">{{ categoryLocation(name)?.address || "位置待补" }}</text></view></view>
     </view>
 
-    <view v-if="categoryActionOpen && !formOpen" class="category-action-mask" @click="categoryActionOpen = false"><view class="category-action-sheet" @click.stop><view class="category-action-heading"><view><strong>{{ categoryActionName }}</strong><small>{{ categoryMaterials(categoryActionName).length }} 份素材 · {{ categoryLocation(categoryActionName)?.address || "位置待补" }}</small></view><text @click="categoryActionOpen = false">×</text></view><view class="category-action-grid"><button class="category-action-view" @click="performCategoryAction('view')"><text>▤</text><view><strong>查看素材</strong><small>{{ categoryMaterials(categoryActionName).length }} 份素材</small></view></button><button class="category-action-rename" @click="performCategoryAction('rename')"><text>✎</text><view><strong>修改名称</strong><small>调整小区分类名</small></view></button><button class="category-action-location" @click="performCategoryAction('location')"><text>⌖</text><view><strong>{{ categoryLocation(categoryActionName) ? "修改地址" : "补充地址" }}</strong><small>管理分类位置信息</small></view></button></view><button class="category-action-remove" @click="performCategoryAction('remove')"><text>移除分类</text><small>不会删除素材或小区库数据</small></button></view></view>
+    <view v-if="categoryActionOpen && !formOpen" class="category-action-mask" @click="categoryActionOpen = false"><view class="category-action-sheet" @click.stop><view class="category-action-heading"><view><strong>{{ categoryActionName }}</strong><small>{{ categoryMaterials(categoryActionName).length }} 份素材 · {{ categoryLocation(categoryActionName)?.address || "位置待补" }}</small></view><text @click="categoryActionOpen = false">×</text></view><view class="category-action-grid"><button class="category-action-view" @click="performCategoryAction('view')"><text>▤</text><view><strong>查看素材</strong><small>{{ categoryMaterials(categoryActionName).length }} 份素材</small></view></button><button class="category-action-add" @click="performCategoryAction('add')"><text>＋</text><view><strong>在此分类新增</strong><small>自动归入 {{ categoryActionName }}</small></view></button><button class="category-action-rename" @click="performCategoryAction('rename')"><text>✎</text><view><strong>修改名称</strong><small>调整小区分类名</small></view></button><button class="category-action-location" @click="performCategoryAction('location')"><text>⌖</text><view><strong>{{ categoryLocation(categoryActionName) ? "修改地址" : "补充地址" }}</strong><small>管理分类位置信息</small></view></button></view><button class="category-action-remove" @click="performCategoryAction('remove')"><text>移除分类</text><small>不会删除素材或小区库数据</small></button></view></view>
 
     <view v-if="renameCategoryOpen && !formOpen" class="rename-category-mask" @click="renameCategoryOpen = false"><view class="rename-category-sheet" @click.stop><strong>修改小区名称</strong><small>该分类下的素材会同步更新归属</small><input v-model.trim="renameCategoryValue" maxlength="60" placeholder="输入小区名称"/><view><button class="rename-category-cancel" @click="renameCategoryOpen = false">取消</button><button class="rename-category-save" :loading="saving" :disabled="saving || !renameCategoryValue.trim()" @click="saveCategoryRename">保存修改</button></view></view></view>
 
     <view v-if="communityPickerOpen" class="community-picker-mask" @click="dismissCommunityPicker">
       <view class="community-picker-sheet" @click.stop>
         <view class="community-picker-head">
-          <view><strong>{{ communityPickerTargetCategory ? "补充小区位置" : "选择小区分类" }}</strong><small>小区库优先；没有时搜地图</small></view>
+          <view><strong>{{ communityPickerTargetCategory ? "补充小区位置" : communityPickerReturnTo === "entry" ? "选择分类" : "选择小区分类" }}</strong><small>{{ communityPickerTargetCategory ? "为该小区分类补充地图位置" : communityPickerReturnTo === "entry" ? "分类按小区归属；优先选择已有分类" : "小区库优先；没有时搜地图" }}</small></view>
           <text @click="dismissCommunityPicker">×</text>
         </view>
         <view class="community-picker-search">
@@ -668,7 +788,7 @@ const convert = (item: Property) => {
           <button :disabled="communityMapSearching || communityPickerQuery.trim().length < 2" @click="searchCommunityMap">{{ communityMapSearching ? "搜索中…" : communityMapSearched ? "重新搜索地图" : "搜索地图" }}</button>
         </view>
         <view class="community-picker-section">
-          <view class="community-picker-section-head"><strong>已有小区</strong><button v-if="canCreateCommunityCategory" @click="chooseCommunity(communityPickerQuery)">＋ 添加分类</button></view>
+          <view class="community-picker-section-head"><strong>{{ communityPickerReturnTo === "entry" ? "已有分类" : "已有小区" }}</strong><button v-if="canCreateCommunityCategory" @click="chooseCommunity(communityPickerQuery)">＋ 添加分类</button></view>
           <scroll-view v-if="filteredCommunityLibraryOptions.length" scroll-y class="community-picker-list">
             <view v-for="name in filteredCommunityLibraryOptions" :key="name" class="community-picker-option" @click="chooseCommunity(name)"><view><strong>{{ name }}</strong><small>{{ communityLocations[name]?.address || "小区库记录" }}</small></view><text>小区库</text></view>
           </scroll-view>
@@ -689,11 +809,11 @@ const convert = (item: Property) => {
     </checkbox-group>
     <view v-if="!formOpen && loading" class="empty-state">正在加载素材…</view>
     <view v-else-if="!formOpen && !materials.length" class="empty-state"><strong>还没有素材</strong><button @click="openEntry">＋ 新增素材</button></view>
-    <view v-else-if="!formOpen && !filteredMaterials.length" class="empty-state"><strong>{{ showConvertedArchive ? "还没有已转房源的素材" : activeMaterials.length ? "当前筛选下没有素材" : "还没有素材" }}</strong><button v-if="!showConvertedArchive && !activeMaterials.length" @click="openEntry">＋ 新增素材</button><button v-else-if="!showConvertedArchive && (activeCommunity !== '全部' || activeLayout !== '全部')" class="clear-filters" @click="activeCommunity = '全部'; activeLayout = '全部'">清除筛选</button></view>
+    <view v-else-if="!formOpen && !filteredMaterials.length" class="empty-state"><strong>{{ activeMaterials.length ? "当前筛选下没有素材" : "还没有已转房源的素材" }}</strong><button v-if="!showConvertedArchive && !activeMaterials.length" @click="openEntry">＋ 新增素材</button><button v-else-if="activeCommunity !== '全部' || activeLayout !== '全部'" class="clear-filters" @click="activeCommunity = '全部'; activeLayout = '全部'">清除筛选</button></view>
     <view v-else-if="!formOpen" class="material-list">
-      <view v-for="item in filteredMaterials" :key="item.id" class="material-card">
-        <view class="material-media-strip"><template v-for="media in (item.media || []).slice(0, 4)" :key="media.id"><image v-if="media.type === 'image'" :src="mediaUrl(media.url)" mode="aspectFill" @click="previewMaterialImages(item, media)"/><view v-else class="video-tile"><video :src="mediaUrl(media.url)" controls object-fit="cover"/><text>视频</text></view></template><view v-if="!item.media?.length" class="no-media">暂无图片或视频</view><view class="material-count">{{ item.media?.filter(media => media.type === 'image').length || 0 }}图 · {{ item.media?.filter(media => media.type === 'video').length || 0 }}视频</view></view>
-        <view class="material-copy"><view class="title-line"><strong>{{ item.title || item.community }}</strong><text>{{ materialCommunity(item) }}</text></view><view class="material-tags"><text>{{ materialLayout(item) }}</text><text>{{ item.rentType || "出租方式待补" }}</text><text v-for="tag in extraMaterialTags(item)" :key="tag">{{ tag }}</text><text v-if="showPrice" class="material-price-tag">{{ item.rentMonthly }} 元/月</text></view><view v-if="item.description" class="optional-info"><text>{{ item.description }}</text></view><view v-if="item.convertedPropertyId" class="converted-note">已转为房源草稿，素材已保留</view><view class="card-actions"><button v-if="item.convertedPropertyId" class="convert-button" @click="openConvertedProperty(item)">查看房源草稿</button><button v-else class="convert-button" @click="convert(item)">转为房源草稿</button><button class="delete-button" @click="removeMaterial(item)">删除</button></view></view>
+      <view v-for="item in filteredMaterials" :key="item.id" class="material-card" @click="openMaterialDetail(item)">
+        <view class="material-media-strip"><image v-if="item.media?.some(media => media.type === 'image')" :src="mediaUrl(item.media.find(media => media.type === 'image')!.url)" mode="aspectFill" /><view v-else-if="item.media?.some(media => media.type === 'video')" class="video-cover"><text>▶</text><small>视频素材</small></view><view v-else class="no-media">暂无图片或视频</view><view class="material-count">{{ item.media?.filter(media => media.type === 'image').length || 0 }}图 · {{ item.media?.filter(media => media.type === 'video').length || 0 }}视频</view></view>
+        <view class="material-copy"><view class="title-line"><strong>{{ item.title || item.community }}</strong><text>{{ materialCommunity(item) }}</text></view><view class="material-tags"><text>{{ materialLayout(item) }}</text><text>{{ item.rentType || "出租方式待补" }}</text><text v-for="tag in extraMaterialTags(item)" :key="tag">{{ tag }}</text><text v-if="showPrice" class="material-price-tag">{{ item.rentMonthly }} 元/月</text></view><view v-if="item.description" class="optional-info"><text>{{ item.description }}</text></view><view v-if="isConverted(item)" class="converted-note">已转房源</view><view class="card-actions"><button v-if="isConverted(item)" class="convert-button" @click.stop="openConvertedProperty(item)">{{ linkedActionLabel(item) }}</button><button v-else class="convert-button" @click.stop="convert(item)">转为房源草稿</button><button class="delete-button" @click.stop="removeMaterial(item)">删除</button></view></view>
       </view>
     </view>
   </view>
@@ -706,6 +826,7 @@ const convert = (item: Property) => {
 .material-rent-types,.material-tags { display:flex;flex-wrap:wrap;gap:8rpx; }
 .material-rent-types button { margin:0;padding:0 22rpx;line-height:60rpx;font-size:23rpx;background:#f0f4ec;color:#40543f; }
 .material-rent-types button.active { background:#40543f;color:#fff; }
+.material-layout-settings{display:grid;gap:13rpx;padding:18rpx;border:1rpx solid #e1e8dd;border-radius:15rpx;background:#f8faf6}.material-field-title{color:#40543f;font-size:23rpx;font-weight:700}.material-field-title small,.material-field-pair label>small{margin-left:8rpx;color:#879184;font-size:18rpx;font-weight:500}.material-choice-row{display:flex;flex-wrap:wrap;gap:9rpx}.material-choice-row button{margin:0;padding:0 15rpx;border:1rpx solid #dce5d9;border-radius:11rpx;background:#fff;color:#52634f;font-size:20rpx;line-height:52rpx}.material-choice-row button.active{border-color:#40543f;background:#40543f;color:#fff}.material-choice-row button::after{border:0}.material-choice-grid{display:grid;gap:14rpx}.material-choice-grid>view{display:flex;align-items:flex-start;gap:12rpx}.material-choice-grid>view>text{flex:none;width:86rpx;padding-top:12rpx;color:#687665;font-size:20rpx}.room-sequence-title{margin-top:4rpx}.material-field-pair{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.material-field-pair label{display:grid;align-content:start;gap:9rpx;color:#54634f;font-size:22rpx;font-weight:650}.material-field-pair input{width:100%;height:72rpx;padding:0 16rpx;border:1rpx solid #dce5d9;border-radius:12rpx;box-sizing:border-box;background:#fbfcfa;color:#28382b;font-size:23rpx}.material-floor-input{display:flex;align-items:center;gap:8rpx}.material-floor-input text{color:#667363;font-size:21rpx}
 .material-tags text { padding:4rpx 9rpx;border-radius:8rpx;background:#eef3e9;color:#40543f;font-size:20rpx; }
 .material-tags .material-price-tag { background:#fff0e9;color:#a64d32; }
 .material-price-switch { display:flex;justify-content:flex-end;margin:12rpx 0;color:#40543f;font-size:22rpx; }
@@ -729,4 +850,12 @@ const convert = (item: Property) => {
 .category-action-sheet{gap:12rpx;padding:22rpx 20rpx calc(22rpx + env(safe-area-inset-bottom))}.category-action-heading{padding-bottom:8rpx}.category-action-grid{display:grid;grid-template-columns:1fr 1fr;gap:10rpx}.category-action-grid button{display:grid;grid-template-columns:42rpx minmax(0,1fr);align-items:center;gap:10rpx;min-height:76rpx;padding:10rpx 12rpx;border-radius:13rpx;line-height:1.2}.category-action-grid button>text{display:grid;place-items:center;width:40rpx;height:40rpx;border-radius:12rpx;background:#edf3e9;color:#40543f;font-size:24rpx;font-weight:700}.category-action-grid button>view{display:grid;gap:4rpx;min-width:0}.category-action-grid button strong{color:#344b38;font-size:19rpx;font-weight:700;white-space:nowrap}.category-action-grid button small{overflow:hidden;color:#849080;font-size:15rpx;text-overflow:ellipsis;white-space:nowrap}.category-action-sheet .category-action-remove{display:flex;align-items:center;justify-content:space-between;gap:12rpx;padding:0 14rpx;background:#fff7f4;color:#a15144;font-size:18rpx;text-align:left;line-height:48rpx}.category-action-sheet .category-action-remove small{color:#b57a70;font-size:15rpx}
 
 .material-archive-row{display:flex;gap:10rpx;margin:2rpx 0 4rpx}.material-archive-row button{display:flex;align-items:center;gap:8rpx;margin:0;padding:0 16rpx;border:1rpx solid #dce5d9;border-radius:24rpx;background:#fff;color:#647160;font-size:19rpx;line-height:52rpx}.material-archive-row button::after{border:0}.material-archive-row button.active{border-color:#40543f;background:#40543f;color:#fff}.material-archive-row button text{min-width:28rpx;padding:0 7rpx;border-radius:18rpx;background:#edf2e8;color:#40543f;font-size:16rpx;line-height:30rpx;text-align:center}.material-archive-row button.active text{background:#fff;color:#40543f}.converted-note{margin-top:7rpx;color:#6e7e63;font-size:17rpx}
+.community-select-control.fixed-category{border-color:#cbdcc6;background:#eef4ea}.community-select-control.fixed-category>text{color:#557452;font-size:19rpx}
+.material-media-strip>image{width:100%;height:100%;object-fit:cover}.video-cover{display:grid;width:100%;height:100%;place-content:center;justify-items:center;gap:8rpx;background:linear-gradient(145deg,#dce3d7,#aebba9);color:#fff}.video-cover text{display:grid;width:54rpx;height:54rpx;place-items:center;border:2rpx solid #ffffffc9;border-radius:50%;background:#26372c88;font-size:23rpx}.video-cover small{padding:4rpx 9rpx;border-radius:8rpx;background:#26372c88;font-size:17rpx}
+.material-list{gap:9rpx}.material-card{gap:9rpx;margin-bottom:0;padding:8rpx;border-radius:14rpx}.material-media-strip{width:142rpx;height:122rpx;border-radius:10rpx}.material-media-strip>image,.video-tile{border-radius:9rpx}.material-copy{padding:2rpx 1rpx}.title-line strong{font-size:21rpx;-webkit-line-clamp:1}.title-line text{max-width:94rpx;padding:3rpx 6rpx;font-size:14rpx}.material-tags{gap:4rpx;margin-top:5rpx}.material-tags text{padding:2rpx 6rpx;font-size:15rpx;line-height:1.2}.material-copy>small{margin-top:3rpx;font-size:15rpx;line-height:1.25}.optional-info{gap:6rpx;margin-top:3rpx;font-size:14rpx}.optional-info text{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:1}.card-actions{gap:6rpx;padding-top:5rpx}.card-actions button{padding:0 9rpx;font-size:15rpx;line-height:38rpx}.material-count{right:5rpx;bottom:5rpx;padding:3rpx 6rpx;font-size:13rpx}
+.category-action-add>text{background:#40543f!important;color:#fff!important}
+</style>
+
+<style scoped>
+.entry-locked { opacity: .75; pointer-events: none; }
 </style>

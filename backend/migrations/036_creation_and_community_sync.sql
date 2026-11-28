@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS property_creation_tasks (
+  task_id CHAR(64) PRIMARY KEY,
+  digest CHAR(64) NOT NULL,
+  property_id VARCHAR(36) NOT NULL,
+  snapshot JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS community_sync_jobs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  payload JSON NOT NULL,
+  next_attempt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_error VARCHAR(500) NOT NULL DEFAULT '',
+  INDEX idx_community_sync_next (next_attempt,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

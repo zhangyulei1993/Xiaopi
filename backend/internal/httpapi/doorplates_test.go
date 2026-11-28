@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"xiaopi/backend/internal/domain"
 )
 
 type doorplateConfigStore struct {
@@ -118,3 +120,52 @@ func TestCollectionPlanAndLocationUseCanonicalCommunity(t *testing.T) {
 
 var _ appConfigStore = (*doorplateConfigStore)(nil)
 var _ Store = (*doorplateConfigStore)(nil)
+
+func TestCommunityPhaseAliasesKeepDistinctPhasesAndConfirmedPositions(t *testing.T) {
+	rows := consolidateDoorplateRows([]doorplate{
+		{Community: "凤凰花园1期", Building: "1栋", Room: "101"},
+		{Community: "凤凰花园一期", Building: "1栋", Room: "101"},
+		{Community: "凤凰花园１期", Building: "1栋", Room: "102"},
+		{Community: "凤凰花园二期", Building: "1栋", Room: "101"},
+	})
+	if len(rows) != 3 || rows[0].Community != rows[1].Community || rows[0].Community == rows[2].Community {
+		t.Fatalf("unexpected consolidation: %#v", rows)
+	}
+	confirmed := communityLocation{Address: "武汉市凤凰花园", Latitude: 30.4, Longitude: 114.4}
+	locations := consolidateCommunityLocations(map[string]communityLocation{"凤凰花园1期": {Address: "待补充"}, "凤凰花园一期": confirmed})
+	if len(locations) != 1 || locations["凤凰花园1期"] != confirmed {
+		t.Fatalf("confirmed position was lost: %#v", locations)
+	}
+	plans := consolidateDoorplatePlans(map[string]doorplatePlan{"凤凰花园1期": {Status: "pending"}, "凤凰花园一期": {Status: "done", Note: "已采集"}})
+	if len(plans) != 1 || plans["凤凰花园1期"].Status != "done" || plans["凤凰花园1期"].Note != "已采集" {
+		t.Fatalf("collection progress was lost: %#v", plans)
+	}
+}
+
+func TestConfirmedMapPositionOverridesListingCoordinatesAcrossAliases(t *testing.T) {
+	items := []domain.Property{
+		{Community: "凤凰花园一期", Latitude: 30.1, Longitude: 114.1},
+		{Community: "凤凰花园二期", Latitude: 30.2, Longitude: 114.2},
+	}
+	applyConfirmedMapPositions(items, map[string]communityLocation{
+		"凤凰花园1期": {Address: "凤凰花园一期", Latitude: 30.5, Longitude: 114.5},
+		"凤凰花园2期": {Address: "待补充", Latitude: 30.9, Longitude: 114.9},
+	})
+	if items[0].Latitude != 30.5 || items[0].Longitude != 114.5 || items[1].Latitude != 30.2 || items[1].Longitude != 114.2 {
+		t.Fatalf("unexpected map coordinates: %#v", items)
+	}
+}
+
+func TestDoorplateImportReceiptCountsActualWrites(t *testing.T) {
+	store := &doorplateConfigStore{fakeStore: &fakeStore{}, configs: map[string][]byte{}}
+	server := &Server{store: store}
+	for index, want := range []int{1, 0} {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/doorplates?receipt=1", strings.NewReader(`[{"community":"凤凰花园一期","building":"1栋","room":"101"},{"community":"凤凰花园1期","building":"1栋","room":"101"}]`))
+		response := httptest.NewRecorder()
+		server.doorplates(response, request)
+		got := responseData[struct{ Added, Duplicates int }](t, response)
+		if response.Code != http.StatusOK || got.Added != want || got.Duplicates != 2-want {
+			t.Fatalf("receipt %d: %d %s", index, response.Code, response.Body.String())
+		}
+	}
+}

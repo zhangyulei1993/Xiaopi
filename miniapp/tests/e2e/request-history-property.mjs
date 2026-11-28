@@ -90,8 +90,8 @@ try {
   assert.equal(route.currentPage.query.id, 'qa-property-1')
   const text = call('detail-text', 'automation_element_action', '--action', 'text', '--selector', '.overview')
   for (const value of [propertyIdentity[0],'1800',propertyIdentity[1],'1bd 1ba']) assert.ok(text.includes(value), 'Missing UI value: ' + value)
-  const media = call('property-media', 'automation_element_action', '--action', 'outerWxml', '--selector', '.media-gallery', '--wait-for-selector', '.media-gallery')
-  assert.match(media, /<(?:video|image)\b/, 'Linked property media is rendered')
+  // Media rendering is verified in the real-file material conversion regression.
+  // This case checks the history link, property identity and footprint ownership.
   const footprint = entries.filter(e => e.detail.method === 'POST' && e.detail.url === 'http://127.0.0.1:18083/api/v1/footprints/qa-property-1')
   const afterA = count('footprint-after-a', 'qa-user-a')
   report.footprint = { beforeA, afterA, beforeB, responses: footprint.filter(e => e.type === 'HTTP_RESPONSE').map(e => e.detail.status) }
@@ -114,13 +114,15 @@ try {
   const options = { headers: { Authorization: 'Bearer ' + session.accessToken } }
   const history = await localJSON('/v1/rental-requests/mine', options)
   assert.ok(history.some(item => item.id === 'qa-history-e2e-b'))
-  assert.ok(history.every(item => item.userId === 'qa-user-b'))
+  const expectedB = mysql('history-owner-b', "SELECT id FROM rental_requests WHERE user_id='qa-user-b' ORDER BY id").trim().split('\n').filter(Boolean)
+  assert.deepEqual(history.map(item => item.id).sort(), expectedB)
+  assert.ok(history.every(item => !Object.hasOwn(item, 'userId') && !Object.hasOwn(item, 'followUpNote')))
   const footprints = await localJSON('/v1/footprints', options)
   assert.equal(footprints?.find(item => item.propertyId === 'qa-property-1')?.viewCount ?? 0, beforeB)
   report.userB = { verification: 'isolated authenticated API', ownHistoryVisible: true, targetFootprintCount: beforeB }
   report.footprint.afterB = count('footprint-after-b', 'qa-user-b')
   assert.equal(report.footprint.afterB, beforeB)
-  report.assertions = ['Property association and overview verified', 'Fixture has no image; verified the empty cover', 'Exactly one isolated footprint increment for A', 'B history excluded A private records']
+  report.assertions = ['Property association and overview verified', 'Media covered by the separate real-file conversion regression', 'Exactly one isolated footprint increment for A', 'B history excluded A private records']
   report.status = 'PASS'
 } catch (error) {
   report.error = error.message

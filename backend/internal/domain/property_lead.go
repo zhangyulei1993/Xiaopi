@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrLeadFollowUpConflict = errors.New("线索已转为房源，请刷新列表")
 
 type PropertyLeadStatus string
 

@@ -3,10 +3,12 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 export const tabRoutes = {
   '运营总览': 'dashboard',
   '房源列表': 'properties',
+  '房源素材库': 'materials',
   '小区门牌数据': 'doorplates',
   '线索管理': 'leads',
   '租客需求': 'rental-requests',
   '用户意向': 'intentions',
+  '通知任务': 'subscription-jobs',
   '微信用户': 'wechat-users',
   '小程序基础配置': 'miniapp-basic-config',
   '小程序页面配置': 'miniapp-page-config',

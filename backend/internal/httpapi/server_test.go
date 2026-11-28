@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -61,8 +63,8 @@ func (*fakeStore) CreatePropertyLead(context.Context, domain.PropertyLead) error
 func (*fakeStore) UpdatePropertyLeadFollowUp(context.Context, string, string, string) error {
 	return nil
 }
-func (f *fakeStore) UpdatePropertyStatus(context.Context, string, string, string, string) error {
-	return f.statusErr
+func (f *fakeStore) UpdatePropertyStatus(context.Context, string, string, string, string) (string, error) {
+	return "draft", f.statusErr
 }
 func (*fakeStore) ConvertLeadToProperty(context.Context, string, domain.Property) error { return nil }
 func (*fakeStore) AddPropertyMedia(context.Context, domain.PropertyMedia) error         { return nil }
@@ -281,16 +283,29 @@ func (f *fakeStore) FindBoundWechatUserByPhone(_ context.Context, phone string) 
 	}
 	return domain.User{}, sql.ErrNoRows
 }
-func (f *fakeStore) LoginTemporaryUser(_ context.Context, phone, codeHash string, now time.Time) (domain.User, error) {
+func (f *fakeStore) LoginTemporaryUser(_ context.Context, phone, codeHash string, now time.Time) (domain.User, domain.TemporaryGrant, error) {
 	if f.temporaryHashes[phone] != codeHash || len(f.temporaryAccess) == 0 || f.temporaryAccess[0].Status != "active" || !f.temporaryAccess[0].ExpiresAt.After(now) {
-		return domain.User{}, sql.ErrNoRows
+		return domain.User{}, domain.TemporaryGrant{}, sql.ErrNoRows
 	}
 	for _, existing := range f.users {
 		if existing.Phone == phone {
-			return existing, nil
+			return existing, domain.TemporaryGrant{ID: f.temporaryAccess[0].ID, Version: 1, ExpiresAt: f.temporaryAccess[0].ExpiresAt}, nil
 		}
 	}
-	return domain.User{}, sql.ErrNoRows
+	return domain.User{}, domain.TemporaryGrant{}, sql.ErrNoRows
+}
+
+func (f *fakeStore) ValidateTemporarySession(_ context.Context, userID string, id, version uint64) error {
+	for _, item := range f.temporaryAccess {
+		if item.ID == id && version == 1 && item.Status == "active" && item.ExpiresAt.After(time.Now()) {
+			for _, user := range f.users {
+				if user.ID == userID && user.Phone == item.Phone {
+					return nil
+				}
+			}
+		}
+	}
+	return sql.ErrNoRows
 }
 
 func testServer(dataStore Store) *Server {
@@ -447,6 +462,25 @@ func TestTemporaryAccessAuthenticatesExistingBoundWechatUser(t *testing.T) {
 	if auth.AccessToken == "" || auth.Role != roleUser || len(dataStore.users) != 1 || dataStore.users[0].Phone != "13800138000" {
 		t.Fatalf("unexpected temporary auth result: %#v users=%#v", auth, dataStore.users)
 	}
+	refreshed := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, auth.AccessToken)
+	if refreshed.Code != http.StatusOK {
+		t.Fatalf("temporary refresh: %d", refreshed.Code)
+	}
+	refreshedAuth := responseData[struct{ AccessToken string }](t, refreshed)
+	revoked := performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/admin/temporary-access/status", map[string]string{"phone": "13800138000", "status": "revoked"}, adminToken)
+	if revoked.Code != http.StatusOK {
+		t.Fatalf("revocation: %d", revoked.Code)
+	}
+	for _, token := range []string{auth.AccessToken, refreshedAuth.AccessToken} {
+		if got := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, token); got.Code != http.StatusUnauthorized {
+			t.Fatalf("revoked temporary token refresh returned %d", got.Code)
+		}
+	}
+	ordinaryToken, _ := server.tokens.issue("wx-user-1", roleUser)
+	if got := performRequest(t, server.Handler(), http.MethodPost, "/api/v1/auth/refresh", nil, ordinaryToken); got.Code != http.StatusOK {
+		t.Fatalf("ordinary token revoked with temporary grant: %d", got.Code)
+	}
+
 }
 
 func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
@@ -480,7 +514,7 @@ func TestUserFavoriteAndRentalRequestFlow(t *testing.T) {
 }
 
 func TestAppointmentRequiresBoundPhone(t *testing.T) {
-	server := testServer(&fakeStore{properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}}})
+	server := testServer(&fakeStore{users: []domain.User{{ID: "user-without-phone", Status: domain.UserActive}}, properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}}})
 	userToken, err := server.tokens.issue("user-without-phone", roleUser)
 	if err != nil {
 		t.Fatal(err)
@@ -494,7 +528,7 @@ func TestAppointmentRequiresBoundPhone(t *testing.T) {
 }
 
 func TestGeneralRequestRequiresBoundPhone(t *testing.T) {
-	server := testServer(&fakeStore{})
+	server := testServer(&fakeStore{users: []domain.User{{ID: "user-without-phone", Status: domain.UserActive}}})
 	userToken, err := server.tokens.issue("user-without-phone", roleUser)
 	if err != nil {
 		t.Fatal(err)
@@ -508,7 +542,7 @@ func TestGeneralRequestRequiresBoundPhone(t *testing.T) {
 }
 
 func TestUserCanOnlyListOwnRentalRequests(t *testing.T) {
-	server := testServer(&fakeStore{rentalRequests: []domain.RentalRequest{
+	server := testServer(&fakeStore{users: []domain.User{{ID: "user-a", Status: domain.UserActive}}, rentalRequests: []domain.RentalRequest{
 		{ID: "mine", UserID: "user-a", RequestType: "appointment", PropertyID: "property-1", Status: "new"},
 		{ID: "other", UserID: "user-b", RequestType: "general", Location: "金融港", Status: "contacted"},
 	}})
@@ -545,6 +579,7 @@ func TestAppointmentIsIdempotentWithinThirtyMinutes(t *testing.T) {
 
 func TestContactEventsAreRecordedAndDeduplicated(t *testing.T) {
 	dataStore := &fakeStore{properties: []domain.Property{{ID: "property-1", Status: domain.PropertyAvailable}}}
+	dataStore.users = append(dataStore.users, domain.User{ID: "user-1", Status: domain.UserActive})
 	server := testServer(dataStore)
 	userToken, err := server.tokens.issue("user-1", roleUser)
 	if err != nil {
@@ -625,6 +660,15 @@ func TestPropertyVisibilityDependsOnAdminRole(t *testing.T) {
 	if len(adminItems) != 3 {
 		t.Fatalf("admin expected all properties, got %#v", adminItems)
 	}
+	detail := performRequest(t, handler, http.MethodGet, "/api/v1/properties/available", nil, "")
+	if detail.Code != http.StatusOK || strings.Contains(detail.Body.String(), `"ownerId"`) {
+		t.Fatalf("unexpected public property detail: %d %s", detail.Code, detail.Body.String())
+	}
+	unavailable := performRequest(t, handler, http.MethodGet, "/api/v1/properties/draft", nil, "")
+	if unavailable.Code != http.StatusNotFound {
+		t.Fatalf("draft is public: %d %s", unavailable.Code, unavailable.Body.String())
+	}
+
 }
 
 func TestPublicDoorplateBadgeFollowsConfigAndNeverStaysInTitle(t *testing.T) {
@@ -667,6 +711,7 @@ func TestDisabledWechatAdminCannotKeepManagementAccess(t *testing.T) {
 
 func TestCreatePropertyRequiresAdmin(t *testing.T) {
 	dataStore := &fakeStore{}
+	dataStore.users = append(dataStore.users, domain.User{ID: "wx-user-1", Status: domain.UserActive})
 	server := testServer(dataStore)
 	handler := server.Handler()
 	payload := map[string]any{"title": "整租一居", "community": "测试小区", "rentMonthly": 3500, "ownerId": "forged-owner"}
@@ -760,6 +805,7 @@ func TestAdminCanDeleteAListingInAnyStatus(t *testing.T) {
 
 func TestAdminCannotSubmitPropertyLead(t *testing.T) {
 	dataStore := &fakeStore{admins: []domain.AdminUser{{UserID: "wx-admin-1", Status: "active"}}}
+	dataStore.users = append(dataStore.users, domain.User{ID: "wx-admin-1", Status: domain.UserActive})
 	server := testServer(dataStore)
 	staleUserToken, err := server.tokens.issue("wx-admin-1", roleUser)
 	if err != nil {
@@ -949,7 +995,7 @@ func TestProductionWechatLoginIgnoresMockFlag(t *testing.T) {
 	t.Setenv("WECHAT_MOCK_ENABLED", "true")
 	t.Setenv("WECHAT_MINI_APP_ID", "wx-prod-path-test")
 	t.Setenv("WECHAT_MINI_APP_SECRET", "test-only-placeholder")
-	server := testServer(&fakeStore{})
+	server := testServer(&fakeStore{users: []domain.User{{ID: wechatUserID("production-path-openid"), Status: domain.UserActive}}})
 	calls := 0
 	server.httpClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		calls++
@@ -1054,6 +1100,14 @@ func TestBindWechatPhoneMergesTemporaryAdminIdentity(t *testing.T) {
 
 func TestUserCanUpdateAndReadWechatProfile(t *testing.T) {
 	dataStore := &fakeStore{users: []domain.User{{ID: "wx-user-1", OpenID: "openid-1", Status: domain.UserActive}}}
+	dir := t.TempDir()
+	t.Setenv("FILE_STORAGE_LOCAL_PATH", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "avatars"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "avatars", "wx-user-1-photo.jpg"), []byte("avatar"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	server := testServer(dataStore)
 	token, err := server.tokens.issue("wx-user-1", roleUser)
 	if err != nil {
@@ -1061,13 +1115,13 @@ func TestUserCanUpdateAndReadWechatProfile(t *testing.T) {
 	}
 	updated := performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/auth/profile", map[string]string{
 		"nickname":  "小皮用户",
-		"avatarUrl": "/uploads/avatars/wx-user-1.jpg",
+		"avatarUrl": "/uploads/avatars/wx-user-1-photo.jpg",
 	}, token)
 	if updated.Code != http.StatusOK {
 		t.Fatalf("expected profile update success, got %d: %s", updated.Code, updated.Body.String())
 	}
 	profile := responseData[domain.User](t, updated)
-	if profile.Nickname != "小皮用户" || profile.AvatarURL != "/uploads/avatars/wx-user-1.jpg" {
+	if profile.Nickname != "小皮用户" || profile.AvatarURL != "/uploads/avatars/wx-user-1-photo.jpg" {
 		t.Fatalf("unexpected updated profile: %#v", profile)
 	}
 	loaded := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/auth/profile", nil, token)
@@ -1077,5 +1131,141 @@ func TestUserCanUpdateAndReadWechatProfile(t *testing.T) {
 	loadedProfile := responseData[domain.User](t, loaded)
 	if loadedProfile.Nickname != profile.Nickname || loadedProfile.AvatarURL != profile.AvatarURL {
 		t.Fatalf("profile did not persist: %#v", loadedProfile)
+	}
+}
+
+type materialRevisionTestStore struct {
+	fakeStore
+	revision int
+}
+
+func (f *materialRevisionTestStore) UpdateMaterialRevision(_ context.Context, p domain.Property) (int, error) {
+	if p.EditRevision != f.revision {
+		return 0, domain.ErrPropertyEditConflict
+	}
+	f.revision++
+	return f.revision, nil
+}
+
+func TestMaterialUpdateRequiresCurrentRevision(t *testing.T) {
+	dataStore := &materialRevisionTestStore{}
+	server := testServer(dataStore)
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	update := func(payload map[string]any) *httptest.ResponseRecorder {
+		payload["id"], payload["title"], payload["community"], payload["isMaterial"] = "material-1", "素材", "测试小区", true
+		return performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/properties/update", payload, token)
+	}
+	if result := update(map[string]any{}); result.Code != http.StatusConflict {
+		t.Fatalf("missing revision: got %d: %s", result.Code, result.Body.String())
+	}
+	result := update(map[string]any{"editRevision": 0})
+	if result.Code != http.StatusOK || responseData[domain.Property](t, result).EditRevision != 1 {
+		t.Fatalf("current revision: got %d: %s", result.Code, result.Body.String())
+	}
+	if result := update(map[string]any{"editRevision": 0}); result.Code != http.StatusConflict {
+		t.Fatalf("stale revision: got %d: %s", result.Code, result.Body.String())
+	}
+}
+
+type operationsPageTestStore struct {
+	fakeStore
+	lastOffset int
+	lastLimit  int
+}
+
+func (f *operationsPageTestStore) UpdateRentalRequestFollowUp(_ context.Context, id, _, _ string) error {
+	if id != "known" {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (f *operationsPageTestStore) UpdatePropertyLeadFollowUp(ctx context.Context, id, status, note string) error {
+	if id == "converted" {
+		return domain.ErrLeadFollowUpConflict
+	}
+	return f.UpdateRentalRequestFollowUp(ctx, id, status, note)
+}
+
+func (f *operationsPageTestStore) ListContactEventsPage(_ context.Context, limit, offset int) ([]domain.ContactEvent, int, error) {
+	f.lastLimit, f.lastOffset = limit, offset
+	return []domain.ContactEvent{{ID: "event"}}, 231, nil
+}
+
+func TestFollowUpRejectsMissingRecord(t *testing.T) {
+	server := testServer(&operationsPageTestStore{})
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/admin/rental-requests/follow-up", "/api/v1/property-leads/follow-up"} {
+		for id, want := range map[string]int{"known": http.StatusOK, "missing": http.StatusNotFound} {
+			result := performRequest(t, server.Handler(), http.MethodPatch, path, map[string]string{"id": id, "status": "contacted"}, token)
+			if result.Code != want {
+				t.Fatalf("%s id %q: want %d, got %d: %s", path, id, want, result.Code, result.Body.String())
+			}
+		}
+	}
+	result := performRequest(t, server.Handler(), http.MethodPatch, "/api/v1/property-leads/follow-up", map[string]string{"id": "converted", "status": "contacted"}, token)
+	if result.Code != http.StatusConflict {
+		t.Fatalf("converted lead: want 409, got %d: %s", result.Code, result.Body.String())
+	}
+}
+
+func TestContactEventPagination(t *testing.T) {
+	store := &operationsPageTestStore{}
+	server := testServer(store)
+	token, err := server.tokens.issue("operator", roleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := server.Handler()
+	path := "/api/v1/admin/contact-events/query"
+	result := performRequest(t, handler, http.MethodGet, path+"?page=11&pageSize=20", nil, token)
+	if result.Code != http.StatusOK || store.lastOffset != 200 || store.lastLimit != 20 {
+		t.Fatalf("pagination beyond 200 did not reach the store: %d %s", result.Code, result.Body.String())
+	}
+	page := responseData[struct {
+		Total int
+		Page  int
+		Items []domain.ContactEvent
+	}](t, result)
+	if page.Total != 231 || page.Page != 11 || len(page.Items) != 1 {
+		t.Fatalf("unexpected page response: %#v", page)
+	}
+	if result := performRequest(t, handler, http.MethodGet, path+"?pageSize=101", nil, token); result.Code != http.StatusBadRequest {
+		t.Fatalf("invalid page size returned %d", result.Code)
+	}
+	if result := performRequest(t, handler, http.MethodGet, path, nil, ""); result.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated request returned %d", result.Code)
+	}
+}
+
+func TestCustomerRequestOmitsInternalFollowUp(t *testing.T) {
+	store := &fakeStore{rentalRequests: []domain.RentalRequest{{ID: "request", UserID: "customer", FollowUpNote: "internal-only", Note: "customer note", Status: "contacted"}}}
+	store.users = append(store.users, domain.User{ID: "customer", Status: domain.UserActive})
+	server := testServer(store)
+	token, err := server.tokens.issue("customer", roleUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := performRequest(t, server.Handler(), http.MethodGet, "/api/v1/rental-requests/mine", nil, token)
+	if result.Code != http.StatusOK || strings.Contains(result.Body.String(), "followUpNote") || !strings.Contains(result.Body.String(), "customer note") {
+		t.Fatalf("unexpected customer response: %d %s", result.Code, result.Body.String())
+	}
+}
+
+func TestStaticUploadsUseConfiguredStorageRoot(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("FILE_STORAGE_LOCAL_PATH", dir)
+	if err := os.WriteFile(filepath.Join(dir, "probe.jpg"), []byte("local-file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result := performRequest(t, testServer(&fakeStore{}).Handler(), http.MethodGet, "/uploads/probe.jpg", nil, "")
+	if result.Code != http.StatusOK || result.Body.String() != "local-file" {
+		t.Fatalf("configured upload root: %d %s", result.Code, result.Body.String())
 	}
 }

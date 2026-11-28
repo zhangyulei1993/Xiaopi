@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { refreshCurrentSession } from "../../auth/refresh-session";
 import { onLoad } from '@dcloudio/uni-app'
 import { reactive, ref } from 'vue'
-import { createPropertyLead, refreshAuth } from '../../api/properties'
-import { getSession, saveSession } from '../../auth/session'
+import { createPropertyLead } from '../../api/properties'
+import { getSession } from '../../auth/session'
 import { usePagePresentation } from '../../utils/presentation'
 
 const form = reactive({
@@ -26,8 +27,7 @@ onLoad(async () => {
     return
   }
   try {
-    const refreshed = await refreshAuth()
-    saveSession(refreshed.accessToken, refreshed.role)
+    const refreshed = await refreshCurrentSession()
     if (refreshed.role === 'admin') {
       setTimeout(() => uni.switchTab({ url: '/pages/me/index' }), 300)
       return

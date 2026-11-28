@@ -52,14 +52,32 @@ func (s *Server) updateUserProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "昵称不能超过32个字符")
 		return
 	}
-	if input.AvatarURL != "" && !strings.HasPrefix(input.AvatarURL, "/uploads/avatars/") {
+	store, ok := s.userAdminStore()
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "user unavailable")
+		return
+	}
+	existing, err := store.GetUser(r.Context(), claimsFromContext(r.Context()).Subject)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "登录账号已失效")
+		return
+	}
+	changingAvatar := input.AvatarURL != "" && input.AvatarURL != existing.AvatarURL
+	if changingAvatar && !strings.HasPrefix(input.AvatarURL, "/uploads/avatars/") {
 		writeError(w, http.StatusBadRequest, "头像地址无效")
 		return
 	}
-	store, ok := s.userAdminStore()
-	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "user store unavailable")
-		return
+	if changingAvatar {
+		name := strings.TrimPrefix(input.AvatarURL, "/uploads/avatars/")
+		if name != filepath.Base(name) || !strings.HasPrefix(name, safeFilePart(claimsFromContext(r.Context()).Subject)+"-") {
+			writeError(w, http.StatusBadRequest, "请选择当前账号上传的头像")
+			return
+		}
+		info, err := os.Stat(filepath.Join(mediaStorageDir(), "avatars", name))
+		if err != nil || !info.Mode().IsRegular() {
+			writeError(w, http.StatusBadRequest, "头像文件不存在，请重新上传")
+			return
+		}
 	}
 	userID := claimsFromContext(r.Context()).Subject
 	if err := store.UpdateUserProfile(r.Context(), userID, input.Nickname, input.AvatarURL); errors.Is(err, sql.ErrNoRows) {
@@ -100,7 +118,7 @@ func (s *Server) uploadUserAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := safeFilePart(claimsFromContext(r.Context()).Subject)
-	directory := filepath.Join("uploads", "avatars")
+	directory := filepath.Join(mediaStorageDir(), "avatars")
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to prepare avatar storage")
 		return

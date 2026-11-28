@@ -74,9 +74,11 @@ func (c Config) authConfigured() bool {
 }
 
 type tokenClaims struct {
-	Subject string `json:"sub"`
-	Role    string `json:"role"`
-	Expires int64  `json:"exp"`
+	Subject          string `json:"sub"`
+	Role             string `json:"role"`
+	Expires          int64  `json:"exp"`
+	TemporaryID      uint64 `json:"tid,omitempty"`
+	TemporaryVersion uint64 `json:"tv,omitempty"`
 }
 
 type tokenManager struct {
@@ -90,10 +92,14 @@ func newTokenManager(config Config) tokenManager {
 }
 
 func (m tokenManager) issue(subject, role string) (string, error) {
-	if len(m.secret) == 0 || subject == "" || (role != roleAdmin && role != roleUser) {
+	return m.issueClaims(tokenClaims{Subject: subject, Role: role, Expires: m.now().Add(m.ttl).Unix()})
+}
+
+func (m tokenManager) issueClaims(claims tokenClaims) (string, error) {
+	if len(m.secret) == 0 || claims.Subject == "" || (claims.Role != roleAdmin && claims.Role != roleUser) {
 		return "", errInvalidToken
 	}
-	payload, err := json.Marshal(tokenClaims{Subject: subject, Role: role, Expires: m.now().Add(m.ttl).Unix()})
+	payload, err := json.Marshal(claims)
 	if err != nil {
 		return "", err
 	}
@@ -139,6 +145,20 @@ func bearerToken(r *http.Request) string {
 
 func (s *Server) optionalClaims(r *http.Request) (tokenClaims, bool) {
 	claims, err := s.tokens.verify(bearerToken(r))
+	if err == nil && !strings.HasPrefix(claims.Subject, webAdminPrefix) && !(claims.Role == roleAdmin && claims.Subject == s.config.AdminUsername) {
+		if store, ok := s.userAdminStore(); ok {
+			user, loadErr := store.GetUser(r.Context(), claims.Subject)
+			if loadErr != nil || user.Status == "blocked" {
+				return tokenClaims{}, false
+			}
+		}
+	}
+	if err == nil && claims.TemporaryID != 0 {
+		store, ok := s.temporaryAuthStore()
+		if !ok || store.ValidateTemporarySession(r.Context(), claims.Subject, claims.TemporaryID, claims.TemporaryVersion) != nil {
+			return tokenClaims{}, false
+		}
+	}
 	if err == nil && strings.HasPrefix(claims.Subject, webAdminPrefix) {
 		_, ok := s.webAdminSession(r, claims)
 		return claims, ok

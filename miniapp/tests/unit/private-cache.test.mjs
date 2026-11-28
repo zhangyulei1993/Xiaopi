@@ -44,7 +44,8 @@ function runLifecycle(page, hook, context) {
   assert.ok(registration, hook)
   const callback = registration.expression.arguments[0].getText(source)
   const js = ts.transpileModule('(' + callback + ')({})',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText
-  return vm.runInNewContext(js,context)
+  const redirect = fs.readFileSync(new URL('../../src/utils/permission-redirect.ts', import.meta.url), 'utf8').replace('export function', 'function')
+  return vm.runInNewContext(redirect + '\n' + js, { ...context, setTimeout: callback => callback() })
 }
 
 for (const [page, hook, roles] of [

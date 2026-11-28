@@ -44,19 +44,21 @@ if (expected && !combined.includes(expected)) fail('configured test API not foun
 if (combined.includes('api.xiaopizufang.cn')) { report.rejected.push('production API domain present in output'); report.status = 'FAIL' }
 // Pins cover the reviewed test callers and their validators. A rebuild does not refresh them.
 const reviewed = {
-  'api/client.js': '769f8c9eec21264099bf956779526661de51f254d2079afc01b7996e358f722d',
+  'api/client.js': 'b3d3ad7351257de548305f973b798e66ae3ccfe503d19aab375206c6e6596b25',
   'api/request-url.js': '0717acf313cd34bbb238750ba2fa8d5e9598f73b560b219ce28c23f72bd8e97e',
   'api/upload-url.js': '0483e3525aa2ff158e23c90b0025c68e6af41057c0fc8d45224da815cc3cef6e',
   'api/download-url.js': '6f99afd137f889883488848e159e92386ee9289f3199d9a2b5ac60489bcb3d82',
-  'pages/admin/material-library.js': '1139a97024d51b0493b90d3dbe81f0a64429533e93ec41094f458ad34f9729dc',
-  'pages/admin/property-edit.js': 'c2d2fa43fd85777ad590cf09cd641c4534e8f3ce2a7a5bb641ced1c3aeadbe36',
-  'pages/auth/login.js': '78435ab7da03292bc08a090c6945329f267335119f160bcb2ce2b334c72c1ab1',
-  'pages/me/index.js': '761029a563210ed5e864d67cf2e7f840f5909d52af331d844fab20cc23f2603d',
-  'pages/properties/detail.js': '000b9d84665b25422729f0f0d892858465856e6955f16d9d64d5077556260603',
+  'pages/admin/material-library.js': 'fc9e38da9d2132ec91e86b01ebbd2efd120070af86a668a5508e3e7eeb27bf65',
+  'pages/admin/material-detail.js': 'f6c205704978cd7a796641c38302fb6e0d53d9fcb354617d68cf5bc6e9599b8e',
+  'pages/admin/property-edit.js': '0c85b0246efc1557cba473b25f46424288b3a6a1f86fdef1144d6582c7d97e15',
+  'pages/auth/login.js': '812c854f0172ff8f793dff897bbdfa816a751cc9029120e7b1f03ab068628bba',
+  'pages/me/index.js': 'a79fabfcf21afe2d14e4131324ef2aa807d629951b8e1ffa496c343aa25cfed9',
+  'pages/properties/detail.js': 'b4790fd44d2d77b8cd60f4c3183e7cc44f3cdd76f141c9b4b699638ed0e8a574',
 }
+
 const verified = report.buildProvenance.status === 'PASS'
   && Object.entries(reviewed).every(([file, digest]) => report.artifactSha256[file] === digest)
-  && report.sourceCalls.length === 6
+  && report.sourceCalls.length === 7
   && report.sourceCalls.every(call => call.originVerified && call.importAlias && call.directGuard && !call.reassigned)
 const matched = new Set()
 report.guardedCalls = []
